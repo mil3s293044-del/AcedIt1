@@ -7480,6 +7480,135 @@ was made to check it is switched on by the redemption. Draw the pickers with `sc
 (the real `AgeAnswer`, the SAC grid with two SACs tracked, the session chips
 with a day already carrying sessions), in both themes and at 390.
 
+## Strategise opens on what the app knows
+
+**It was a questionnaire about things the app already had on file**, and it was
+where the planner sends somebody the moment the runway says "no prep planned".
+Four stages: pick the SAC again (the runway's "Plan its prep" carried no id),
+then four text boxes — what are you shaky on, which topics, how did the last one
+go, what do you want — then one bordered card per day, then the plan. Most
+students left the boxes empty, so the prompt read "they didn't name specific
+topics" about a student whose weak cards, repeated dropped criteria, untouched
+course areas and marks were all one query away.
+
+It is one screen now (`src/pages/Strategise.jsx`), opened ON the SAC by
+`?id=`:
+
+- **The chips are the evidence** (`src/lib/strategyEvidence.js`): weak card
+  topics, criteria dropped more than once and still open, open mistakes by
+  topic, the command-term tier they lose marks on (only past `hasGap`), study-
+  design areas with nothing in their decks or quizzes, their last mark in the
+  subject, and their target study score. Every chip names its SOURCE and a
+  detail they can check on the screen it came from; untick what is wrong, add
+  up to four of their own. **Nothing is invented to fill the list** — an
+  account with no history in the subject gets the course outline and the copy
+  says so rather than claiming "built from your own work".
+- **The run-up is one strip** of days. Bar HEIGHT is the minutes, colour AND
+  glyph are the aim (CVD), dots are sessions already on the planner, a diamond
+  is another assessment (that day seeds as rest). A mouse paints on press and
+  drag; a finger paints on TAP, because on a phone a drag is the strip
+  scrolling.
+- **The prompt is `planBrief`** over the TICKED chips and the PAINTED days, plus
+  what is already on the planner that week. The page builds no prompt of its
+  own; the test refuses one.
+- **The lock and the price are in the footer from the first paint.** A free
+  account used to fill all four stages in and THEN read "Couldn't build the
+  plan". `pr-24 xl:pr-4` on that footer is the Ace launcher's corner: it sat
+  on the Build button at every width below 1280.
+
+Three bugs fixed in the model (`strategise.js`), each verified by putting it
+back:
+
+- **The run-up was counted in UTC**, so in Melbourne it began TODAY. `dayKey`
+  is `studyLog`'s, and the test pins `TZ=Australia/Melbourne` itself.
+- **Every day was capped at the SMALLEST minutes set on any day** — one
+  20-minute Wednesday made a 90-minute Saturday a 20-minute one. `applyRules`
+  takes `minutesByDay`; the check-in's flat `minutesPerDay` still works.
+- **Running it twice stacked a second plan on the first.** A plan's id now
+  carries its SAC (`strategyIdFor` — eight characters of the SAC id, a dash, a
+  tail; `planTags`' pattern already allowed the dash), and a rebuild replaces
+  only that SAC's sessions that are still to come and unticked
+  (`sessionsToReplace`). Old eight-character ids match through
+  `activeStrategies`' guess, and ONLY old ones: a new-style id handed to the
+  guess could be attributed to an earlier SAC in the same subject and deleted.
+  The new plan is written BEFORE the old one is removed, with `allSettled`.
+
+Draw it with the network-level harness (`/Strategise?id=`), against a SAC with
+a second assessment inside its run-up, an old plan to replace, and a free
+account — each changes the footer.
+
+## Friends: the browser could accept its own request
+
+**`friendships_update_either` let EITHER party update a row**, with a check
+that only required one of the two emails to be the caller's. So the student
+who SENT a request could mark it accepted, and the recipient could rewrite the
+requester to anybody. Anybody could be anybody's friend — which is the bound
+pranks rest on ("friends only, mutual and accepted"), the condition sharing
+rests on, and what two achievements pay XP for. The names on a request were
+whatever the sender's browser wrote, so a request could arrive from
+"Mr Smith". And the shares had the same shape: insertable by the sender to ANY
+email, friend or not, with a free-text message on it.
+
+**Every friendship and share write is the server's now** —
+`getFriends` / `lookupFriendCode` / `requestFriend` / `respondFriend` /
+`cancelFriend` / `removeFriend` / `shareWithFriends`, reached through
+`src/api/friendsApi.js`. Names come off the profiles; only the recipient may
+answer; either side may remove (it was requester-only, so a student who had
+accepted somebody could not remove them and the button silently did nothing);
+a declined request is never re-sent; a request both ways is a yes; requests
+are capped per day and while waiting; a share goes only to ACCEPTED friends and
+its content is read off the sender's OWN rows. `getFriends` returns no other
+student's email — a friend is a name and a friendship id.
+
+**MIGRATION 0042 TAKES THE BROWSER'S WRITE POLICIES AWAY, AND IT GOES ON AFTER
+THE DEPLOY**, not before: the client before this release writes these tables
+directly, so applying it first switches friend requests and sharing off until
+the new client ships. Until it is applied the hole is simply still open.
+`PENDING_run_me.sql` still has not been extended past 0035, so everything from
+0036 on, 0042 included, is applied by hand.
+
+**A CODE, NOT A SEARCH.** Students mostly do not know each other's email, and a
+username search would let anyone find any student by trying names — a directory
+is the wrong thing to build for minors. Every account gets `ACE-XXXXX`
+(`friends.js`: five characters from an alphabet with no 0/O/1/I/L, minted into
+`extra.friend_code` on first ask) and a link, `/Friends?add=`. **Opening the
+link ASKS** — it looks the code up and offers "Add <name>?"; it never sends on
+arrival, because links get forwarded. Lookups are rate limited because a lookup
+names the code's owner. Email still works and answers identically whether or
+not the address has an account.
+
+**A link opened while signed out survives the sign-in** (`pendingFriend.js`).
+Sign-in always returns to the root, so the one moment the link exists for was
+lost; it is kept for a day and the app takes them back to the invite once.
+
+**THE NOTES ARE THE WHOLE VOCABULARY.** A share carried a free-text box, which
+made it a direct-message channel between students the app could not moderate —
+the reason 0034 refused free text on Compete and pranks shipped without any.
+`SHARE_NOTES` is a fixed list; the server accepts a note id or nothing, and
+`shownNote` refuses to draw an OLD row's message unless it is one of the notes,
+or every share sent before the channel closed would keep it open.
+
+**The page is one page.** A coach line, a crew hero with a giant friend count,
+an inbox panel, a featured panel and five tabs announced one pending request
+four times, while the friend rows said nothing about the friend (a
+`streak_days: 0` placeholder never filled) and Remove sat behind a hover a
+phone cannot do. Now: waiting on you (only when there is something), your
+friends with streak and rank and their actions visible, requests waiting on
+them as chips, and your code beside a box for theirs. **Ladder is gone** —
+`FriendsLeaderboard` is deleted and "Where you stand" opens
+`/Ranked?tab=board&scope=friends`, which Ranked now honours. **Received AI
+results are shown**: they were written and displayed nowhere, a share into a
+void. The flashcard shelf's and AI history's share paths go through the server
+too; the shelf's read `User.list()` — every account on the site — to name its
+friends.
+
+`friends.test.mjs` holds the model, the kept link, and scans for each piece of
+the fix (no client writes friendships or shares directly; only the recipient
+answers; names never come off the request; notes only; the migration's
+policies). 43 injections across both files, every one biting — two only after
+their fixtures grew the case (a flagged topic with a 0% miss rate, a repeat
+fixed every time).
+
 ## Premium codes (the Year 10 program)
 
 A student taps "Have a code?" on /Subscription, types their name and a code,
@@ -7883,6 +8012,16 @@ student looking free in the nav, the planner and the companion.
   and the gate share it) and a day near today as chips plus a Monday-first
   grid with what is already on each day marked. No `type="date"` survives in
   `src`; the test scans for one. Draw them with `scripts/_floorProbe.jsx?v=dates`
+- `src/lib/strategise.js` + `strategise.test.mjs`, `src/lib/strategyEvidence.js`,
+  `src/pages/Strategise.jsx` — the run-up to one SAC on one screen: the
+  evidence chips (each naming its source), the painted strip, `planBrief`, the
+  per-day budgets, and the plan id that carries its SAC so a rebuild replaces
+  rather than stacks
+- `src/lib/friends.js` + `friends.test.mjs`, `src/api/friendsApi.js`,
+  `src/lib/pendingFriend.js`, `src/pages/Friends.jsx`,
+  `supabase/migrations/0042_friendships_server_only.sql` — friends by code and
+  link, every friendship and share write on the server, set notes instead of
+  free text. Apply 0042 AFTER the deploy
 - `src/lib/premiumGrant.js` + `premiumGrant.test.mjs` — when a checkout grants
   premium (a $0 promotion code included, a trial deliberately not), that the
   session is the caller's, and the reveal owed on the profile until a screen

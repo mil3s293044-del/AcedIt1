@@ -488,6 +488,16 @@ const PORTED_FUNCTIONS = {
   verifySubscription:       '/local-ai/fn/verifySubscription',
   // Premium from a code (Year 10 program) — no Stripe:
   redeemPremiumCode:        '/local-ai/fn/redeemPremiumCode',
+  // Friends — every friendship and share write is the server's now, because
+  // the browser's own policy let a requester accept their own request. See
+  // src/lib/friends.js and migration 0042. lookupFriendCode only reads.
+  getFriends:               '/local-ai/fn/getFriends',
+  lookupFriendCode:         '/local-ai/fn/lookupFriendCode',
+  requestFriend:            '/local-ai/fn/requestFriend',
+  respondFriend:            '/local-ai/fn/respondFriend',
+  cancelFriend:             '/local-ai/fn/cancelFriend',
+  removeFriend:             '/local-ai/fn/removeFriend',
+  shareWithFriends:         '/local-ai/fn/shareWithFriends',
   // stripe-webhook is NOT here — it's called by Stripe, not the frontend.
   // stripeCheckout:   '/local-ai/fn/stripeCheckout',  // 3b-4c
   // ...
@@ -511,6 +521,9 @@ const READ_ONLY_FUNCTIONS = new Set([
   // are not sure, leave it out" rule is answered with certainty about what it
   // touches rather than caution about what it might.
   'getPranks',
+  // `getFriends` mints a friend code into `extra` on first ask and is here for
+  // getPranks' reason: nothing reads `friend_code` through the entity cache.
+  'getFriends', 'lookupFriendCode',
   'extractDocumentText', 'invokeAI', 'mindMapGaps',
 ]);
 

@@ -21,6 +21,7 @@ import {
     Users, UserPlus, ChevronLeft, FileText, ListChecks
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { getFriends, shareWithFriends } from "@/api/friendsApi";
 import { outgoingDeck } from "@/lib/sharedDeck";
 import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import MegaPicker from "@/components/shared/MegaPicker";
@@ -296,17 +297,15 @@ export default function SpacedRepetition() {
         } catch (error) { console.error(error); }
     };
 
+    // Off the server, by friendship id. This read the friendships and then
+    // `User.list()` — every account on the site — to find names, and the
+    // share it fed wrote straight into `shared_flashcards`, which the browser
+    // may no longer do (migration 0042). A friend is a name and an id here; the
+    // server knows the address.
     const loadFriends = async () => {
         try {
-            const [asReq, asRec] = await Promise.all([
-                base44.entities.Friendship.filter({ requester_email: user.email, status: 'accepted' }),
-                base44.entities.Friendship.filter({ recipient_email: user.email, status: 'accepted' })
-            ]);
-            const friendEmails = [...(asReq || []), ...(asRec || [])].map(f =>
-                f.requester_email === user.email ? f.recipient_email : f.requester_email
-            );
-            const users = await base44.entities.User.list();
-            setFriends(users.filter(u => friendEmails.includes(u.email)));
+            const res = await getFriends();
+            setFriends(res?.friends || []);
         } catch (error) { console.error(error); }
     };
 
@@ -598,7 +597,12 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             // saying flashcards has no such column — and 400'd every accept.
             const deckData = outgoingDeck(sharingDeck);
             const promises = [];
-            if (selectedFriends.length > 0) promises.push(...selectedFriends.map(friendEmail => base44.entities.SharedFlashcard.create({ deck_id: sharingDeck.id, deck_name: `${sharingDeck.subject_name} - ${sharingDeck.topic}`, shared_by_email: user.email, shared_by_name: user.full_name, shared_with_email: friendEmail, shared_with_name: friends.find(f => f.email === friendEmail)?.full_name || "", flashcard_data: deckData, status: 'pending' })));
+            // Friends go through the server, which reads the deck off this
+            // student's own rows and checks every recipient is a friend.
+            if (selectedFriends.length > 0) promises.push(shareWithFriends({
+                kind: "deck", friendship_ids: selectedFriends, deck_id: sharingDeck.id,
+                subject_name: sharingDeck.subject_name, topic: sharingDeck.topic,
+            }));
             if (selectedGroups.length > 0) promises.push(...selectedGroups.map(groupId => base44.entities.GroupSharedResource.create({ group_id: groupId, resource_type: "flashcard_deck", title: `${sharingDeck.subject_name} - ${sharingDeck.topic}`, description: `Flashcard deck with ${deckData.length} cards`, shared_by_email: user.email, shared_by_name: user.full_name, resource_data: { flashcards: deckData }, subject_name: sharingDeck.subject_name, topic: sharingDeck.topic, tags: [sharingDeck.subject_name, sharingDeck.unit] })));
             await Promise.all(promises);
             toast({ title: "Deck shared!" });
@@ -1266,9 +1270,9 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                     </div>
                                 ) :
                                     friends.map(f => (
-                                        <div key={f.email} className="flex items-center gap-3 p-3 hover:bg-secondary/50 rounded-xl">
-                                            <Checkbox checked={selectedFriends.includes(f.email)} onCheckedChange={c => setSelectedFriends(c ? [...selectedFriends, f.email] : selectedFriends.filter(e => e !== f.email))} />
-                                            <div><p className="font-medium text-sm">{f.full_name}</p><p className="text-xs text-muted-foreground">{f.email}</p></div>
+                                        <div key={f.id} className="flex items-center gap-3 p-3 hover:bg-secondary/50 rounded-xl">
+                                            <Checkbox checked={selectedFriends.includes(f.id)} onCheckedChange={c => setSelectedFriends(c ? [...selectedFriends, f.id] : selectedFriends.filter(e => e !== f.id))} />
+                                            <div><p className="font-medium text-sm">{f.name}</p>{f.username && f.username !== f.name && <p className="text-xs text-muted-foreground">@{f.username}</p>}</div>
                                         </div>
                                     ))}
                             </ScrollArea>

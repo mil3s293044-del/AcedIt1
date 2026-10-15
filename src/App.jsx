@@ -4,10 +4,11 @@ import { queryClientInstance } from '@/lib/query-client'
 import NavigationTracker from '@/lib/NavigationTracker'
 import ConsentBanner from '@/components/legal/ConsentBanner'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes, useLocation, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Route, Routes, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { MotionConfig } from 'framer-motion';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { lazyPage } from '@/lib/lazyPage';
+import { rememberFriendLink, takePendingFriend } from '@/lib/pendingFriend';
 import PageErrorBoundary from '@/components/shared/PageErrorBoundary';
 import PageNotFound from './lib/PageNotFound';
 // Landing and Login are what an unauthenticated visitor lands on, so they stay
@@ -77,6 +78,17 @@ const LayoutWrapper = ({ children, currentPageName }) => {
 const AuthenticatedApp = () => {
   const { isAuthenticated, isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // A friend link opened while signed out is kept across the sign-in, which
+  // always lands on the root, and the student is taken back to it once they
+  // are in. See src/lib/pendingFriend.js.
+  useEffect(() => {
+    if (!isAuthenticated) { rememberFriendLink(location); return; }
+    if (isLoadingAuth || /^\/friends\/?$/i.test(location.pathname)) return;
+    const code = takePendingFriend();
+    if (code) navigate(`/Friends?add=${encodeURIComponent(code)}`, { replace: true });
+  }, [isAuthenticated, isLoadingAuth, location, navigate]);
 
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {

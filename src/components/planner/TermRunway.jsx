@@ -131,7 +131,7 @@ function Header({ next, runway }) {
 
                 <div className="flex gap-2 mt-4 flex-wrap">
                     {next.needsPrep && (
-                        <Link to={createPageUrl("Strategise")}
+                        <Link to={`${createPageUrl("Strategise")}?id=${encodeURIComponent(next.sac.id)}`}
                             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-extrabold bg-white text-slate-900 hover:bg-white/90 transition-colors">
                             <Sparkles className="w-4 h-4" /> Plan its prep
                         </Link>

@@ -52,7 +52,7 @@ import League from "@/pages/League";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     standing, titlesFor, nextBand, weakestComponent, BAND_TONE,
-    COMPONENT_MOVE, moveHref, boardsFor, boardById, fmtMins,
+    COMPONENT_MOVE, moveHref, boardsFor, boardById, fmtMins, SCOPES,
 } from "@/lib/ranked";
 import { movementMap } from "@/lib/boardMovement";
 import { liftFor, ATAR_TARGETS } from "@/lib/atarLift";
@@ -159,9 +159,20 @@ export default function Ranked() {
     // CONTROLLED rather than uncontrolled: the Score tab's standing line opens
     // the Board tab, and an uncontrolled Tabs can only be moved by the trigger
     // it owns.
-    const [tab, setTab] = useState("score");
+    //
+    // `?tab=` and `?scope=` are honoured, so Friends' "See where you stand"
+    // lands on the Board tab already narrowed to friends rather than on the
+    // Score tab with the friends board two controls away. Anything not on
+    // the lists falls back to the defaults.
+    const [tab, setTab] = useState(() => {
+        const t = new URLSearchParams(window.location.search).get("tab");
+        return TABS.some(([v]) => v === t) ? t : "score";
+    });
     const [board, setBoard] = useState("xp");   // which of the two all-time boards
-    const [scope, setScope] = useState("global");
+    const [scope, setScope] = useState(() => {
+        const s = new URLSearchParams(window.location.search).get("scope");
+        return SCOPES.some((x) => x.id === s) ? s : "global";
+    });
 
     useEffect(() => {
         base44.functions.invoke("getRankedBoards", {})
