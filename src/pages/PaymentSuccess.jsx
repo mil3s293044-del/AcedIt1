@@ -6,6 +6,7 @@ import { base44 } from "@/api/base44Client";
 import { trackPurchase } from "@/lib/analytics";
 import AceShuffle from "@/components/ace/AceShuffle";
 import PremiumReveal from "@/components/subscription/PremiumReveal";
+import { withRevealSeen } from "@/lib/premiumGrant";
 
 export default function PaymentSuccess() {
     const [status, setStatus] = useState("verifying"); // verifying | success | error
@@ -54,6 +55,16 @@ export default function PaymentSuccess() {
                     onboarding_completed: true,
                     onboarding_completed_at: new Date().toISOString(),
                 };
+
+                // THIS SCREEN IS ABOUT TO PLAY THE REVEAL, so the grant's
+                // owed reveal is marked shown here — on arrival, the rule
+                // SettlementReveal keeps — or Layout would play it a second
+                // time on the next screen. The read above comes after the
+                // verify call, which drops the read cache, so `extra` is the
+                // one the server just wrote.
+                if (result.reveal_id) {
+                    premiumData.extra = withRevealSeen(profiles[0]?.extra, result.reveal_id);
+                }
 
                 if (profiles.length > 0) {
                     await base44.entities.UserProfile.update(profiles[0].id, premiumData);

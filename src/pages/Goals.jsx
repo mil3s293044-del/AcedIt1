@@ -35,6 +35,7 @@ import PhoneWeek from "@/components/planner/PhoneWeek";
 import { termRunway, runwayLead } from "@/lib/termRunway";
 import { useMedia } from "@/hooks/useMedia";
 import { dayStep } from "@/lib/dayStep";
+import DatePicker from "@/components/shared/DatePicker";
 import WeekPlanDialog from "@/components/planner/WeekPlanDialog";
 import { fmtDate } from "@/lib/safeDate";
 import { takeFn } from "@/lib/fnResult";
@@ -509,6 +510,29 @@ export default function Planner() {
     const runway = useMemo(
         () => termRunway({ today: todayStr, assessments, plans }),
         [todayStr, assessments, plans]);
+    // ── What is already on each day, for the date pickers ────────────────────
+    // A SAC tracked on top of another one used to show up only on the runway
+    // AFTER it was saved. Dotted on the grid, the clash shows before.
+    const sacMarks = useMemo(() => {
+        const m = {};
+        for (const a of upcoming) {
+            if (!m[a.due_date]) m[a.due_date] = [];
+            m[a.due_date].push({ tone: "streak", label: `${a.subject_name} — ${a.title}` });
+        }
+        return m;
+    }, [upcoming]);
+    const planMarks = useMemo(() => {
+        const m = {};
+        for (const [d, list] of Object.entries(sacMarks)) m[d] = [...list];
+        const counts = {};
+        // The session being edited is not "already planned" on its own day.
+        for (const p of plans) if (p.id !== editingPlan?.id) counts[p.date] = (counts[p.date] || 0) + 1;
+        for (const [d, n] of Object.entries(counts)) {
+            if (!m[d]) m[d] = [];
+            m[d].push({ tone: "primary", label: `${n} session${n === 1 ? "" : "s"} already planned` });
+        }
+        return m;
+    }, [sacMarks, plans, editingPlan]);
     const wide = useMedia("(min-width: 1024px)");
     // Below `sm` the week is a strip and an agenda rather than the drag board.
     // A breakpoint that decides what is MOUNTED, so it is read rather than
@@ -1583,7 +1607,10 @@ export default function Planner() {
                     crammed into a five-column grid that collapsed to five
                     unlabelled rows on a phone. */}
                 <Dialog open={addSacOpen} onOpenChange={setAddSacOpen}>
-                    <DialogContent className="max-w-md rounded-3xl">
+                    {/* Scrolls at a height now: the month grid made it taller
+                        than a short phone, and a dialog whose button falls off
+                        the bottom is a dialog nobody can finish. */}
+                    <DialogContent className="max-w-md rounded-3xl max-h-[88vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle className="font-display font-extrabold">Track an assessment</DialogTitle>
                         </DialogHeader>
@@ -1602,25 +1629,23 @@ export default function Planner() {
                                 <Input placeholder='e.g. "Unit 3 AOS1 SAC"' value={sacTitle}
                                     onChange={e => setSacTitle(e.target.value)} maxLength={80} />
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="space-y-1.5">
-                                    <p className="stat-label text-muted-foreground">Type</p>
-                                    <div className="flex gap-1.5">
-                                        {TYPE_OPTIONS.map(t => (
-                                            <button key={t.value} onClick={() => setSacType(t.value)}
-                                                aria-pressed={sacType === t.value}
-                                                className={`flex-1 px-2 py-2 rounded-xl text-xs font-bold border-2 transition-all ${sacType === t.value ? "bg-chart-3 border-chart-3 text-white" : "bg-surface border-border text-muted-foreground hover:border-chart-3/40"}`}>
-                                                {t.label}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="space-y-1.5">
-                                    <p className="stat-label text-muted-foreground">When</p>
-                                    <Input type="date" value={sacDate} min={todayStr}
-                                        onChange={e => setSacDate(e.target.value)} />
+                            <div className="space-y-1.5">
+                                <p className="stat-label text-muted-foreground">Type</p>
+                                <div className="flex gap-1.5">
+                                    {TYPE_OPTIONS.map(t => (
+                                        <button key={t.value} onClick={() => setSacType(t.value)}
+                                            aria-pressed={sacType === t.value}
+                                            className={`flex-1 px-2 py-2 rounded-xl text-xs font-bold border-2 transition-all ${sacType === t.value ? "bg-chart-3 border-chart-3 text-white" : "bg-surface border-border text-muted-foreground hover:border-chart-3/40"}`}>
+                                            {t.label}
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
+                            {/* A SAC is weeks out, so this is the month grid on its
+                                own — no "next seven days" chips — with every SAC
+                                already tracked dotted on it. */}
+                            <DatePicker label="When" idPrefix="acedit-sac-date" value={sacDate}
+                                onChange={setSacDate} min={todayStr} marks={sacMarks} />
                             <Button onClick={handleAddSac} disabled={savingSac} className="w-full h-11 gap-1.5">
                                 {savingSac ? <AceShuffle size="sm" /> : <Plus className="w-4 h-4" />} Track it
                             </Button>
@@ -1673,15 +1698,16 @@ export default function Planner() {
                             {/* Day and time together — dragging is the quick way to move a
                                 session, this is the exact way, and the only way on a
                                 keyboard-free-hands day when you know precisely when. */}
-                            <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                    <p className="stat-label mb-1.5">Day</p>
-                                    <Input type="date" value={planDay || ""} onChange={e => e.target.value && setPlanDay(e.target.value)} />
-                                </div>
-                                <div>
-                                    <p className="stat-label mb-1.5">Start time</p>
-                                    <Input type="time" value={planTime} onChange={e => setPlanTime(e.target.value)} />
-                                </div>
+                            {/* The week ahead as chips, the month behind "More". A
+                                session is nearly always this week; the dialog's own
+                                title already prints the day, so the picker does not
+                                echo it — only what is already on it. */}
+                            <DatePicker label="Day" idPrefix="acedit-plan-day" value={planDay || ""}
+                                onChange={(v) => v && setPlanDay(v)} quick={7} collapsible echo={false}
+                                marks={planMarks} />
+                            <div>
+                                <p className="stat-label mb-1.5">Start time</p>
+                                <Input type="time" value={planTime} onChange={e => setPlanTime(e.target.value)} />
                             </div>
 
                             <div>

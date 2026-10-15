@@ -46,6 +46,7 @@ import PlayingCard, { CardBack } from "@/components/cards/PlayingCard";
 import AceBody from "@/components/ace/AceBody";
 import { Confetti } from "@/components/shared/Confetti";
 import { Button } from "@/components/ui/button";
+import { claimAce } from "@/components/ace/useAceYield";
 
 /** Every row names a surface the student can go and open. */
 const UNLOCKED = [
@@ -60,6 +61,10 @@ const TURN_MS = 0.42;
 export default function PremiumReveal({ onContinue, fallbackMs = 20000 }) {
     const reduce = useReducedMotion();
     const [turned, setTurned] = useState(reduce);
+
+    // He is drawn here, and since Layout can play this over any page, he
+    // claims the stage — the walker and the launcher stand down for it.
+    useEffect(() => claimAce("premium"), []);
 
     useEffect(() => {
         if (reduce) return undefined;

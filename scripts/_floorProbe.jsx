@@ -22,6 +22,8 @@ import Room from "@/components/market/Room";
 import MarkEntry from "@/components/planner/MarkEntry";
 import TermRunway from "@/components/planner/TermRunway";
 import PhoneWeek from "@/components/planner/PhoneWeek";
+import AgeAnswer from "@/components/legal/AgeAnswer";
+import DatePicker from "@/components/shared/DatePicker";
 import { termRunway, runwayLead } from "@/lib/termRunway";
 import DeckStack from "@/components/cards/DeckStack";
 import SourcePanel from "@/components/quizzes/SourcePanel";
@@ -1224,6 +1226,50 @@ views.runway = () => {
             </div>
         </div>
         </MemoryRouter>
+    );
+};
+
+/* ── ?v=dates — the birthday picker and the event picker ───────────────────
+ *
+ * The birthday is the second screen a new student ever sees and the event
+ * picker lives inside two auth-gated dialogs, so this draws all three shapes
+ * against fixtures dated off TODAY: the real `AgeAnswer` (empty, so the grids
+ * show), the SAC picker with two SACs already tracked, and the session picker
+ * with its week of chips and a day carrying sessions.
+ */
+views.dates = () => {
+    const [age, setAge] = React.useState({ dob: "", guardian: false });
+    const [sac, setSac] = React.useState("");
+    const [day, setDay] = React.useState(rwDay(1));
+    const sacMarks = {
+        [rwDay(6)]: [{ tone: "streak", label: "Chemistry — Unit 3 AOS1 SAC" }],
+        [rwDay(9)]: [{ tone: "streak", label: "Legal Studies — Folio task 2" }],
+    };
+    const planMarks = {
+        ...sacMarks,
+        [rwDay(1)]: [{ tone: "primary", label: "2 sessions already planned" }],
+        [rwDay(2)]: [{ tone: "primary", label: "1 session already planned" }],
+    };
+    return (
+        <div className="min-h-screen bg-background p-4 sm:p-6">
+            <div className="max-w-5xl mx-auto grid gap-6 lg:grid-cols-3 items-start">
+                <div className="card-soft on-table p-5" data-probe="birthday">
+                    <p className="stat-label mb-3">Onboarding · birthday</p>
+                    <AgeAnswer idPrefix="probe" dob={age.dob} guardian={age.guardian}
+                        onChange={(p) => setAge((a) => ({ ...a, ...p }))} />
+                </div>
+                <div className="card-soft on-table p-5" data-probe="sac">
+                    <p className="stat-label mb-3">Planner · track a SAC</p>
+                    <DatePicker label="When" idPrefix="probe-sac" value={sac} onChange={setSac}
+                        min={rwDay(0)} marks={sacMarks} />
+                </div>
+                <div className="card-soft on-table p-5" data-probe="plan">
+                    <p className="stat-label mb-3">Planner · plan a session</p>
+                    <DatePicker label="Day" idPrefix="probe-plan" value={day} onChange={setDay}
+                        quick={7} collapsible echo={false} marks={planMarks} />
+                </div>
+            </div>
+        </div>
     );
 };
 

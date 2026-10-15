@@ -68,6 +68,7 @@ import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiC
 // Which model a student's work runs on. The tier lives on their profile, so it
 // is resolved here rather than trusted from the request body.
 import { modelFor } from "./src/lib/aiModels.js";
+import { checkoutVerdict, withRevealPending } from "./src/lib/premiumGrant.js";
 import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
 // A textbook is stored whole and read a CHAPTER at a time — the caps, the
 // range maths and the chip price all live in one module because the number
@@ -12481,11 +12482,24 @@ app.post("/local-ai/fn/verifySubscription", async (req, res) => {
     if (!sessionId) return res.status(400).json({ success: false, error: "No sessionId provided" });
 
     const session = await stripe.checkout.sessions.retrieve(sessionId);
-    if (session.payment_status !== "paid") {
+    const subscription = session.subscription
+      ? await stripe.subscriptions.retrieve(session.subscription)
+      : null;
+    // ONE RULE, in premiumGrant.js. It used to be `payment_status === "paid"`
+    // alone, which refused every promotion code that took the first payment to
+    // $0 — those complete as "no_payment_required" — so a student given
+    // premium was told their payment had failed, the reveal never played, and
+    // the webhook upgraded them silently a moment later. And it never checked
+    // the session was the CALLER's: a session id rides in the success URL, so
+    // anybody handed another student's could upgrade off their payment.
+    const verdict = checkoutVerdict(session, subscription, user.email);
+    if (!verdict.ok) {
+      if (verdict.reason === "not_yours") {
+        console.warn("[verifySubscription] session does not belong to caller", JSON.stringify({ session_id: sessionId }));
+        return res.json({ success: false, error: "That checkout belongs to a different account." });
+      }
       return res.json({ success: false, error: "Payment not completed", payment_status: session.payment_status });
     }
-
-    const subscription = await stripe.subscriptions.retrieve(session.subscription);
     // Use exactly 30 days from now as expiry (matches Base44 behaviour).
     const subscriptionEndDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
@@ -12500,7 +12514,11 @@ app.post("/local-ai/fn/verifySubscription", async (req, res) => {
     };
 
     const { data: existingRows } = await supabaseAdmin
-      .from("user_profiles").select("id").eq("created_by", user.email).limit(1);
+      .from("user_profiles").select("id, extra").eq("created_by", user.email).limit(1);
+    // The reveal is owed for THIS grant. Re-running verification (a reload of
+    // the success page) writes the same id again and leaves `seen` alone, so
+    // it never replays — premiumGrant.js holds the rule.
+    updatePayload.extra = withRevealPending(existingRows?.[0]?.extra, subscription.id);
 
     // Stripe has already taken the money by this point. If the profile write
     // fails we must NOT reply success — that told the student they were
@@ -12534,7 +12552,13 @@ app.post("/local-ai/fn/verifySubscription", async (req, res) => {
     return res.json({
       success: true,
       tier: "premium",
+      via: verdict.via,
+      reveal_id: subscription.id,
       expires_at: subscriptionEndDate.toISOString(),
+      // The page reports the purchase to the pixels with these, and never had
+      // them — so every conversion arrived as $0, a full-price one included.
+      amount_total: session.amount_total ?? null,
+      currency: session.currency ?? null,
     });
   } catch (err) {
     console.error("[verifySubscription] error:", err?.message || err);
@@ -12604,17 +12628,23 @@ app.post("/local-ai/fn/stripe-webhook", async (req, res) => {
 
       // Idempotency: if already processed this exact subscription as premium, no-op.
       const profile = await findProfileByEmail(userEmail);
+      let fullExtra = null;
       if (profile) {
         const { data: full } = await supabaseAdmin
           .from("user_profiles")
-          .select("stripe_subscription_id, subscription_tier")
+          .select("stripe_subscription_id, subscription_tier, extra")
           .eq("id", profile.id).single();
         if (full?.stripe_subscription_id === subscription.id && full?.subscription_tier === "premium") {
           return res.json({ success: true, message: "Already processed" });
         }
+        fullExtra = full?.extra ?? null;
       }
 
       const payload = {
+        // The webhook is often the FIRST thing to grant premium — always when
+        // a student closed the tab at Stripe — so it owes the reveal too, and
+        // Layout plays it on their next screen.
+        extra: withRevealPending(fullExtra, subscription.id),
         subscription_tier: "premium",
         subscription_active: true,
         user_role: "premium_user",

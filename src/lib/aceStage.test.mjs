@@ -127,6 +127,7 @@ check("EVERY SURFACE THAT DRAWS A BODY CLAIMS ONE", () => {
         "src/components/ace/AceRoam.jsx": "roam",
         "src/components/onboarding/AceHost.jsx": "onboarding",
         "src/components/progress/AceVerdict.jsx": "report",
+        "src/components/subscription/PremiumReveal.jsx": "premium",
     };
     for (const [file, id] of Object.entries(drawers)) {
         const src = fs.readFileSync(file, "utf8");

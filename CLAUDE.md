@@ -7269,6 +7269,126 @@ TODAY so the track is always populated: a flagged SAC, a covered one, a missed
 session, one past the eighth week, and the empty state behind a toggle. Both
 themes, and at 390, where the track scrolls rather than squashes.
 
+## A date is three taps, and a code is a payment
+
+**"Make the calendar selector in the onboarding far more aesthetic, on brand
+and easier to use — this is the first impression — and apply it to all other
+date pickers. And if a user uses a code, make sure the animation plays once
+they are approved for premium."**
+
+### The browser's date input opened on this month
+
+The birthday on the wizard's second screen was `<input type="date">`. On a
+desktop that opens on the CURRENT month, so a sixteen-year-old paged back about
+two hundred times or typed into a box in an order its placeholder did not
+show; on Android it is a month grid with a tiny year menu. It was the one
+control in the funnel the app had not designed, at the moment a first
+impression is still forming. The planner's SAC date and session day were the
+same bare box inside dialogs that were otherwise the app's own.
+
+**TWO PICKERS, BECAUSE THEY ARE TWO QUESTIONS** (`src/lib/datePick.js` is the
+arithmetic for both, pure and tested):
+
+- **`BirthdayPicker`** — three slots, Day · Month · Year in the order an
+  Australian writes them, each showing its answer at display size, and a grid
+  under whichever is open. Picking moves to the next empty slot, so a student
+  who just taps is done in three; a filled slot reopens with one tap. **The
+  year is the slow one**, so its first page is twelve to twenty-one years back —
+  every VCE student, plus the twelve-year-old who has to be able to enter a real
+  birthday in order to be refused — and older years are a page away, not a
+  scroll through a century. One ring SLIDES between the slots (`layoutId`), the
+  Progress tab-pill idiom. It lives inside `AgeAnswer`, so the wizard and
+  `AgeGate` changed together and still share one control.
+- **`DatePicker`** — for a day near today. `quick` puts the next few days up
+  front as chips (the session picker, because a session is nearly always this
+  week); the month grid sits behind "Another day" when `collapsible`, and opens
+  on its own when the chosen day is not one of the chips. The SAC picker is the
+  grid alone, because a SAC is weeks away.
+
+**WHAT IS ALREADY ON A DAY IS DOTTED ON IT.** A student could track a Chemistry
+SAC on the same day as a Methods one and only find out from the runway after
+saving. The SACs already tracked (and, for a session, how many are already
+planned) are marks on the grid and the chips, and picking one of those days
+says what is there — a clash shows before it is made.
+
+Rules the model holds, each verified by putting the bug back:
+
+- **A DAY IS LOCAL.** `AgeAnswer` capped its input with
+  `new Date().toISOString().slice(0, 10)` — UTC, so before 10 or 11am in
+  Melbourne "today" was yesterday. `isoOf` is `studyLog`'s `dayKey`. The test
+  sets `TZ=Australia/Melbourne` itself: in a UTC container the UTC and local
+  strings are identical, so the injection passed silently until it did.
+- **A MISSING PART IS NULL, NEVER ZERO**, and **`pageFor(null)` OPENED THE YEAR
+  GRID ON 1920** — `Number(null)` is 0, which IS an integer, so "no year yet" was
+  paged for year 0 and clamped to the earliest. Only the screenshot said so.
+  `Number(null) === 0` is now in its eleventh module.
+- **31 FEBRUARY IS SAID, NOT SWALLOWED.** A day and a month picked separately
+  can disagree; the day slot goes red, the sentence names the month's real
+  count, and the day grid reopens. `dateOf` refuses any date that does not
+  survive a round trip, because `new Date(2009, 1, 31)` quietly becomes 3 March.
+- **The picker reports "" until day, month and year make a real date**, so the
+  age band downstream is only ever judged on a complete answer.
+- **MONDAY FIRST**, like `studyLog.weekStart` and every board above it.
+- **No `type="date"` survives anywhere in `src`** — the scan is the property the
+  request asked for. Time inputs are not dates and are untouched.
+
+**A SCROLLING ROW STILL HANDS ITS CONTENT WIDTH UP.** The chip row is
+`overflow-x-auto`, and at 390 it still widened the grid around it to all seven
+chips — a horizontal scrollbar on the page, and the planner's `DialogContent`
+is a grid too. `w-0 min-w-full` gives it no intrinsic width and fills the
+container. And the way to the month grid is on the label row, not the end of
+that row, where it sat past the edge of a strip nobody knows scrolls.
+
+### A promotion code was told its payment failed
+
+`stripeCheckout` sets `allow_promotion_codes`. A code covering the price
+completes the checkout as `payment_status: "no_payment_required"`, and
+`verifySubscription` accepted exactly one status, `"paid"`. So a student who
+had just been given premium read **"That payment did not go through"**, the
+reveal never played — and a moment later the webhook, which never looked at the
+payment status at all, upgraded them in the background with nothing on screen
+saying so.
+
+**`checkoutVerdict` (`src/lib/premiumGrant.js`) is the one rule**, and it is
+about the SUBSCRIPTION rather than the money: paid, or no payment required with
+an `active` subscription. **A `trialing` one is deliberately NOT accepted** —
+whether a trial is offered is the open decision `pricing.js` records, and this
+does not make it.
+
+**AND VERIFICATION NEVER CHECKED THE SESSION WAS THE CALLER'S.** It took a
+session id from the request and upgraded whoever sent it; the id rides in the
+success URL, so anybody handed another student's could have upgraded off their
+payment. The session carries the email it was created for, and a mismatch
+grants nothing. Found while fixing the code path, and closed because it was
+the same function — the wider security sweep is still the one planned before
+the trial.
+
+**THE REVEAL FOLLOWS THE GRANT, NOT THE PAGE.** It lived on /PaymentSuccess and
+nowhere else, so premium arriving any other way — the webhook first, a tab
+closed at Stripe, a success page that errored — was celebrated nowhere. Both
+grant paths now write `extra.premium_reveal.pending` with the subscription they
+granted; whichever screen shows the reveal first marks it `seen`, on arrival.
+Layout plays an owed one once, over any page, lazily loaded:
+
+- **nobody premium before this is ambushed** — they carry no marker;
+- **a re-run of a grant never replays it** — the same `pending` is written again
+  and `seen` is never touched;
+- **never on /PaymentSuccess**, which plays its own and marks it there, and
+  **never over the age gate**, which is asked first;
+- **a grant since revoked is not celebrated.**
+
+The reveal now claims the Ace stage as `"premium"`, second only to `reacts`,
+since Layout can play it over a page where the walker is standing. The verify
+response also finally returns `amount_total` and `currency`, which the success
+page has been reading for the purchase pixel the whole time — every conversion
+arrived as $0, full-price ones included.
+
+`premiumGrant.test.mjs` and `datePick.test.mjs` hold all of it: 27 injections,
+every one biting once the three that could not reach their branch were moved to
+the layer that decides. Draw the pickers with `scripts/_floorProbe.jsx?v=dates`
+(the real `AgeAnswer`, the SAC grid with two SACs tracked, the session chips
+with a day already carrying sessions), in both themes and at 390.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -7645,6 +7765,16 @@ themes, and at 390, where the track scrolls rather than squashes.
   with each cleared kind carrying the queue's own tier so the two cannot be
   inked apart. A to-do list with no done pile gets shorter the better somebody
   does, which made a good week look like a shorter list of failings
+- `src/lib/datePick.js` + `datePick.test.mjs`,
+  `src/components/shared/BirthdayPicker.jsx`, `DatePicker.jsx` — every date a
+  student picks: the birthday as three taps (inside `AgeAnswer`, so the wizard
+  and the gate share it) and a day near today as chips plus a Monday-first
+  grid with what is already on each day marked. No `type="date"` survives in
+  `src`; the test scans for one. Draw them with `scripts/_floorProbe.jsx?v=dates`
+- `src/lib/premiumGrant.js` + `premiumGrant.test.mjs` — when a checkout grants
+  premium (a $0 promotion code included, a trial deliberately not), that the
+  session is the caller's, and the reveal owed on the profile until a screen
+  shows it. Imported by `server.mjs`; Layout plays an owed reveal once
 - `src/lib/progressCharts.js` + `progressCharts.test.mjs`,
   `src/components/progress/Signature.jsx`, `AceVerdict.jsx`, `CountUp.jsx` — the
   drawing each Progress tab opens on (deck band + seven-day forecast, every sit
