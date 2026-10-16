@@ -29,6 +29,7 @@
  * the trap CLAUDE.md records three times.
  */
 import { studyEvents, dayKey, weekStart } from "./studyLog.js";
+import { isNew, isReady } from "./due.js";
 
 export const TECHNIQUE_IDS = ["pomodoro", "spaced_repetition", "active_recall", "blurting", "exam", "mind_map"];
 
@@ -351,4 +352,72 @@ export function nextStep({
         sub: "Keep going with anything below, or call it a day.",
         cta: null,
     };
+}
+
+/**
+ * The figure the step card leads with, or null when the step has no honest
+ * number — then the card draws the technique's glyph instead.
+ *
+ * Every figure is one the sentence beside it already states, set large: the
+ * days to the SAC, the cards ready, the length of the block being suggested.
+ * A step with nothing countable (a running timer, today's intent, mixing it
+ * up) gets no figure rather than a number found to fill the space — a big
+ * number nobody can check is decoration in the most prominent place there is.
+ */
+export function stepFigure(step, { ready = 0, deadline = null, todayMins = 0 } = {}) {
+    switch (step?.id) {
+        case "deadline": {
+            const d = deadline?.days;
+            if (d == null || d < 0) return null;
+            if (d === 0) return { value: "Today", unit: "" };
+            return { value: String(d), unit: d === 1 ? "day" : "days" };
+        }
+        case "cards":
+            return ready > 0 ? { value: String(ready), unit: "ready" } : null;
+        case "start":
+        case "stack":
+            return { value: "25", unit: "min" };
+        case "done":
+            return todayMins > 0 ? { value: fmtMinutes(todayMins), unit: "today" } : null;
+        default:
+            return null;
+    }
+}
+
+/**
+ * Today's minutes against what they SAID today would take — or null.
+ *
+ * Only ever drawn against a declared intent. The app has no basis for a
+ * daily target of its own (`weekPace`'s rule: compare a student to
+ * themselves, never to a number nobody chose), so with no intent there is no
+ * ring, and today's minutes stay in the line above the card.
+ */
+export function todayRing({ intent = null, todayMins = 0 } = {}) {
+    const target = Math.round(Number(intent?.duration) || 0);
+    if (!(target > 0)) return null;
+    const done = Math.max(0, Math.round(Number(todayMins) || 0));
+    return {
+        done,
+        target,
+        pct: Math.min(1, done / target),
+        met: done >= target,
+        label: intent?.plan?.label || "Today",
+    };
+}
+
+/**
+ * EVERY CARD ONE SUBJECT HAS READY, as one session — the shelf band's
+ * "Review N ready". Lapsed cards lead and never-opened ones follow, because a
+ * card you have started forgetting is what a session exists for and a fresh
+ * one can wait its turn. Scheduled, snoozed and put-away cards are not ready
+ * and do not come. Within each half the shelf's own order holds, so two
+ * presses play the same session rather than a reshuffle.
+ *
+ * The count on the button is this array's length, so the two cannot disagree:
+ * a button promising 8 that opens 6 is the small lie `due.js` was written
+ * against.
+ */
+export function subjectReviewCards(decks = [], today) {
+    const ready = decks.flatMap((d) => d?.cards || []).filter((c) => isReady(c, today));
+    return [...ready.filter((c) => !isNew(c, today)), ...ready.filter((c) => isNew(c, today))];
 }

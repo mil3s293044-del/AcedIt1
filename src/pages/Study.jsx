@@ -10,8 +10,8 @@ import {
     GraduationCap,
     BookOpen,
     Flame,
-    ArrowRight,
-    Network
+    Network,
+    FolderOpen
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
@@ -27,13 +27,14 @@ import MindMaps from "../components/study/MindMaps";
 import HelpButton from "@/components/shared/HelpButton";
 import NeuroPanel from "../components/study/NeuroPanel";
 import TechniqueTabs from "../components/study/TechniqueTabs";
+import NextStepCard from "../components/study/NextStepCard";
 import { todaysIntent } from "@/lib/studyIntent";
 import { isReady } from "@/lib/due";
 import { deckCards } from "@/lib/mistakeBank";
 import { dayKey } from "@/lib/studyLog";
 import {
     minutesSummary, nextDeadline, dominantTechnique, techniqueFacts, nextStep,
-    greetingFor, fmtMinutes, FALLBACK_FACT, TECHNIQUE_READ_LIMIT,
+    greetingFor, fmtMinutes, stepFigure, todayRing, FALLBACK_FACT, TECHNIQUE_READ_LIMIT,
 } from "@/lib/studyPage";
 
 // ─── The six techniques ──────────────────────────────────────────────────────
@@ -44,12 +45,12 @@ import {
 // what the technique is, and what it is for, which used to be two pills on a
 // card that named the technique a second time.
 const TECHNIQUES = [
-    { id: "pomodoro",          name: "Pomodoro",          icon: Clock,         ink: "text-primary", bar: "bg-primary", blurb: "25 minutes of focus, then a 5-minute break. Best for getting through one topic without burning out." },
-    { id: "spaced_repetition", name: "Spaced Repetition", icon: RefreshCw,     ink: "text-chart-3", bar: "bg-chart-3", blurb: "Flashcards that come back just before you would forget them. Best for locking facts in for the long haul." },
-    { id: "active_recall",     name: "Active Recall",     icon: Brain,         ink: "text-chart-4", bar: "bg-chart-4", blurb: "Questions from your notes, answered without looking. Shows what you know rather than what looks familiar." },
-    { id: "blurting",          name: "Blurting",          icon: PenTool,       ink: "text-xp",      bar: "bg-xp",      blurb: "Write down everything you remember on a topic, then see what you missed. Finds the gaps before a SAC does." },
-    { id: "exam",              name: "Revision Mode",     icon: GraduationCap, ink: "text-streak",  bar: "bg-streak",  blurb: "A timed mock built from your own cards and quizzes. Builds the stamina and timing a real paper needs." },
-    { id: "mind_map",          name: "Mind Maps",         icon: Network,       ink: "text-map",     bar: "bg-map",     blurb: "One map per subject, grown all year. Any node opens into a map of its own, and any branch can become flashcards or recall." },
+    { id: "pomodoro",          name: "Pomodoro",          icon: Clock,         ink: "text-primary", bar: "bg-primary", tone: "primary", blurb: "25 minutes of focus, then a 5-minute break. Best for getting through one topic without burning out." },
+    { id: "spaced_repetition", name: "Spaced Repetition", icon: RefreshCw,     ink: "text-chart-3", bar: "bg-chart-3", tone: "chart-3", blurb: "Flashcards that come back just before you would forget them. Best for locking facts in for the long haul." },
+    { id: "active_recall",     history: true, name: "Active Recall",     icon: Brain,         ink: "text-chart-4", bar: "bg-chart-4", tone: "chart-4", blurb: "Questions from your notes, answered without looking. Shows what you know rather than what looks familiar." },
+    { id: "blurting",          history: true, name: "Blurting",          icon: PenTool,       ink: "text-xp",      bar: "bg-xp",      tone: "xp", blurb: "Write down everything you remember on a topic, then see what you missed. Finds the gaps before a SAC does." },
+    { id: "exam",              name: "Revision Mode",     icon: GraduationCap, ink: "text-streak",  bar: "bg-streak",  tone: "streak", blurb: "A timed mock built from your own cards and quizzes. Builds the stamina and timing a real paper needs." },
+    { id: "mind_map",          name: "Mind Maps",         icon: Network,       ink: "text-map",     bar: "bg-map",     tone: "map", blurb: "One map per subject, grown all year. Any node opens into a map of its own, and any branch can become flashcards or recall." },
 ];
 
 /** A pomodoro running in this browser, from the state the timer persists. */
@@ -79,6 +80,9 @@ export default function Study() {
     const [deckCardCount, setDeckCardCount] = useState(0);
     const [assessments, setAssessments] = useState([]);
     const [activeTab, setActiveTab] = useState("pomodoro");
+    // Which technique's history dialog is open, if any. It lives here because
+    // the button lives in the page's header, beside the technique's name.
+    const [historyFor, setHistoryFor] = useState(null);
 
     // ── The science is a PREFERENCE, answered once ──────────────────────────
     // One key for every technique, not one per technique: a student who opens
@@ -292,12 +296,16 @@ export default function Study() {
             <ActiveRecall
                 onSessionComplete={handleSessionComplete}
                 userSubjects={userSubjects}
+                historyOpen={historyFor === "active_recall"}
+                onHistoryChange={(open) => setHistoryFor(open ? "active_recall" : null)}
             />
         ),
         blurting: (
             <BlurtingMethod
                 onSessionComplete={handleSessionComplete}
                 userSubjects={userSubjects}
+                historyOpen={historyFor === "blurting"}
+                onHistoryChange={(open) => setHistoryFor(open ? "blurting" : null)}
             />
         ),
         exam: (
@@ -342,14 +350,19 @@ export default function Study() {
     // cannot be started from the app any more (Compete is one market now), and
     // it spoke a betting vocabulary — "defend your ante", "the pot" — the floor
     // has since dropped for forecasting. Nothing else here read `useStakes`.
+    const intent = todaysIntent(userProfile);
     const step = isLoading ? null : nextStep({
         todayMins: minutes.today,
         ready: flashcards.length,
         deadline,
-        intent: todaysIntent(userProfile),
+        intent,
         timerLive: timerIsLive(),
         dominant: dominantTechnique(recentSessions),
     });
+    const figure = stepFigure(step, { ready: flashcards.length, deadline, todayMins: minutes.today });
+    const ring = isLoading ? null : todayRing({ intent, todayMins: minutes.today });
+    // A finished day has no technique to point at, so it wears the brand.
+    const stepTechnique = TECHNIQUES.find(t => t.id === step?.tab) || TECHNIQUES[0];
 
     const streakDays = userProfile?.streak_days || 0;
     const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
@@ -424,17 +437,13 @@ export default function Study() {
 
                 {/* ── TODAY: the one next step ────────────────────────────
                     It used to be "Six techniques to make studying actually
-                    work" over a "Selected technique" card and a "Today" card
-                    — a pitch, the technique named a second time, and the
-                    dashboard's figures repeated. The heading is the step now,
-                    with the button that takes them to it; the minutes are one
-                    quiet line above, and only when there are any. */}
-                <motion.header
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.35 }}
-                    className="pb-6 lg:pb-8"
-                >
+                    work" over a "Selected technique" card and a "Today" card,
+                    and then a 40px heading with its button floating off at the
+                    far edge. It is ONE card now (NextStepCard): the figure the
+                    sentence turns on, the sentence, and the door to it — with
+                    today's minutes as a ring only when there is a target the
+                    student set themselves. */}
+                <header className="pb-4">
                     <div className="flex items-center justify-between gap-3 mb-3">
                         <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
                             <span>{format(now, "EEE d MMM")}</span>
@@ -446,7 +455,10 @@ export default function Study() {
                                     </span>
                                 </>
                             )}
-                            {minutes.today > 0 && (
+                            {/* Today's minutes live in the ring when there is
+                                one; printing them here as well is one number
+                                twice, four inches apart. */}
+                            {minutes.today > 0 && !ring && (
                                 <>
                                     <span className="text-muted-foreground/40" aria-hidden="true">·</span>
                                     <span className="text-foreground tabular-nums">{fmtMinutes(minutes.today)} today</span>
@@ -463,27 +475,15 @@ export default function Study() {
                         <HelpButton page="Study" />
                     </div>
 
-                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
-                        <div className="min-w-0 max-w-3xl">
-                            <h1 className="font-display text-[1.65rem] sm:text-3xl lg:text-[2.5rem] font-extrabold tracking-tight leading-[1.1] text-foreground">
-                                <span className={step ? "text-muted-foreground" : ""}>{greeting}, {firstName}.</span>
-                                {step && <> {step.title}</>}
-                            </h1>
-                            {step?.sub && (
-                                <p className="mt-2 text-sm sm:text-base text-muted-foreground leading-snug">{step.sub}</p>
-                            )}
-                        </div>
-                        {step?.cta && (
-                            <Button
-                                onClick={() => openTechnique(step.tab)}
-                                className="btn-3d h-12 px-6 rounded-xl gap-2 font-bold w-full sm:w-auto flex-shrink-0"
-                            >
-                                {step.cta}
-                                <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                            </Button>
-                        )}
-                    </div>
-                </motion.header>
+                    <NextStepCard
+                        greeting={`${greeting}, ${firstName}`}
+                        step={step}
+                        figure={figure}
+                        technique={stepTechnique}
+                        ring={ring}
+                        onGo={() => openTechnique(step?.tab)}
+                    />
+                </header>
 
                 {/* ── THE SWITCHER ─────────────────────────────────────── */}
                 <TechniqueTabs
@@ -503,11 +503,26 @@ export default function Study() {
                     heading's button lands the header in view rather than
                     under them. */}
                 <section ref={toolRef} className="scroll-mt-[7.5rem] pt-6 lg:pt-8" aria-labelledby="study-technique">
-                    <div className="mb-5 lg:mb-6 max-w-3xl">
-                        <h2 id="study-technique" className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
-                            {currentTechnique.name}
-                        </h2>
-                        <p className="mt-1 text-sm text-muted-foreground leading-snug">{currentTechnique.blurb}</p>
+                    <div className="mb-5 lg:mb-6 flex items-start justify-between gap-4">
+                        <div className="min-w-0 max-w-3xl">
+                            <h2 id="study-technique" className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
+                                {currentTechnique.name}
+                            </h2>
+                            <p className="mt-1 text-sm text-muted-foreground leading-snug">{currentTechnique.blurb}</p>
+                        </div>
+                        {/* HISTORY BESIDE THE NAME, on every tool that keeps
+                            one. It was a quiet link under ~1,000px of setup,
+                            opening a panel further down still. */}
+                        {currentTechnique.history && (
+                            <Button
+                                variant="outline"
+                                onClick={() => setHistoryFor(currentTechnique.id)}
+                                className="flex-shrink-0 h-9 px-3 rounded-xl border-2 gap-1.5 text-sm font-bold"
+                            >
+                                <FolderOpen className="w-4 h-4" aria-hidden="true" />
+                                <span>History</span>
+                            </Button>
+                        )}
                     </div>
                     <motion.div
                         key={activeTab}
