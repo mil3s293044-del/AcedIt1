@@ -15,9 +15,12 @@
  *
  *   1. What is waiting on me — requests and shares, only when there are any,
  *      each with its action on the row.
- *   2. My people — a row per friend with their streak and rank, and the two
+ *   2. How to add someone — your code and link, and a box for theirs. It
+ *      sits ABOVE the list: the code is what a student opens this page to
+ *      find or hand over, and below a long list of friends it was a scroll
+ *      away on exactly the visit that needed it.
+ *   3. My people — a row per friend with their streak and rank, and the two
  *      things you can do with a friend (share, remove) visible.
- *   3. How to add someone — your code and link, and a box for theirs.
  *
  * ─── THE WRITES ARE THE SERVER'S ────────────────────────────────────────────
  * Every friendship and share goes through `friendsApi` (see src/lib/friends.js
@@ -392,6 +395,36 @@ export default function Friends() {
                     </Band>
                 )}
 
+                {/* ── Adding someone ─────────────────────────────────────── */}
+                <Band title="Add a friend">
+                    <div className="grid md:grid-cols-2 gap-3" data-friends-block="add">
+                        <div className="card-soft on-table p-4 sm:p-5">
+                            <p className="text-xs font-bold text-muted-foreground">Your code</p>
+                            <p className="font-display font-black text-3xl tracking-wider text-foreground mt-1 tabular-nums select-all">
+                                {data.code || "—"}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">Only people you give it to can find you.</p>
+                            <div className="flex gap-2 mt-3">
+                                <Button size="sm" onClick={shareLink} disabled={!link} className="gap-1.5 flex-1 sm:flex-none">
+                                    <Share2 className="w-4 h-4" /> Send my link
+                                </Button>
+                                <Button size="sm" variant="outline" onClick={copyLink} disabled={!link} className="gap-1.5">
+                                    <Copy className="w-4 h-4" /> Copy
+                                </Button>
+                            </div>
+                        </div>
+                        <form onSubmit={addFromInput} className="card-soft on-table p-4 sm:p-5 flex flex-col">
+                            <label htmlFor="friend-add" className="text-xs font-bold text-muted-foreground">Their code, link or email</label>
+                            <Input id="friend-add" value={addInput} onChange={(e) => setAddInput(e.target.value)}
+                                placeholder="Paste a link, or e.g. ACE-4FH9P" autoComplete="off" spellCheck={false}
+                                className="mt-2 font-semibold tracking-wide" />
+                            <Button type="submit" size="sm" disabled={!addInput.trim() || working === "add"} className="gap-1.5 mt-3 self-start">
+                                {working === "add" ? <AceShuffle size="sm" /> : <UserPlus className="w-4 h-4" />} Send request
+                            </Button>
+                        </form>
+                    </div>
+                </Band>
+
                 {/* ── Your friends ───────────────────────────────────────── */}
                 <Band title="Your friends" count={data.friends.length || null}
                     aside={data.friends.length > 0 && (
@@ -404,7 +437,7 @@ export default function Friends() {
                         <div className="flex items-center gap-4 py-2" data-friends-block="empty">
                             <AceBody className="w-16 flex-shrink-0" pose="wave" title="Ace" />
                             <p className="text-sm text-muted-foreground max-w-md">
-                                Nobody yet. Send your link below to someone in your class — when they open it they can send you a
+                                Nobody yet. Send your link above to someone in your class — when they open it they can send you a
                                 request, and once you're friends you can share decks and quizzes and see each other on Ranked.
                             </p>
                         </div>
@@ -463,36 +496,6 @@ export default function Friends() {
                             </div>
                         </div>
                     )}
-                </Band>
-
-                {/* ── Adding someone ─────────────────────────────────────── */}
-                <Band title="Add a friend">
-                    <div className="grid md:grid-cols-2 gap-3" data-friends-block="add">
-                        <div className="card-soft on-table p-4 sm:p-5">
-                            <p className="text-xs font-bold text-muted-foreground">Your code</p>
-                            <p className="font-display font-black text-3xl tracking-wider text-foreground mt-1 tabular-nums select-all">
-                                {data.code || "—"}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">Only people you give it to can find you.</p>
-                            <div className="flex gap-2 mt-3">
-                                <Button size="sm" onClick={shareLink} disabled={!link} className="gap-1.5 flex-1 sm:flex-none">
-                                    <Share2 className="w-4 h-4" /> Send my link
-                                </Button>
-                                <Button size="sm" variant="outline" onClick={copyLink} disabled={!link} className="gap-1.5">
-                                    <Copy className="w-4 h-4" /> Copy
-                                </Button>
-                            </div>
-                        </div>
-                        <form onSubmit={addFromInput} className="card-soft on-table p-4 sm:p-5 flex flex-col">
-                            <label htmlFor="friend-add" className="text-xs font-bold text-muted-foreground">Their code, link or email</label>
-                            <Input id="friend-add" value={addInput} onChange={(e) => setAddInput(e.target.value)}
-                                placeholder="Paste a link, or e.g. ACE-4FH9P" autoComplete="off" spellCheck={false}
-                                className="mt-2 font-semibold tracking-wide" />
-                            <Button type="submit" size="sm" disabled={!addInput.trim() || working === "add"} className="gap-1.5 mt-3 self-start">
-                                {working === "add" ? <AceShuffle size="sm" /> : <UserPlus className="w-4 h-4" />} Send request
-                            </Button>
-                        </form>
-                    </div>
                 </Band>
             </div>
 

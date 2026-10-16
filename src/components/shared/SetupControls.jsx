@@ -48,14 +48,6 @@ export const TONE = {
         chipOn: "border-xp bg-xp/10 text-xp",
         value: "text-xp",
     },
-    // Revision Mode's. It was the one setup screen not drawn with these
-    // controls at all — black-filled pills of its own, in five stacked boxes.
-    streak: {
-        slider: "streak",
-        on: "border-streak bg-streak/10 text-foreground",
-        chipOn: "border-streak bg-streak/10 text-streak",
-        value: "text-streak",
-    },
 };
 const inkFor = (tone) => TONE[tone] || TONE.primary;
 
@@ -100,16 +92,7 @@ export function Segmented({ value, onChange, options = [], tone = "primary", siz
     // the control cryptic, so the ROW wraps instead: two columns below `sm`,
     // one row from `sm` up. Three or fewer still fit a line at every width,
     // and a 2-up grid of three leaves an orphan cell, so they stay a row.
-    //
-    // IT IS THE WORDS THAT DO NOT FIT, NOT THE COUNT. Wrapping on count alone
-    // put "10 · 20 · 30 · 50 · All" on three rows with "All" orphaned, and
-    // "5m · 10m · 15m · 20m" in a 2×2 — numbers that sit on one line easily.
-    // So a row of short labels stays a row, and six options wrap three across
-    // rather than leaving three rows of two.
-    const longest = Math.max(0, ...options.map(o => String(o.label ?? "").length));
-    const wrap = options.length < 4 || longest * options.length <= 18
-        ? "flex"
-        : options.length % 3 === 0 && longest <= 9 ? "grid grid-cols-3 sm:flex" : "grid grid-cols-2 sm:flex";
+    const wrap = options.length >= 4 ? "grid grid-cols-2 sm:flex" : "flex";
     return (
         <div className={`${wrap} gap-1.5`}>
             {options.map(o => {

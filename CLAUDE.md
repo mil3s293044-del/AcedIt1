@@ -4163,213 +4163,43 @@ Draw both with `scripts/_floorProbe.jsx?v=study` (the setup card against picks
 of every kind), `?v=setup` (the REAL components, which is the only way to see
 the no-picks path a fixture cannot reach) and `?v=planner`.
 
-## The Study page leads with one step, and names a technique once
+## The Study page went back to how it was
 
-**"Rework the study page."** Measured before anything was drawn, and every fault
-was a number. The page opened on *"Six techniques to make studying actually
-work"* — a pitch, read by somebody who had already arrived (and the no-subjects
-screen said *Five*). Under it, a "Selected technique" card, a "Today" card
-repeating the dashboard, six pastel tiles that were really tabs, and then the
-tool's own title card. **The technique was named three times before anything
-could be pressed**, and the tool began ~730px down on a laptop and ~1,200px down
-on a phone. The one thing the page had worked out — what is worth doing NOW —
-was a "Top pick" badge in the corner of one tile.
+**"I still feel like you killed the aesthetics of it — revert it to the original
+version of Study before we began fiddling with it."** Two releases reworked
+Study: one made the heading a single next step, the six tiles a tab strip and
+the science rail a fold under the tool; the next set that step in a card with a
+figure and a ring, gave the switcher a sliding pill, pinned a start bar under
+every setup and banded the deck shelf. Both were reverted in full, on purpose:
+every Study screen is the version from before them — the coach strip, the
+"Suggested today" panel, the six technique tiles, each technique's own header,
+the science rail beside the tool (open by default), Revision Mode's hero, and
+Mind Maps' "One map per subject" card. `TechniqueTabs`, `NextStepCard`,
+`SetupShell` and `studyPage.js` went with them, and `SetupControls`/`slider`
+lost the `streak` tone and the label-length wrap rule that only the polish used.
 
-`src/lib/studyPage.js` is the model and `studyPage.test.mjs` holds it (TZ pinned
-to Melbourne, 24 injections, every one biting).
+**THE LESSON IS ABOUT THE ASK, NOT THE CODE.** Every change in those two
+releases was argued from a measured fault — the technique named three times,
+the tool ~730px down, a start button below the fold — and the page still read
+as worse to the person it is for. A student-facing screen's LOOK is the
+product's call, and a measurement that the old page was inefficient is not a
+mandate to replace what it looked like. Before reworking a page that already
+has a look somebody likes, change the fault and leave the look.
 
-### The heading IS the next step
+**THREE FIXES SURVIVED, because none of them changes a pixel**, and
+`study.test.mjs` holds all three (each verified by putting the bug back):
 
-`nextStep` ranks, in an order a student could check: a focus block already
-running → an assessment inside 3 days → **what they said today was for**, until
-they have done that much (their own word beats our guess, which is why the
-dashboard asks) → an assessment inside 7 days → 5+ cards ready → nothing yet
-today → one technique has been ≥70% of the week (breadth is an ATAR component)
-→ under an hour → done, which draws **no button at all**.
+- **`todaysIntent` reads today as a LOCAL day** (`studyIntent.js`). It used
+  `toISOString`, which is UTC, so in Melbourne before 10 or 11am an intent set
+  at breakfast read as yesterday's and the page ignored it.
+- **Days to a SAC are CALENDAR days** (`differenceInCalendarDays` in
+  Study.jsx). `differenceInDays` counts 24-hour spans, so at 3pm a SAC due
+  tomorrow floored to 0 and the panel said "Exam today".
+- **The deck shelf's pill says READY**, the word on the deck face beside it,
+  rather than "6 due" next to "6 READY" — due.js's rule.
 
-**EVERY BUTTON NAMES WHERE IT GOES.** It opens the technique and scrolls to it.
-It does not start the timer or build a session, so it may not say "Start" —
-`startFromSuggestion`'s rule, kept by promising only the door. Free study with
-nothing ready skips to the next rule rather than sending somebody to an empty
-deck. The greeting is muted beside the step, so the sentence reads as one line
-with the part that matters in full ink.
-
-**The duel coach line is gone**, with the duels it described — nothing can start
-one now — and it spoke the betting vocabulary ("defend your ante", "the pot")
-the floor dropped for forecasting. Nothing else on the page read `useStakes`.
-
-### The switcher says one counted thing per technique
-
-`TechniqueTabs` is one row with a sliding PILL (it was an underline — see the
-section below), sticky at `top-12` (the top bar's own `h-12`), scrolling
-sideways on a phone. Under each name, `techniqueFacts`: "14 ready", "SAC in 3
-days", "25m today", "Yesterday". Colour is on the glyph and a live fact only —
-six pastel boxes were the generated grid this app keeps deleting. The suggested
-technique carries a dot so the heading's step can be found in the strip.
-
-**"NOT TRIED YET" IS NEVER SAID OFF A TRUNCATED READ.** `study_techniques` is
-read 50 rows deep (`TECHNIQUE_READ_LIMIT`); a technique missing from a FULL read
-may simply be older than it. Then the strip prints what the technique IS rather
-than a claim about somebody's history. On a phone the ROW is scrolled to the live
-tab, never `scrollIntoView` on the tab, which also scrolls the page.
-
-### Days are local, and three of them were not
-
-- **`differenceInDays(dueDate, now)` counts 24-hour spans**, so at 3pm a SAC due
-  TOMORROW was nine hours away, floored to 0, and the page said "Exam today".
-  `daysUntil` counts calendar days, and survives a daylight-saving day.
-- **Today's and this week's minutes** were summed inline, parsing `date` as UTC
-  midnight. They go through `studyEvents` (both tables) on `dayKey` days now.
-- **`todaysIntent` read today as `toISOString`** — UTC — while the Dashboard
-  writes the intent with a LOCAL day. In Melbourne, before 10 or 11am, a
-  breakfast answer read as yesterday's, so the Study page ignored the one thing
-  the student had told it. Fixed at the read, which is the shared one.
-
-### One header, and the techniques lost theirs
-
-The page prints the technique's name and one sentence of what it is for, above
-the tool. Pomodoro's "Pomodoro Timer / Focus and productivity timer" card, Active
-Recall's and Blurting's title rows, Revision Mode's centred hero and Mind Maps'
-"One map per subject" card are gone — Revision Mode keeps the one useful thing
-its hero had, the size of each question pool, as a strip. Its selected source
-tiles were solid saturated fills; they are tinted now, the selected state every
-other control on the page uses. The deck shelf's "6 due" beside a deck face
-reading "6 READY" says **ready**.
-
-### The science is a fold UNDER the tool
-
-It was a 380px rail beside every technique, open by default, and REFERENCE:
-read once or twice, permanently taking a third of the width. Its own header
-clipped ("…SPACED REPETIT…") and the deck shelf beside it lost the end of its
-toolbar. The tool takes the page now; `NeuroPanel` is a named fold after it
-("Why Pomodoro works — the science, with sources"), two columns when open.
-
-**IT DEFAULTS FOLDED, and that reverses an earlier call on purpose.**
-Open-by-default was right while it was a rail beside the tool, where folding it
-gave nothing back but width. Under the tool and open, it is two screens of
-reference between the student and the bottom of the page on every technique.
-One preference across all six (`acedit.study.science`), and only an explicit
-"open" opens it.
-
-Draw it with the network-level harness against `/Study`, with `study_techniques`
-and `study_sessions` fixtures (the facts and the minutes are blank without them)
-and an assessment inside a week (the heading's first rule). Both themes, at 390
-with touch, and the button's scroll — `scroll-mt` has to clear the top bar AND
-the sticky strip, or the header lands underneath them.
-
-## The Study page, polished: one card, one bar, one shelf
-
-**"Looks good — make it more aesthetic, and better UI and UX."** The rework
-above fixed what the page SAID. This pass fixed what it looked like doing it,
-and each change was a measured fault rather than a taste.
-
-### The next step is a card with its own number in it
-
-The heading was a 40px sentence with its button floating bottom-right at the
-far edge, so the top of the page was a large sentence beside a hole and the
-button read as belonging to the tab bar under it. `NextStepCard` holds the three
-together: the FIGURE the sentence turns on, the sentence, and its door.
-
-- **The figure is the sentence's own number** (`stepFigure`) — "4 days", "14
-  ready", "25 min". A step with nothing countable gets the technique's glyph
-  instead, never a filler figure: a big number nobody can check is decoration
-  in the most prominent place on the page.
-- **The ring is only ever against what they SAID** (`todayRing`, null without a
-  declared intent). The app has no basis for a daily target of its own, which
-  is WeekPace's rule. Without one, the minutes stay in the eyebrow and no circle
-  implies they are behind. With one, the eyebrow drops its "today" so the figure
-  is not printed twice.
-
-### The switcher is the Progress bar's control
-
-An underline in a six-column grid put equal cells around names of unequal
-length, which read as uneven gaps, and "Spaced Repetition" ran into the
-neighbouring cell. It is a segmented bar with one sliding pill (`layoutId`, the
-ProgressTabs idiom), so the two pages a student moves between most use one
-control. The cells are sized by their content (`lg:flex-auto`).
-
-### Six tools, one shape
-
-Active Recall and Blurting each had the start button at the bottom of ~1,000px
-of options, below the fold on every screen, with history behind a quiet link
-under it. Revision Mode was five stacked boxes with black pills and a summary
-card of its own. Three setups, three shapes, on one page whose tabs promise
-they are siblings. `SetupShell.jsx` is what they share now:
-
-- **`StartBar` is pinned and says what is about to happen.** Sticky inside its
-  card, so the button is on screen from the first paint and settles at the foot
-  of the card. It leads with the session as a FIGURE ("14 questions", "10
-  minutes") and a line of what the options added up to, so the press is on
-  something stated rather than on a verb. **Its card must be `overflow-clip`,
-  never `overflow-hidden`**: `hidden` makes the card a scroll container, and a
-  sticky child sticks to a box that never scrolls, which renders exactly like no
-  sticky at all.
-- **`pr-20` below xl is the Ace launcher's corner**, the reserve Strategise's
-  footer keeps, sized for a bar inside a card. The launcher is fixed
-  bottom-right and covered the button at every width until the column clears it
-  at 1280. On a phone that leaves no room beside the button, so the bar STACKS
-  rather than truncating "14 questions" to "14 questio…". Only the screenshot
-  said so.
-- **History is a dialog, opened from the page's own header.** It was an inline
-  panel that appeared under a long setup card, so pressing "Previous sessions"
-  changed something off screen. A technique flagged `history: true` in
-  Study.jsx gets a History button beside its name, and the component takes
-  `historyOpen` / `onHistoryChange`. A history row's delete uses `HOVER_REVEAL`,
-  because `opacity-0 group-hover:` alone is a control a phone can never reach.
-- **Revision Mode is one card on the shared controls**: the pool as its first
-  row, subject and topic, the sources as rows on a phone (three across from
-  `sm`; "Flashcards" in a third of a phone came out "Flash…"), and the count and
-  time limit as `Segmented`.
-- **Pomodoro is two columns on a desktop**, the clock beside its options, with
-  the block length as chips (25 / 50 / 90). **A chip goes through
-  `handleSettingsChange`**, the path that banks the minutes already studied
-  BEFORE the block restarts. That is the bug CLAUDE.md records about changing a
-  block's length, and setting `workTime` directly would bring it back. A custom
-  length set in the settings is named under the chips rather than silently
-  matching none of them.
-
-**A SEGMENTED ROW WRAPS ON ITS WORDS, NOT ITS COUNT.** Wrapping at four options
-was written for "Written / Extended / Standard / Revision", and it put "10 · 20
-· 30 · 50 · All" on three rows with "All" orphaned, and "5m · 10m · 15m · 20m"
-in a 2×2. Short labels stay one row, and six options wrap three across.
-
-### The shelf is a shelf, and a subject is one press
-
-The flashcard shelf labelled a subject with a dot. The Quizzes shelf, the other
-list of a student's own decks, labels it with a spine and a rule to the end of
-the row. The two now match.
-
-**THE READY COUNT IS THE BUTTON.** It was a pill stating a number nobody could
-act on without opening each deck in turn, so a subject with six decks and four
-ready cards spread across three of them was six taps from the four cards.
-`subjectReviewCards` plays every ready card in the subject, lapsed first and
-never-opened after, and **the count on the button is that array's length**, so
-"Review 8 ready" cannot open six. The session's deck is built for the session
-and never stored: the shelf keys decks on subject|topic|unit, so it carries
-`topic: null` and the study log records the subject without inventing a topic.
-On a phone the band prints `shortSubject`, so the button never pushes
-"Mathematical Methods" to "Mathematical …".
-
-**OPENING A DECK OR A REVIEW TAKES YOU TO ITS TOP.** Both replace the shelf in
-place, so a deck tapped halfway down a long shelf opened with its Exit button
-already scrolled away under the sticky strip. It scrolls only when the top is
-out of sight, with the same `scroll-mt` Study's tool uses. The shelf's toolbar
-also ran off a phone with its primary button cut in half, so below `sm` it is
-two outline buttons on one row with the generate button taking the next row
-whole.
-
-`studyPage.test.mjs` holds all of it, 43 checks with 24 injections, every one
-caught. **One older guard went red on correct code:** `quizSetup.test.mjs`
-pinned `questionCount * pace` for Active Recall's estimate, and the start bar
-now multiplies the questions that will actually be asked, which is the number
-the clock uses. It reads the PROPERTY now: the estimate in the start bar reads
-`pace` and hard-codes no three.
-
-Draw it with the network-level harness against `/Study`: `CLICK='Review 8 ready'`
-for the subject session, `SCROLL=` with a viewport shot for the pinned bar (a
-full-page screenshot draws a sticky element where the viewport was, which looks
-like a bug and is not), `INTENT=cramming` for the ring. Both themes, and at 390
-with touch, where the launcher and the stacked bar meet.
+And one word: the no-subjects screen said "Five evidence-based techniques" on a
+page with six.
 
 ## Study intent
 
@@ -7863,9 +7693,11 @@ or every share sent before the channel closed would keep it open.
 an inbox panel, a featured panel and five tabs announced one pending request
 four times, while the friend rows said nothing about the friend (a
 `streak_days: 0` placeholder never filled) and Remove sat behind a hover a
-phone cannot do. Now: waiting on you (only when there is something), your
-friends with streak and rank and their actions visible, requests waiting on
-them as chips, and your code beside a box for theirs. **Ladder is gone** —
+phone cannot do. Now: waiting on you (only when there is something), then
+your code beside a box for theirs, then your friends with streak and rank and
+their actions visible, and requests waiting on them as chips. **The code sits
+ABOVE the list** — it is what a student opens this page to find or hand over,
+and under a long list of friends it was a scroll away on exactly that visit. **Ladder is gone** —
 `FriendsLeaderboard` is deleted and "Where you stand" opens
 `/Ranked?tab=board&scope=friends`, which Ranked now honours. **Received AI
 results are shown**: they were written and displayed nowhere, a share into a
@@ -8045,17 +7877,9 @@ student looking free in the nav, the planner and the companion.
 - `src/data/vceSubjects.js` — VCE subject catalog (`assessment_structure` and
   `key_skills` are read by `subjectHub.js`)
 - `src/lib/subjectHub.js`, `src/pages/SubjectHub.jsx` — one subject, gathered
-- `src/lib/studyPage.js` + `studyPage.test.mjs`,
-  `src/components/study/TechniqueTabs.jsx`, `NextStepCard.jsx`,
-  `SetupShell.jsx` — the Study page's heading (one next step, ranked, with a
-  button that only ever names a door, set as a card around its own figure and,
-  only against a declared intent, today's ring), the counted fact under each
-  technique on a sliding-pill bar, and today's minutes through `studyEvents` on
-  local days. `SetupShell` is what the tools share: the pinned `StartBar` (its
-  card is `overflow-clip`, and it keeps the Ace corner clear below xl), history
-  as a dialog opened from the header, and `HOVER_REVEAL`. `subjectReviewCards`
-  is the shelf's one-press subject session. `NeuroPanel` is the science fold
-  under the tool, shut by default
+- `src/pages/Study.jsx` + `src/lib/study.test.mjs` — the Study page, back to
+  its original look (see "The Study page went back to how it was"). The test
+  holds the three invisible fixes that survived the revert
 - `src/components/study/WhatToTest.jsx`, `SourceRow.jsx`,
   `src/lib/recallSuggest.js` + `recallSuggest.test.mjs` — the picks that open a
   session and the sources it runs on, drawn as the TOP OF the setup card rather

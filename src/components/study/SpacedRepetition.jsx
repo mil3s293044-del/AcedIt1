@@ -38,8 +38,6 @@ import DeckStack from "@/components/cards/DeckStack";
 import { rankFor, suitFor, subjectColor } from "@/components/cards/cardIdentity";
 import { cardMastery, isCardDue } from "@/lib/mastery";
 import { isNew, isReady, tally } from "@/lib/due";
-import { shortSubject } from "@/lib/subjectShort";
-import { subjectReviewCards } from "@/lib/studyPage";
 import { deckCards } from "@/lib/mistakeBank";
 import { calculateNextReview as sm2Next, formatIntervalShort as sm2Interval, reviewPatch, RATINGS } from "@/lib/sm2";
 
@@ -648,18 +646,6 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
         recordStudyAndGetStreak().catch(() => {});
     };
 
-    // EVERY READY CARD IN ONE SUBJECT, as one session (`subjectReviewCards`
-    // decides which and in what order). The deck is built for the session and
-    // never stored: the shelf keys decks on subject|topic|unit, and a "deck"
-    // with no topic of its own would split the shelf. `topic` is null so the
-    // study log records the subject without inventing a topic name.
-    const handleReviewSubject = (subjectName, subjectDecks) => {
-        const deck = { id: `subject:${subjectName}`, subject_name: subjectName, topic: null, unit: "General",
-            cards: subjectReviewCards(subjectDecks) };
-        setSelectedDeck(deck);
-        handleStartReview(deck, 'ready');
-    };
-
     const handleCompleteReview = async () => {
         if (!reviewStartTime) return;
         const durationMinutes = Math.round((Date.now() - reviewStartTime) / 60000);
@@ -697,7 +683,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             toast({
                 variant: "success",
                 title: `${reviewed} card${reviewed === 1 ? '' : 's'} reviewed`,
-                description: `${xp > 0 ? `+${xp} XP banked · ` : ''}They're off today's review list.`,
+                description: `${xp > 0 ? `+${xp} XP banked · ` : ''}They're off today's due list.`,
             });
         }
 
@@ -721,20 +707,6 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             if (user?.email) loadDecks(user.email).catch(() => {});
         })();
     }, [sessionStats.totalReviews, reviewStartTime, selectedDeck, currentCardIndex, user, loadDecks, toast]);
-
-    // OPENING A DECK OR A REVIEW TAKES YOU TO ITS TOP. Both replace the shelf
-    // in place, so a deck tapped halfway down a long shelf — or a subject's
-    // "Review N ready" — opened with its Exit button and its title already
-    // scrolled away under the sticky technique strip. Only when the top is out
-    // of sight: a view already in place does not jump. `scroll-mt` on the
-    // view clears the top bar and the strip, the margin Study's tool uses.
-    const viewTopRef = React.useRef(null);
-    useEffect(() => {
-        if (!reviewMode && !selectedDeck) return;
-        const el = viewTopRef.current;
-        if (!el || el.getBoundingClientRect().top >= 120) return;
-        el.scrollIntoView({ block: "start" });
-    }, [reviewMode, selectedDeck?.id]);
 
     // Esc leaves the deck, the same as it closes every dialog on the site.
     useEffect(() => {
@@ -864,7 +836,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             currentCard.subject_name);
 
         return (
-            <div ref={viewTopRef} className="max-w-4xl mx-auto space-y-4 scroll-mt-[7.5rem]">
+            <div className="max-w-4xl mx-auto space-y-4">
                 {/* Top bar. The card counter that used to live here is gone —
                     the two piles say the same thing, and saying it twice is
                     how a screen ends up looking like a dashboard. */}
@@ -1002,7 +974,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             selectedDeck.subject_name);
 
         return (
-            <div ref={viewTopRef} className="space-y-5 scroll-mt-[7.5rem]">
+            <div className="space-y-5">
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <button onClick={() => setSelectedDeck(null)} className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground font-medium">
@@ -1143,10 +1115,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                             {userSubjects.map(s => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                    {/* Three buttons in a row ran off a phone with the primary
-                        one cut in half. Below sm the two outline buttons share
-                        a row and the generate button takes the next one whole. */}
-                    <div className="grid grid-cols-2 sm:flex gap-2">
+                    <div className="flex gap-2">
                         {/* The way out of a pile that has got away from you.
                             Every other control here makes MORE cards; this is
                             the only one that lets you tell the app it is wrong
@@ -1158,8 +1127,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                             h1. Two names for one screen is how a student stops
                             believing either. The count is what makes it a
                             decision rather than a label. */}
-                        <Link to={createPageUrl("Review")} className="min-w-0">
-                            <Button variant="outline" className="w-full sm:w-auto gap-2 border-2 border-border rounded-xl h-11 text-foreground">
+                        <Link to={createPageUrl("Review")}>
+                            <Button variant="outline" className="gap-2 border-2 border-border rounded-xl h-11 text-foreground">
                                 <ListChecks className="w-4 h-4" />
                                 Progress
                                 {queueReady > 0 && (
@@ -1170,10 +1139,10 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                 )}
                             </Button>
                         </Link>
-                        <Button onClick={() => setIsCreatingDeck(true)} variant="outline" className="w-full sm:w-auto gap-2 border-2 border-border rounded-xl h-11 text-foreground">
+                        <Button onClick={() => setIsCreatingDeck(true)} variant="outline" className="gap-2 border-2 border-border rounded-xl h-11 text-foreground">
                             <Plus className="w-4 h-4" /> New Deck
                         </Button>
-                        <Button onClick={() => setIsShowingGenerated(true)} className="col-span-2 btn-3d gap-2 bg-chart-4 hover:bg-chart-4 text-white rounded-xl h-11">
+                        <Button onClick={() => setIsShowingGenerated(true)} className="btn-3d gap-2 bg-chart-4 hover:bg-chart-4 text-white rounded-xl h-11">
                             <Sparkles className="w-4 h-4" /> Make cards from notes
                         </Button>
                     </div>
@@ -1196,45 +1165,16 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         // READY, and the word goes with the number: this pill
                         // said "6 due" directly beside a deck face reading
                         // "6 READY" — one count, two names. due.js's rule.
-                        const totalReady = subjectReviewCards(subjectDecks).length;
+                        const totalReady = subjectDecks.reduce((sum, d) => sum + d.cards.filter(isReady).length, 0);
                         return (
                             <div key={subjectName} className="space-y-3">
-                                {/* THE QUIZZES SHELF'S BAND, because the two
-                                    shelves holding a student's own decks of
-                                    cards should not label a subject two ways:
-                                    a colour SPINE, the count, and a rule to the
-                                    end of the row so the space beside two
-                                    decks is margin rather than a hole.
-
-                                    THE READY COUNT IS THE BUTTON. It was a pill
-                                    stating a number nobody could act on without
-                                    opening each deck in turn — a subject with
-                                    six decks and four cards ready in three of
-                                    them was six taps from the four cards. */}
-                                <div className="flex items-center gap-2.5">
-                                    <span className="w-1.5 h-5 rounded-full flex-shrink-0" style={{ backgroundColor: groupColor }} aria-hidden="true" />
-                                    {/* On a phone the review button takes
-                                        the width, so the name is the one
-                                        students say ("Methods") rather than
-                                        "Mathematical …" cut short. */}
-                                    <h3 className="min-w-0 font-display font-extrabold text-foreground truncate">
-                                        <span className="sm:hidden">{shortSubject(subjectName)}</span>
-                                        <span className="hidden sm:inline">{subjectName}</span>
-                                    </h3>
-                                    <span className="text-xs font-bold text-muted-foreground/50 tabular-nums flex-shrink-0">
-                                        {subjectDecks.length}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: groupColor }} />
+                                    <h3 className="font-bold text-foreground">{subjectName}</h3>
+                                    <span className="text-xs text-muted-foreground/60">
+                                        {subjectDecks.length} deck{subjectDecks.length === 1 ? "" : "s"}
                                     </span>
-                                    <span className="flex-1 min-w-4 h-px bg-border" aria-hidden="true" />
-                                    {totalReady > 0 && (
-                                        <button type="button" onClick={() => handleReviewSubject(subjectName, subjectDecks)}
-                                            className="flex-shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-full
-                                                bg-chart-3/10 text-chart-3 text-xs font-extrabold tabular-nums
-                                                hover:bg-chart-3/20 transition-colors
-                                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                                            <Play className="w-3 h-3 fill-current" aria-hidden="true" />
-                                            Review {totalReady} ready
-                                        </button>
-                                    )}
+                                    {totalReady > 0 && <span className="pill bg-chart-3/10 text-chart-3">{totalReady} ready</span>}
                                 </div>
                                 {/* Wrapped rather than gridded. A four-column
                                     grid leaves a subject with one deck sitting
