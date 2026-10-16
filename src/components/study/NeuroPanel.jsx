@@ -1,5 +1,5 @@
 /**
- * NeuroPanel — the science under whichever technique is open, folded until asked.
+ * NeuroPanel — the science rail beside whichever technique is open.
  *
  * The brief was a neuroscience vibe that builds trust. Trust comes from being
  * checkable, so the order here is deliberate: what your brain is doing, what
@@ -30,155 +30,162 @@ const TONE_PILL = {
     streak: "bg-streak/15 text-streak", map: "bg-map/15 text-map",
 };
 
-export default function NeuroPanel({ techniqueId, techniqueName, open = false, onToggle }) {
+export default function NeuroPanel({ techniqueId, techniqueName, open = true, onToggle }) {
     const data = TECHNIQUE_NEURO[techniqueId];
     const [showSources, setShowSources] = useState(false);
     if (!data) return null;
     const utility = data.utility ? UTILITY[data.utility] : null;
 
-    // ── IT LIVES UNDER THE TOOL NOW, FOLDED ─────────────────────────────────
+    // ── COLLAPSED: a bar, and the tool gets the width ───────────────────────
     //
-    // It was a 380px rail beside every technique, open by default — REFERENCE,
-    // read once or twice, permanently taking a third of the width from the
-    // thing the student opened the page to do. Its own header clipped
-    // ("THE SCIENCE BEHIND SPACED REPETIT…") and the deck shelf beside it lost
-    // the end of its own toolbar. So the tool takes the page, and this is a
-    // named section after it: folded unless the student has opened it before.
+    // This rail is 380px of the screen on every technique, permanently, and it
+    // is REFERENCE — read once, maybe twice, then in the way of the thing the
+    // student actually opened the page to do. A timer running next to a brain
+    // diagram is the diagram winning an argument it should not be having.
     //
-    // It is not deleted and it does not hide itself. The fold is a heading with
-    // a rule — the Progress page's MoreDetail idiom — and it NAMES what is
-    // behind it, because a chevron on nothing is a control nobody presses.
-    const fold = (
-        <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={open}
-            className="w-full flex items-center gap-3 px-1 py-1 text-left group"
-        >
-            <Brain className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden="true" />
-            <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider whitespace-nowrap
-                group-hover:text-foreground transition-colors">
-                Why {techniqueName} works
-            </span>
-            <span className="h-px flex-1 bg-border" aria-hidden="true" />
-            <span className="hidden sm:inline text-xs text-muted-foreground whitespace-nowrap">
-                {open ? "Hide" : "The science, with sources"}
-            </span>
-            <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform
-                ${open ? "rotate-180" : ""}`} aria-hidden="true" />
-        </button>
-    );
+    // It is not deleted, and it does not hide itself: what is worth reading
+    // once is worth being able to find again, so the collapsed state is a real
+    // control that names what is behind it rather than a chevron on nothing.
+    // Study remembers the choice, so this is answered once and not per visit.
+    if (!open) {
+        return (
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded={false}
+                className="w-full flex items-center gap-2.5 rounded-2xl border-2 border-border
+                    bg-surface px-4 py-3 text-left hover:border-foreground/20 transition-colors"
+            >
+                <Brain className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="stat-label text-muted-foreground flex-1 min-w-0 truncate">
+                    The science behind {techniqueName}
+                </span>
+                <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+            </button>
+        );
+    }
 
-    if (!open) return <section aria-label={`Why ${techniqueName} works`}>{fold}</section>;
-
-    // Two columns once there is width for them: the brain on one side, the
-    // numbers and the caveats on the other. Stacked on a phone.
+    // One column as a side rail; two when it stacks under the tool and has the
+    // width, so the space it gains is used rather than spent on 1100px-long
+    // lines of body text.
     return (
-        <motion.section
+        <motion.aside
             key={techniqueId}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="space-y-4"
-            aria-label={`Why ${techniqueName} works`}
+            className="grid gap-3 items-start md:grid-cols-2 xl:grid-cols-1"
+            aria-label={`The science behind ${techniqueName}`}
         >
-            {fold}
-            <div className="grid gap-3 items-start md:grid-cols-2">
-                {/* ── The brain ──────────────────────────────────────────────── */}
-                <div className="rounded-3xl border-2 border-border bg-gradient-to-b from-secondary/40 to-transparent overflow-hidden">
-                    <div className="flex items-center gap-2 px-4 pt-4">
-                        <p className="stat-label">Your brain on {techniqueName}</p>
-                    </div>
-
-                    <BrainModel key={techniqueId} regions={data.regions} height={250} className="mt-1" />
-
-                    <div className="px-4 pb-4 space-y-2.5">
-                        <p className="text-sm text-foreground leading-snug">{data.network}</p>
-                        <ul className="space-y-1.5">
-                            {data.regions.map(r => (
-                                <li key={r.id} className="flex items-start gap-2">
-                                    <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${TONE_DOT[r.tone] || "bg-map"}`} />
-                                    <span className="min-w-0">
-                                        <span className="text-xs font-bold text-foreground">{REGIONS[r.id]?.name}</span>
-                                        <span className="text-xs text-muted-foreground"> — {r.role}</span>
-                                    </span>
-                                </li>
-                            ))}
-                        </ul>
-                        <p className="text-[10px] text-muted-foreground/80 leading-snug pt-1 border-t border-border">
-                            {REGION_NOTE}
-                        </p>
-                    </div>
+            {/* The way out. In the grid's flow rather than floated over a card,
+                so it cannot land on top of the brain at the width where the
+                rail becomes two columns. */}
+            <button
+                type="button"
+                onClick={onToggle}
+                aria-expanded
+                className="md:col-span-2 xl:col-span-1 w-full flex items-center gap-2.5
+                    rounded-2xl border-2 border-border bg-surface px-4 py-2.5 text-left
+                    hover:border-foreground/20 transition-colors"
+            >
+                <Brain className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                <span className="stat-label text-muted-foreground flex-1 min-w-0 truncate">
+                    The science behind {techniqueName}
+                </span>
+                <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0 rotate-180" />
+            </button>
+            {/* ── The brain ──────────────────────────────────────────────── */}
+            <div className="rounded-3xl border-2 border-border bg-gradient-to-b from-secondary/40 to-transparent overflow-hidden">
+                <div className="flex items-center gap-2 px-4 pt-4">
+                    <p className="stat-label">Your brain on {techniqueName}</p>
                 </div>
 
-                {/* ── The numbers, and what to know about them ─────────────────── */}
-                <div className="space-y-3">
-                    <div className="card-soft p-4 border-2 border-border space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                            <p className="stat-label flex items-center gap-1.5">
-                                <TrendingUp className="w-3.5 h-3.5" /> With it vs without it
-                            </p>
-                            {utility && (
-                                <span className={`pill ${TONE_PILL[utility.tone] || TONE_PILL.primary}`} title={utility.blurb}>
-                                    {utility.label}
+                <BrainModel key={techniqueId} regions={data.regions} height={250} className="mt-1" />
+
+                <div className="px-4 pb-4 space-y-2.5">
+                    <p className="text-sm text-foreground leading-snug">{data.network}</p>
+                    <ul className="space-y-1.5">
+                        {data.regions.map(r => (
+                            <li key={r.id} className="flex items-start gap-2">
+                                <span className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${TONE_DOT[r.tone] || "bg-map"}`} />
+                                <span className="min-w-0">
+                                    <span className="text-xs font-bold text-foreground">{REGIONS[r.id]?.name}</span>
+                                    <span className="text-xs text-muted-foreground"> — {r.role}</span>
                                 </span>
-                            )}
-                        </div>
-                        <p className="text-sm font-bold text-foreground leading-snug">{data.headline}</p>
-                        <EvidenceChart chart={data.chart} max={chartMax(data.chart)} />
-                        {data.effect && (
-                            <div className="rounded-xl bg-secondary/50 px-3 py-2">
-                                <p className="text-xs text-muted-foreground">
-                                    <span className="font-display font-black text-foreground text-sm tabular-nums">
-                                        g&nbsp;≈&nbsp;{data.effect.g.toFixed(2)}
-                                    </span>{" "}
-                                    for {data.effect.label} — {data.effect.source}
-                                    {data.effect.approx && <span className="text-muted-foreground/70"> (approx.)</span>}
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
-                    {/* ── Why it feels wrong ─────────────────────────────────────── */}
-                    <div className="rounded-2xl border-2 border-xp/25 bg-xp/5 p-4">
-                        <p className="stat-label text-xp flex items-center gap-1.5 mb-1.5">
-                            <Sparkles className="w-3.5 h-3.5" /> Why it feels harder than it is
-                        </p>
-                        <p className="text-sm text-foreground leading-snug">{data.feelsLike}</p>
-                    </div>
-
-                    {/* ── Where the evidence is thin ─────────────────────────────── */}
-                    {data.caveat && (
-                        <div className="rounded-2xl border-2 border-border p-4">
-                            <p className="stat-label flex items-center gap-1.5 mb-1.5">
-                                <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground" /> Worth knowing
-                            </p>
-                            <p className="text-sm text-muted-foreground leading-snug">{data.caveat}</p>
-                        </div>
-                    )}
-
-                    {/* ── Sources ────────────────────────────────────────────────── */}
-                    <div className="card-soft border-2 border-border overflow-hidden">
-                        <button onClick={() => setShowSources(s => !s)}
-                            aria-expanded={showSources}
-                            className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-secondary/40 transition-colors">
-                            <BookOpen className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-                            <span className="stat-label flex-1">Where this comes from ({data.sources.length})</span>
-                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showSources ? "rotate-180" : ""}`} />
-                        </button>
-                        {showSources && (
-                            <ul className="px-4 pb-4 space-y-2.5">
-                                {data.sources.map(s => (
-                                    <li key={s.ref}>
-                                        <p className="text-xs font-bold text-foreground leading-snug">{s.ref}</p>
-                                        <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{s.note}</p>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
+                            </li>
+                        ))}
+                    </ul>
+                    <p className="text-[10px] text-muted-foreground/80 leading-snug pt-1 border-t border-border">
+                        {REGION_NOTE}
+                    </p>
                 </div>
             </div>
-        </motion.section>
+
+            {/* ── The numbers ────────────────────────────────────────────── */}
+            <div className="card-soft p-4 border-2 border-border space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                    <p className="stat-label flex items-center gap-1.5">
+                        <TrendingUp className="w-3.5 h-3.5" /> With it vs without it
+                    </p>
+                    {utility && (
+                        <span className={`pill ${TONE_PILL[utility.tone] || TONE_PILL.primary}`} title={utility.blurb}>
+                            {utility.label}
+                        </span>
+                    )}
+                </div>
+                <p className="text-sm font-bold text-foreground leading-snug">{data.headline}</p>
+                <EvidenceChart chart={data.chart} max={chartMax(data.chart)} />
+                {data.effect && (
+                    <div className="rounded-xl bg-secondary/50 px-3 py-2">
+                        <p className="text-xs text-muted-foreground">
+                            <span className="font-display font-black text-foreground text-sm tabular-nums">
+                                g&nbsp;≈&nbsp;{data.effect.g.toFixed(2)}
+                            </span>{" "}
+                            for {data.effect.label} — {data.effect.source}
+                            {data.effect.approx && <span className="text-muted-foreground/70"> (approx.)</span>}
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {/* ── Why it feels wrong ─────────────────────────────────────── */}
+            <div className="rounded-2xl border-2 border-xp/25 bg-xp/5 p-4">
+                <p className="stat-label text-xp flex items-center gap-1.5 mb-1.5">
+                    <Sparkles className="w-3.5 h-3.5" /> Why it feels harder than it is
+                </p>
+                <p className="text-sm text-foreground leading-snug">{data.feelsLike}</p>
+            </div>
+
+            {/* ── Where the evidence is thin ─────────────────────────────── */}
+            {data.caveat && (
+                <div className="rounded-2xl border-2 border-border p-4">
+                    <p className="stat-label flex items-center gap-1.5 mb-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground" /> Worth knowing
+                    </p>
+                    <p className="text-sm text-muted-foreground leading-snug">{data.caveat}</p>
+                </div>
+            )}
+
+            {/* ── Sources ────────────────────────────────────────────────── */}
+            <div className="card-soft border-2 border-border overflow-hidden">
+                <button onClick={() => setShowSources(s => !s)}
+                    aria-expanded={showSources}
+                    className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-secondary/40 transition-colors">
+                    <BookOpen className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                    <span className="stat-label flex-1">Where this comes from ({data.sources.length})</span>
+                    <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showSources ? "rotate-180" : ""}`} />
+                </button>
+                {showSources && (
+                    <ul className="px-4 pb-4 space-y-2.5">
+                        {data.sources.map(s => (
+                            <li key={s.ref}>
+                                <p className="text-xs font-bold text-foreground leading-snug">{s.ref}</p>
+                                <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{s.note}</p>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </div>
+        </motion.aside>
     );
 }

@@ -8,7 +8,7 @@ import { Field, Segmented } from "@/components/shared/SetupControls";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, X, Sparkles, Trash2, AlertCircle, Brain, Check, ChevronRight, Layers } from "lucide-react";
+import { PenTool, Play, Clock, CheckCircle, RotateCcw, Maximize, Wand2, X, Sparkles, FolderOpen, Trash2, AlertCircle, Brain, Check, ChevronRight, Layers } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
@@ -16,7 +16,6 @@ import { acceptFiles, uploadAll } from "@/lib/pickFiles";
 import { aceDone } from "@/components/ace/AceReacts";
 import WhatToTest from "./WhatToTest";
 import SourceRow from "./SourceRow";
-import { StartBar, HistoryDialog, HOVER_REVEAL } from "./SetupShell";
 import { suggestTopics } from "@/lib/recallSuggest";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
@@ -80,7 +79,7 @@ function ScoreRing({ percentage, size = 120 }) {
     );
 }
 
-export default function BlurtingMethod({ onSessionComplete, historyOpen, onHistoryChange }) {
+export default function BlurtingMethod({ onSessionComplete }) {
     const [phase, setPhase] = useState("setup");
     const [ownFlashcards, setOwnFlashcards] = useState([]);
     const [ownMaps, setOwnMaps] = useState([]);
@@ -102,11 +101,7 @@ export default function BlurtingMethod({ onSessionComplete, historyOpen, onHisto
     const [aiFeedback, setAiFeedback] = useState(null);
     const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
     const [userSubjects, setUserSubjects] = useState([]);
-    // HISTORY IS OPENED FROM THE PAGE'S HEADER when the page hands it down,
-    // and from here otherwise — so the component still works on its own.
-    const [ownHistory, setOwnHistory] = useState(false);
-    const showSessionHistory = historyOpen ?? ownHistory;
-    const setShowSessionHistory = (v) => (onHistoryChange ? onHistoryChange(v) : setOwnHistory(v));
+    const [showSessionHistory, setShowSessionHistory] = useState(false);
     const [sessionHistory, setSessionHistory] = useState([]);
     const [selectedHistorySession, setSelectedHistorySession] = useState(null);
     const [sessionDuration, setSessionDuration] = useState(10);
@@ -371,11 +366,6 @@ Reference Study Design requirements in your feedback.`,
         }
     };
 
-    // Opened from anywhere, it loads.
-    useEffect(() => {
-        if (showSessionHistory) loadSessionHistory();
-    }, [showSessionHistory]);
-
     const saveSession = async () => {
         try {
             await base44.entities.BlurtingSession.create({
@@ -495,7 +485,7 @@ Reference Study Design requirements in your feedback.`,
                 "How Blurting Works" list. The picks lead, a rule hands over to
                 the manual fields, and the notes sit with the thing they are
                 notes FOR. */}
-            <div className="card-soft p-5 sm:p-6 overflow-clip">
+            <div className="card-soft p-5 sm:p-6 overflow-hidden">
                 <WhatToTest
                     picks={picks}
                     flashcards={ownFlashcards}
@@ -594,6 +584,13 @@ Reference Study Design requirements in your feedback.`,
                     />
                 </div>
 
+                <Button
+                    onClick={startSession}
+                    className="w-full h-12 mt-5 bg-xp hover:bg-xp/90 text-white font-semibold rounded-xl shadow-soft gap-2"
+                >
+                    <Play className="w-5 h-5" /> Start blurting ({sessionDuration} min)
+                </Button>
+
                 {/* ── What a blurt IS ──────────────────────────────────────
                     Four lines, under the button rather than in a panel beside
                     it: it is read once, by somebody who has not done this
@@ -614,78 +611,79 @@ Reference Study Design requirements in your feedback.`,
                     ))}
                 </ol>
 
-                {/* ── THE START BAR, pinned ─────────────────────────────────
-                    The button sat under every option and the how-it-works list,
-                    below the fold. It states the blurt it starts. */}
-                <StartBar
-                    figure={`${sessionDuration} minutes`}
-                    line={[selectedSubject, { all: "Everything", links: "The links", terms: "Key terms", evidence: "Evidence" }[focus],
-                        `${{ gentle: "gentle", standard: "standard", examiner: "examiner" }[strictness]} marking`].filter(Boolean).join(" · ")}
-                >
-                    <Button
-                        onClick={startSession}
-                        className="h-11 px-5 bg-xp hover:bg-xp/90 text-white font-bold rounded-xl shadow-soft gap-2"
+                <div className="mt-4 pt-4 border-t border-border flex justify-center">
+                    <button
+                        onClick={() => { loadSessionHistory(); setShowSessionHistory(!showSessionHistory); }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
                     >
-                        <Play className="w-4 h-4" /> Start
-                    </Button>
-                </StartBar>
+                        <FolderOpen className="w-3.5 h-3.5" /> Previous blurts
+                    </button>
+                </div>
             </div>
 
-            {/* History — a dialog, opened from the page header. */}
-            <HistoryDialog
-                open={showSessionHistory}
-                onOpenChange={setShowSessionHistory}
-                title="Previous blurts"
-                description="Tap one to see what you wrote and what it missed."
-                count={sessionHistory.length}
-                empty={(
-                    <div className="flex flex-col items-center text-center gap-3 py-10">
-                        <div className="w-12 h-12 rounded-2xl bg-xp/10 flex items-center justify-center">
-                            <PenTool className="w-6 h-6 text-xp" />
+            {/* History */}
+            <AnimatePresence>
+                {showSessionHistory && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                        className="card-soft p-6"
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-semibold text-foreground flex items-center gap-2">
+                                <FolderOpen className="w-4 h-4 text-xp" /> Previous Sessions
+                            </h3>
+                            <button onClick={() => setShowSessionHistory(false)} className="text-muted-foreground/60 hover:text-muted-foreground">
+                                <X className="w-4 h-4" />
+                            </button>
                         </div>
-                        <div>
-                            <p className="font-bold text-foreground">No blurts yet</p>
-                            <p className="text-sm text-muted-foreground mt-1 max-w-[260px]">Brain-dump everything you remember on a topic — past sessions land here for review.</p>
-                        </div>
-                    </div>
-                )}
-            >
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                    {sessionHistory.map(session => {
-                        let score = null;
-                        if (session.ai_feedback) {
-                            try { score = JSON.parse(session.ai_feedback).completeness_percentage; } catch { }
-                        }
-                        return (
-                            <div
-                                key={session.id}
-                                onClick={() => { setShowSessionHistory(false); setSelectedHistorySession(session); }}
-                                className="group flex items-start justify-between p-4 bg-secondary/50 hover:bg-xp/5 rounded-2xl border border-border hover:border-xp/30 cursor-pointer transition-all"
-                            >
-                                <div className="flex-1 min-w-0">
-                                    <p className="font-semibold text-foreground text-sm truncate">{session.subject_name}</p>
-                                    <p className="text-xs text-muted-foreground truncate mt-0.5">{session.topic || "General Review"}</p>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        {score !== null && (
-                                            <span className={`pill ${scorePillClass(score)} text-[11px] py-0.5`}>
-                                                {score}%
-                                            </span>
-                                        )}
-                                        <span className="text-xs text-muted-foreground/60">{fmtDate(session.date, "MMM d")}</span>
-                                    </div>
+                        {sessionHistory.length === 0 ? (
+                            <div className="flex flex-col items-center text-center gap-3 py-10">
+                                <div className="w-12 h-12 rounded-2xl bg-xp/10 flex items-center justify-center">
+                                    <PenTool className="w-6 h-6 text-xp" />
                                 </div>
-                                <button
-                                    onClick={e => { e.stopPropagation(); deleteHistorySession(session.id); }}
-                                    aria-label="Delete this blurt"
-                                    className={`text-streak/60 hover:text-streak ml-2 flex-shrink-0 transition-opacity ${HOVER_REVEAL}`}
-                                >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                                <div>
+                                    <p className="font-bold text-foreground">No blurts yet</p>
+                                    <p className="text-sm text-muted-foreground mt-1 max-w-[260px]">Brain-dump everything you remember on a topic — past sessions land here for review.</p>
+                                </div>
                             </div>
-                        );
-                    })}
-                </div>
-            </HistoryDialog>
+                        ) : (
+                            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                                {sessionHistory.map(session => {
+                                    let score = null;
+                                    if (session.ai_feedback) {
+                                        try { score = JSON.parse(session.ai_feedback).completeness_percentage; } catch { }
+                                    }
+                                    return (
+                                        <div
+                                            key={session.id}
+                                            onClick={() => setSelectedHistorySession(session)}
+                                            className="group flex items-start justify-between p-4 bg-secondary/50 hover:bg-xp/5 rounded-2xl border border-border hover:border-xp/30 cursor-pointer transition-all"
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-semibold text-foreground text-sm truncate">{session.subject_name}</p>
+                                                <p className="text-xs text-muted-foreground truncate mt-0.5">{session.topic || "General Review"}</p>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    {score !== null && (
+                                                        <span className={`pill ${scorePillClass(score)} text-[11px] py-0.5`}>
+                                                            {score}%
+                                                        </span>
+                                                    )}
+                                                    <span className="text-xs text-muted-foreground/60">{fmtDate(session.date, "MMM d")}</span>
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={e => { e.stopPropagation(); deleteHistorySession(session.id); }}
+                                                className="opacity-0 group-hover:opacity-100 text-streak/60 hover:text-streak ml-2 flex-shrink-0 transition-opacity"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 
@@ -1013,8 +1011,17 @@ Reference Study Design requirements in your feedback.`,
 
     return (
         <div className="space-y-5">
-            {/* No header of its own: the Study page names the technique once,
-                above the tool, and says what it is for. */}
+            {/* Header */}
+            <div className="flex items-center gap-4 px-1">
+                <div className="w-12 h-12 bg-xp rounded-2xl flex items-center justify-center shadow-soft">
+                    <PenTool className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                    <h2 className="text-xl font-bold text-foreground">Blurting Method</h2>
+                    <p className="text-sm text-muted-foreground">Write everything from memory, then check what you missed</p>
+                </div>
+            </div>
+
             {renderContent()}
 
             {/* Focus prompt */}

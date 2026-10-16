@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Field, Segmented } from "@/components/shared/SetupControls";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, Trash2, Sparkles, ChevronDown, ChevronUp, Zap } from "lucide-react";
+import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, FolderOpen, Trash2, Sparkles, ChevronDown, ChevronUp, Zap } from "lucide-react";
 import { format } from "date-fns";
 import ReactMarkdown from 'react-markdown';
 import { useToast } from "@/components/ui/use-toast";
@@ -26,7 +26,6 @@ import CalibrationReport from "./CalibrationReport";
 import WhatToTest from "./WhatToTest";
 import { questionsFromCards, questionsFromMap, suggestTopics, ownMaterial } from "@/lib/recallSuggest";
 import SourceRow from "./SourceRow";
-import { StartBar, HistoryDialog, HOVER_REVEAL } from "./SetupShell";
 import { deckCards } from "@/lib/mistakeBank";
 import AceShuffle from "@/components/ace/AceShuffle";
 
@@ -241,7 +240,7 @@ function ReviewItem({ question, answer, result, index }) {
     );
 }
 
-export default function ActiveRecall({ onSessionComplete, userSubjects: initialUserSubjects = [], historyOpen, onHistoryChange }) {
+export default function ActiveRecall({ onSessionComplete, userSubjects: initialUserSubjects = [] }) {
     const [phase, setPhase] = useState("setup");
     const [selectedSubject, setSelectedSubject] = useState("");
     const [topic, setTopic] = useState("");
@@ -290,11 +289,7 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
     const { toast } = useToast();
     const focusModeRef = useRef(null);
 
-    // HISTORY IS OPENED FROM THE PAGE'S HEADER when the page hands it down,
-    // and from here otherwise — so the component still works on its own.
-    const [ownHistory, setOwnHistory] = useState(false);
-    const showSessionHistory = historyOpen ?? ownHistory;
-    const setShowSessionHistory = (v) => (onHistoryChange ? onHistoryChange(v) : setOwnHistory(v));
+    const [showSessionHistory, setShowSessionHistory] = useState(false);
     const [sessionHistory, setSessionHistory] = useState([]);
     const [selectedHistorySession, setSelectedHistorySession] = useState(null);
     const [userSubjects, setUserSubjects] = useState(initialUserSubjects);
@@ -587,11 +582,6 @@ ${STIMULUS_RULE_INLINE}`,
         }
     };
 
-    // Opened from anywhere, it loads.
-    useEffect(() => {
-        if (showSessionHistory) loadSessionHistory();
-    }, [showSessionHistory]);
-
     const saveSession = async () => {
         try {
             await base44.entities.ActiveRecallSession.create({
@@ -770,7 +760,7 @@ For each answer:
                 second. One surface, one next move: the picks lead, a rule
                 hands over to the manual fields, and the sources sit with the
                 thing they are a source FOR. */}
-            <div className="card-soft p-5 sm:p-6 overflow-clip">
+            <div className="card-soft p-5 sm:p-6 overflow-hidden">
                 <WhatToTest
                     picks={picks}
                     flashcards={ownFlashcards}
@@ -863,7 +853,8 @@ For each answer:
                                 ]} />
                         </Field>
                         {/* The clock and this estimate are ONE number now. */}
-                        <Field label="Time per question" tone="chart4">
+                        <Field label="Time per question" tone="chart4"
+                            hint={`About ${questionCount * pace} minutes for the session.`}>
                             <Segmented tone="chart4" size="sm" value={pace} onChange={setPace}
                                 options={[
                                     { value: 2, label: "2 min", sub: "quick" },
@@ -931,76 +922,81 @@ For each answer:
                     </div>
                 )}
 
-                {/* ── THE START BAR, pinned ─────────────────────────────────
-                    It was a full-width button under ~1,000px of options, below
-                    the fold on every screen. It states the session it starts:
-                    how many questions, at what depth, for how long — the
-                    estimate the clock uses, which used to sit as a hint under
-                    one field. */}
-                {(() => {
-                    const n = questions.length > 0 ? Math.min(questions.length, questionCount) : questionCount;
-                    const waiting = !!sourceFiles.length && questions.length === 0;
-                    const depthName = { basic: "Recall", intermediate: "Apply", advanced: "Stretch" }[depth];
-                    return (
-                        <StartBar
-                            figure={`${n} question${n === 1 ? "" : "s"}${questions.length > 0 ? " ready" : ""}`}
-                            line={waiting
-                                ? "Make questions from your notes first."
-                                : [selectedSubject, depthName, `about ${n * pace} min`].filter(Boolean).join(" · ")}
-                        >
-                            <Button
-                                onClick={startSession}
-                                disabled={waiting}
-                                className="h-11 px-5 bg-chart-4 hover:bg-chart-4/90 text-white font-bold rounded-xl shadow-soft gap-2"
-                            >
-                                <Play className="w-4 h-4" /> Start
-                            </Button>
-                        </StartBar>
-                    );
-                })()}
+                <Button
+                    onClick={startSession}
+                    disabled={!!sourceFiles.length && questions.length === 0}
+                    className="w-full h-12 mt-5 bg-chart-4 hover:bg-chart-4/90 text-white font-semibold rounded-xl shadow-soft gap-2"
+                >
+                    <Play className="w-5 h-5" />
+                    {questions.length > 0
+                        ? `Start session (${Math.min(questions.length, questionCount)} questions)`
+                        : `Start session (${questionCount} questions)`}
+                </Button>
+                {!!sourceFiles.length && questions.length === 0 && (
+                    <p className="text-xs text-center text-xp mt-2">Generate questions from your uploaded notes first.</p>
+                )}
+
+                {/* Occasional, so it is a quiet line at the foot rather than a
+                    control competing with the heading. */}
+                <div className="mt-4 pt-4 border-t border-border flex justify-center">
+                    <button
+                        onClick={() => { loadSessionHistory(); setShowSessionHistory(!showSessionHistory); }}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                        <FolderOpen className="w-3.5 h-3.5" /> Previous sessions
+                    </button>
+                </div>
             </div>
 
-            {/* Session History — a dialog, opened from the page header. */}
-            <HistoryDialog
-                open={showSessionHistory}
-                onOpenChange={setShowSessionHistory}
-                title="Previous sessions"
-                description="Tap one to see your answers and how they were marked."
-                count={sessionHistory.length}
-                empty={(
-                    <div className="text-center py-10">
-                        <Brain className="w-12 h-12 mx-auto mb-3 text-chart-4/30" />
-                        <p className="text-muted-foreground font-medium">No sessions yet</p>
-                        <p className="text-sm text-muted-foreground/60 mt-1">Your first Active Recall session lands here.</p>
-                    </div>
-                )}
-            >
-                <div className="grid gap-2.5 sm:grid-cols-2">
-                    {sessionHistory.map(session => (
-                        <div
-                            key={session.id}
-                            onClick={() => { setShowSessionHistory(false); setSelectedHistorySession(session); }}
-                            className="group flex items-start justify-between p-4 bg-secondary/50 hover:bg-chart-4/10 rounded-2xl border border-border hover:border-chart-4/30 cursor-pointer transition-all"
-                        >
-                            <div className="flex-1 min-w-0">
-                                <p className="font-semibold text-foreground text-sm truncate">{session.subject_name}</p>
-                                <p className="text-xs text-muted-foreground truncate mt-0.5">{session.topic || "General Review"}</p>
-                                <div className="flex items-center gap-2 mt-2">
-                                    <span className="pill bg-chart-4/15 text-chart-4 py-0.5">{session.questions?.length || 0}q</span>
-                                    <span className="text-xs text-muted-foreground/60">{fmtDate(session.date, "MMM d")}</span>
-                                </div>
-                            </div>
-                            <button
-                                onClick={e => { e.stopPropagation(); deleteHistorySession(session.id); }}
-                                aria-label="Delete this session"
-                                className={`text-streak/60 hover:text-streak ml-2 flex-shrink-0 transition-opacity ${HOVER_REVEAL}`}
-                            >
-                                <Trash2 className="w-3.5 h-3.5" />
+            {/* Session History */}
+            <AnimatePresence>
+                {showSessionHistory && (
+                    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+                        className="card-soft p-6"
+                    >
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-semibold text-foreground flex items-center gap-2">
+                                <FolderOpen className="w-4 h-4 text-chart-4" /> Previous Sessions
+                            </h3>
+                            <button onClick={() => setShowSessionHistory(false)} className="text-muted-foreground/60 hover:text-muted-foreground">
+                                <X className="w-4 h-4" />
                             </button>
                         </div>
-                    ))}
-                </div>
-            </HistoryDialog>
+                        {sessionHistory.length === 0 ? (
+                            <div className="text-center py-10">
+                                <Brain className="w-12 h-12 mx-auto mb-3 text-chart-4/30" />
+                                <p className="text-muted-foreground font-medium">No sessions yet</p>
+                                <p className="text-sm text-muted-foreground/60 mt-1">Complete your first Active Recall session!</p>
+                            </div>
+                        ) : (
+                            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                                {sessionHistory.map(session => (
+                                    <div
+                                        key={session.id}
+                                        onClick={() => setSelectedHistorySession(session)}
+                                        className="group flex items-start justify-between p-4 bg-secondary/50 hover:bg-chart-4/10 rounded-2xl border border-border hover:border-chart-4/30 cursor-pointer transition-all"
+                                    >
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-semibold text-foreground text-sm truncate">{session.subject_name}</p>
+                                            <p className="text-xs text-muted-foreground truncate mt-0.5">{session.topic || "General Review"}</p>
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <span className="pill bg-chart-4/15 text-chart-4 py-0.5">{session.questions?.length || 0}q</span>
+                                                <span className="text-xs text-muted-foreground/60">{fmtDate(session.date, "MMM d")}</span>
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={e => { e.stopPropagation(); deleteHistorySession(session.id); }}
+                                            className="opacity-0 group-hover:opacity-100 text-streak/60 hover:text-streak ml-2 flex-shrink-0 transition-opacity"
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 
@@ -1209,8 +1205,17 @@ For each answer:
 
     return (
         <div className="space-y-5">
-            {/* No header of its own: the Study page names the technique once,
-                above the tool, and says what it is for. */}
+            {/* Header */}
+            <div className="flex items-center gap-4 px-1">
+                <div className="w-12 h-12 bg-chart-4 rounded-2xl flex items-center justify-center shadow-soft">
+                    <Brain className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                    <h2 className="text-xl font-bold text-foreground">Active Recall</h2>
+                    <p className="text-sm text-muted-foreground">Test yourself without notes to strengthen memory</p>
+                </div>
+            </div>
+
             {renderContent()}
 
             {/* Focus prompt dialog */}

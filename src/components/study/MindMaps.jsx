@@ -40,7 +40,7 @@ import { format } from "date-fns";
 import { SESSION_MAX_MINUTES } from "@/lib/integrity";
 import { newSession, noteEdit, closeSession } from "@/lib/mindmapXp";
 import {
-    Plus, EyeOff, Sparkles, ArrowLeft, Trash2, Check, AlertTriangle,
+    Network, Plus, EyeOff, Sparkles, ArrowLeft, Trash2, Check, AlertTriangle,
     Lightbulb, ListTree, Layers, TrendingUp, ChevronRight, Link2, X, Zap, Target,
     ListOrdered, BookMarked, Quote, FlaskConical, HelpCircle, Send, Wand2, MousePointer2,
     Maximize2, Minimize2, Circle, CornerDownRight,
@@ -938,11 +938,23 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
         };
         return (
             <div className="space-y-5">
-                {/* The "One map per subject" card that stood here said what this
-                    technique is — a map you keep growing all year, any node
-                    opening into a map of its own, any branch sent to cards or
-                    recall. That is the Study page's one header now, which names
-                    the technique once, above every tool. */}
+                <div className="rounded-3xl bg-gradient-to-br from-map/10 to-transparent border-2 border-map/20 p-6">
+                    <div className="flex items-start gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-map/15 flex items-center justify-center flex-shrink-0">
+                            <Network className="w-5 h-5 text-map" />
+                        </div>
+                        <div className="min-w-0">
+                            <h3 className="font-display font-extrabold text-foreground text-lg">One map per subject</h3>
+                            <p className="text-sm text-muted-foreground mt-1 max-w-2xl leading-snug">
+                                Not a document you make once. A map you keep growing all year — open any node
+                                and it becomes a map of its own, so a term that turns out to be a whole topic
+                                gets its own space instead of being crammed into a box. Then send any branch
+                                of it straight into flashcards or recall.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
                 {loading ? (
                     <div className="flex justify-center py-10"><AceShuffle size="lg" /></div>
                 ) : subjects.length === 0 ? (
