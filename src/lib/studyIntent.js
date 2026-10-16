@@ -12,6 +12,8 @@
  * there, or the app is arguing with itself one screen later.
  */
 
+import { dayKey } from "./studyLog.js";
+
 export const INTENT_PLAN = {
     homework: {
         label: "Homework",
@@ -39,7 +41,11 @@ export const INTENT_PLAN = {
     },
 };
 
-const todayKey = () => new Date().toISOString().slice(0, 10);
+// LOCAL, because the Dashboard writes the intent with a local day. This read
+// used `toISOString`, which is UTC: in Melbourne, before 10 or 11am, "today"
+// was yesterday, so an intent set at breakfast read as stale until late
+// morning and the Study page ignored the one answer the student had given.
+const todayKey = () => dayKey(new Date());
 
 /**
  * Today's intent, or null. Yesterday's answer is not today's — an intent that

@@ -10,16 +10,11 @@ import {
     GraduationCap,
     BookOpen,
     Flame,
-    Sparkles,
-    Timer,
-    Layers,
-    Swords,
+    ArrowRight,
     Network
 } from "lucide-react";
-import { useStakes } from "@/components/arena/useStakes";
-import { METRICS as DUEL_METRICS, firstName as rivalFirstName } from "@/components/arena/arenaMeta";
 import { Button } from "@/components/ui/button";
-import { format, isToday, startOfWeek, parseISO, differenceInDays } from "date-fns";
+import { format } from "date-fns";
 
 import PomodoroTimer from "../components/study/PomodoroTimer";
 import { fireXPFeedback } from "../components/ranked/XPFeedback";
@@ -31,69 +26,46 @@ import ExamMode from "../components/study/ExamMode";
 import MindMaps from "../components/study/MindMaps";
 import HelpButton from "@/components/shared/HelpButton";
 import NeuroPanel from "../components/study/NeuroPanel";
+import TechniqueTabs from "../components/study/TechniqueTabs";
 import { todaysIntent } from "@/lib/studyIntent";
 import { isReady } from "@/lib/due";
 import { deckCards } from "@/lib/mistakeBank";
+import { dayKey } from "@/lib/studyLog";
+import {
+    minutesSummary, nextDeadline, dominantTechnique, techniqueFacts, nextStep,
+    greetingFor, fmtMinutes, FALLBACK_FACT, TECHNIQUE_READ_LIMIT,
+} from "@/lib/studyPage";
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-const fmtTime = (m) => {
-    if (!m) return "0m";
-    const h = Math.floor(m / 60);
-    const mm = Math.round(m % 60);
-    if (h === 0) return `${mm}m`;
-    if (mm === 0) return `${h}h`;
-    return `${h}h ${mm}m`;
-};
-
-// Per-technique accent (icon-only). Static class strings so JIT picks them up.
+// ─── The six techniques ──────────────────────────────────────────────────────
+//
+// `ink` colours the glyph and `bar` the underline that slides under the live
+// tab — the only two places a technique's hue appears. Static class strings,
+// so JIT sees them. The `blurb` is the one sentence the shared header prints:
+// what the technique is, and what it is for, which used to be two pills on a
+// card that named the technique a second time.
 const TECHNIQUES = [
-    { id: "pomodoro",          name: "Pomodoro",          icon: Clock,         tile: "bg-primary/10",  text: "text-primary",  accent: "primary",  blurb: "Focused 25-min sprints with planned breaks.",                                  goodFor: "Deep focus on one topic without burning out." },
-    { id: "spaced_repetition", name: "Spaced Repetition", icon: RefreshCw,     tile: "bg-chart-3/10",  text: "text-chart-3",  accent: "chart-3",  blurb: "Flashcards on a schedule that hits memory at the right moment.",               goodFor: "Locking facts in for the long haul." },
-    { id: "active_recall",     name: "Active Recall",     icon: Brain,         tile: "bg-chart-4/10",  text: "text-chart-4",  accent: "chart-4",  blurb: "Quiz yourself instead of re-reading notes.",                                   goodFor: "Testing what you actually know vs. what feels familiar." },
-    { id: "blurting",          name: "Blurting",          icon: PenTool,       tile: "bg-xp/10",       text: "text-xp",       accent: "xp",       blurb: "Brain-dump everything you remember on a topic, then check.",                   goodFor: "Spotting blind spots before exams hit them first." },
-    { id: "exam",              name: "Revision Mode",     icon: GraduationCap, tile: "bg-streak/10",   text: "text-streak",   accent: "streak",   blurb: "A timed mock exam built from your own cards and quizzes.",                     goodFor: "Building exam stamina and timing under real conditions." },
-    { id: "mind_map",          name: "Mind Maps",         icon: Network,       tile: "bg-map/10",      text: "text-map",      accent: "map",      blurb: "Map a topic from memory, then get interrogated on the gaps.",                  goodFor: "Seeing how ideas connect — and finding the links you can't explain." },
+    { id: "pomodoro",          name: "Pomodoro",          icon: Clock,         ink: "text-primary", bar: "bg-primary", blurb: "25 minutes of focus, then a 5-minute break. Best for getting through one topic without burning out." },
+    { id: "spaced_repetition", name: "Spaced Repetition", icon: RefreshCw,     ink: "text-chart-3", bar: "bg-chart-3", blurb: "Flashcards that come back just before you would forget them. Best for locking facts in for the long haul." },
+    { id: "active_recall",     name: "Active Recall",     icon: Brain,         ink: "text-chart-4", bar: "bg-chart-4", blurb: "Questions from your notes, answered without looking. Shows what you know rather than what looks familiar." },
+    { id: "blurting",          name: "Blurting",          icon: PenTool,       ink: "text-xp",      bar: "bg-xp",      blurb: "Write down everything you remember on a topic, then see what you missed. Finds the gaps before a SAC does." },
+    { id: "exam",              name: "Revision Mode",     icon: GraduationCap, ink: "text-streak",  bar: "bg-streak",  blurb: "A timed mock built from your own cards and quizzes. Builds the stamina and timing a real paper needs." },
+    { id: "mind_map",          name: "Mind Maps",         icon: Network,       ink: "text-map",     bar: "bg-map",     blurb: "One map per subject, grown all year. Any node opens into a map of its own, and any branch can become flashcards or recall." },
 ];
 
-const ACCENT_THEME = {
-    primary:   { bg: "bg-primary/10",  border: "border-primary/25",  iconBg: "bg-primary/15",  iconText: "text-primary",  divider: "border-primary/15",  pillBg: "bg-primary/15",  pillText: "text-primary"  },
-    "chart-3": { bg: "bg-chart-3/10",  border: "border-chart-3/25",  iconBg: "bg-chart-3/15",  iconText: "text-chart-3",  divider: "border-chart-3/15",  pillBg: "bg-chart-3/15",  pillText: "text-chart-3"  },
-    "chart-4": { bg: "bg-chart-4/10",  border: "border-chart-4/25",  iconBg: "bg-chart-4/15",  iconText: "text-chart-4",  divider: "border-chart-4/15",  pillBg: "bg-chart-4/15",  pillText: "text-chart-4"  },
-    xp:        { bg: "bg-xp/10",       border: "border-xp/25",       iconBg: "bg-xp/15",       iconText: "text-xp",       divider: "border-xp/15",       pillBg: "bg-xp/15",       pillText: "text-xp"       },
-    streak:    { bg: "bg-streak/10",   border: "border-streak/25",   iconBg: "bg-streak/15",   iconText: "text-streak",   divider: "border-streak/15",   pillBg: "bg-streak/15",   pillText: "text-streak"   },
-    map:       { bg: "bg-map/10",      border: "border-map/25",      iconBg: "bg-map/15",      iconText: "text-map",      divider: "border-map/15",      pillBg: "bg-map/15",      pillText: "text-map"      },
-};
-
-// Coach voice — chill, supportive, motivational. Specific not generic.
-function getCoachLine({ name, hour, todayMins, weekMins, streakDays, hasStudiedAnything, dueFlashcards, urgentDays }) {
-    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
-
-    if (!hasStudiedAnything) {
-        return `${period}, ${name}. Six techniques to make studying actually work.`;
+/** A pomodoro running in this browser, from the state the timer persists. */
+function timerIsLive() {
+    try {
+        const t = JSON.parse(localStorage.getItem("pomodoroTimerState") || "null");
+        return !!t?.isRunning && (t.timeLeft || 0) > 0;
+    } catch {
+        return false; // corrupt state is not a running timer
     }
-    if (urgentDays !== null && urgentDays !== undefined && urgentDays <= 3 && todayMins === 0) {
-        return `${period}, ${name}. Exam in ${urgentDays === 0 ? 'a few hours' : `${urgentDays} day${urgentDays === 1 ? '' : 's'}`} — let's lock in.`;
-    }
-    if (streakDays >= 7 && todayMins === 0) {
-        return `${period}, ${name}. Quick session keeps your ${streakDays}-day streak going.`;
-    }
-    if (todayMins >= 90) {
-        return `${period}, ${name}. ${fmtTime(todayMins)} deep — great day shaping up.`;
-    }
-    if (todayMins >= 30) {
-        return `${period}, ${name}. ${fmtTime(todayMins)} in. Solid start.`;
-    }
-    if (todayMins > 0) {
-        return `${period}, ${name}. Nice start — keep building.`;
-    }
-    if (dueFlashcards >= 10) {
-        return `${period}, ${name}. ${dueFlashcards} flashcards waiting for a quick review.`;
-    }
-    if (weekMins >= 300) {
-        return `${period}, ${name}. Strong week so far — let's get a session in.`;
-    }
-    return `${period}, ${name}. Let's get a session in.`;
 }
+
+/** What the strip says while the rows are still loading: what each one IS. */
+const LOADING_FACTS = Object.fromEntries(
+    Object.entries(FALLBACK_FACT).map(([id, text]) => [id, { text, live: false }]),
+);
 
 export default function Study() {
     const [user, setUser] = useState(null);
@@ -102,19 +74,26 @@ export default function Study() {
     const [recentSessions, setRecentSessions] = useState([]);
     const [studySessions, setStudySessions] = useState([]);
     const [flashcards, setFlashcards] = useState([]);
+    // Every card in their decks, ready or not — only so the strip can tell
+    // "All caught up" apart from "No decks yet".
+    const [deckCardCount, setDeckCardCount] = useState(0);
     const [assessments, setAssessments] = useState([]);
     const [activeTab, setActiveTab] = useState("pomodoro");
 
-    // ── The science rail is a PREFERENCE, answered once ─────────────────────
-    // One key for every technique, not one per technique: a student who folds
-    // it away on Pomodoro has said what they think of a reference rail, and
+    // ── The science is a PREFERENCE, answered once ──────────────────────────
+    // One key for every technique, not one per technique: a student who opens
+    // it on Pomodoro has said what they think of a reference section, and
     // asking again on Active Recall is the app not listening. Read lazily so a
-    // blocked or absent localStorage costs a render rather than a crash, and
-    // defaults OPEN — folding somebody's content away for them on first visit
-    // is a decision that is not the app's to make.
+    // blocked or absent localStorage costs a render rather than a crash.
+    //
+    // It defaults FOLDED now, and that reverses an earlier call on purpose.
+    // Open-by-default was right while it was a rail BESIDE the tool, where
+    // folding it gave nothing back but width. Under the tool, open, it is two
+    // screens of reference between the student and the bottom of the page, on
+    // every technique — so only an explicit "open" opens it.
     const [scienceOpen, setScienceOpen] = useState(() => {
-        try { return localStorage.getItem("acedit.study.science") !== "closed"; }
-        catch { return true; }
+        try { return localStorage.getItem("acedit.study.science") === "open"; }
+        catch { return false; }
     });
     const toggleScience = useCallback(() => {
         setScienceOpen((wasOpen) => {
@@ -125,8 +104,9 @@ export default function Study() {
         });
     }, []);
 
-    // Deep links: /Study?tab=spaced_repetition etc. — duel shortcuts land on
-    // the exact technique that scores their yardstick.
+    // Deep links: /Study?tab=spaced_repetition etc. Ranked's ATAR doors, the
+    // review queue and the Progress report all land on the exact technique
+    // they name; `reachable.test.mjs` checks every one against TECHNIQUES.
     useEffect(() => {
         const t = new URLSearchParams(window.location.search).get('tab');
         if (t && TECHNIQUES.some(x => x.id === t)) setActiveTab(t);
@@ -142,10 +122,10 @@ export default function Study() {
 
         setIsLoading(true);
         try {
-            const today = format(new Date(), 'yyyy-MM-dd');
+            const today = dayKey(new Date());
             const [profileData, sessionsData, subjectsData, studySessionsData, flashcardData, assessmentData] = await Promise.all([
                 UserProfile.filter({ created_by: userEmail }).then(data => data[0] || null),
-                StudyTechnique.filter({ created_by: userEmail }, "-created_date", 50),
+                StudyTechnique.filter({ created_by: userEmail }, "-created_date", TECHNIQUE_READ_LIMIT),
                 UserSubject.filter({ created_by: userEmail, is_active: true }),
                 base44.entities.StudySession.filter({ created_by: userEmail }, "-date", 50).catch(() => []),
                 base44.entities.Flashcard.filter({ created_by: userEmail, is_active: true }, "next_review_date").then(deckCards).catch(() => []),
@@ -166,13 +146,8 @@ export default function Study() {
                 // A running pomodoro outranks the intent. Reloading mid-session
                 // used to drop you on Active Recall with the timer still
                 // counting somewhere behind you.
-                let timerLive = false;
-                try {
-                    const t = JSON.parse(localStorage.getItem("pomodoroTimerState") || "null");
-                    timerLive = !!t?.isRunning && (t.timeLeft || 0) > 0;
-                } catch { /* corrupt state isn't a running timer */ }
                 const intent = todaysIntent(profileData);
-                if (timerLive) setActiveTab("pomodoro");
+                if (timerIsLive()) setActiveTab("pomodoro");
                 else if (intent && !deepLink) setActiveTab(intent.plan.technique);
             }
             setRecentSessions(sessionsData || []);
@@ -181,6 +156,7 @@ export default function Study() {
             // Genuinely due, which is not the same as "has a date in the past".
             // A card nobody has opened yet is new material; see lib/due.js.
             setFlashcards((flashcardData || []).filter(c => isReady(c, today)));
+            setDeckCardCount((flashcardData || []).length);
             setAssessments(assessmentData || []);
         } catch (error) {
             console.error("Error loading data:", error);
@@ -339,231 +315,56 @@ export default function Study() {
     };
 
     const currentTechnique = TECHNIQUES.find(t => t.id === activeTab) || TECHNIQUES[0];
-    const currentTheme = ACCENT_THEME[currentTechnique.accent];
 
-    // ─── Derived stats ─────────────────────────────────────────────────────────
-    const todayMins = useMemo(() => {
-        const sumKey = (arr, key) => arr
-            .filter(s => s.date && isToday(new Date(s.date)))
-            .reduce((a, s) => a + (s[key] || 0), 0);
-        const techToday = recentSessions
-            .filter(s => s.created_date && isToday(new Date(s.created_date)))
-            .reduce((a, s) => a + (s.session_duration || 0), 0);
-        return sumKey(studySessions, 'duration_minutes') + techToday;
-    }, [studySessions, recentSessions]);
+    // ─── What the page says before the tool ────────────────────────────────────
+    // All of it is `studyPage.js`, so it can be checked without a login: the
+    // minutes read BOTH tables through `studyEvents`, and every day is a LOCAL
+    // calendar day. The old inline sums parsed `date` as UTC midnight and the
+    // deadline floored 24-hour spans, so at 3pm a SAC due tomorrow was "today".
+    const now = new Date();
+    const minutes = useMemo(
+        () => minutesSummary(studySessions, recentSessions),
+        [studySessions, recentSessions],
+    );
+    const deadline = useMemo(() => nextDeadline(assessments), [assessments]);
+    const facts = useMemo(() => (isLoading ? LOADING_FACTS : techniqueFacts({
+        techniques: recentSessions,
+        ready: flashcards.length,
+        deckCards: deckCardCount,
+        deadline,
+        // A full read may have stopped before a technique's last session, so
+        // "Not tried yet" cannot be said off it.
+        truncated: recentSessions.length >= TECHNIQUE_READ_LIMIT,
+    })), [isLoading, recentSessions, flashcards.length, deckCardCount, deadline]);
 
-    const weekMins = useMemo(() => {
-        // THE WEEK STARTS ON MONDAY. `date-fns` defaults `startOfWeek` to SUNDAY, so
-        // these read a different week from `studyLog`'s `weekStart` — which WeekPace,
-        // subjectHub, holdings, the league and the dashboard panels all use — and on a
-        // Sunday the two were a FULL WEEK apart. See due.js's neighbours in CLAUDE.md.
-        const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-        const sumKey = (arr, key, dateField) => arr
-            .filter(s => s[dateField] && new Date(s[dateField]) >= weekStart)
-            .reduce((a, s) => a + (s[key] || 0), 0);
-        return sumKey(studySessions, 'duration_minutes', 'date')
-            + sumKey(recentSessions, 'session_duration', 'created_date');
-    }, [studySessions, recentSessions]);
-
-    const sessionsThisWeek = useMemo(() => {
-        const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-        const ss = studySessions.filter(s => s.date && new Date(s.date) >= weekStart).length;
-        const ts = recentSessions.filter(s => s.created_date && new Date(s.created_date) >= weekStart).length;
-        return ss + ts;
-    }, [studySessions, recentSessions]);
-
-    const bestTechnique = useMemo(() => {
-        if (!recentSessions.length) return null;
-        const totals = {};
-        recentSessions.forEach(s => {
-            const key = s.technique_name || 'pomodoro';
-            totals[key] = (totals[key] || 0) + (s.session_duration || 0);
-        });
-        const sorted = Object.entries(totals).sort((a, b) => b[1] - a[1]);
-        if (!sorted.length) return null;
-        const [name, mins] = sorted[0];
-        const meta = TECHNIQUES.find(t => t.id === name);
-        return meta ? { id: name, name: meta.name, mins } : null;
-    }, [recentSessions]);
-
-    const dominantRecentTechnique = useMemo(() => {
-        // Last 7 days — if 70%+ of sessions are one technique, flag it
-        const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        const recent = recentSessions.filter(s => s.created_date && new Date(s.created_date) >= weekAgo);
-        if (recent.length < 4) return null;
-        const counts = {};
-        recent.forEach(s => {
-            const k = s.technique_name || 'pomodoro';
-            counts[k] = (counts[k] || 0) + 1;
-        });
-        const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-        if (!sorted.length) return null;
-        const [name, count] = sorted[0];
-        return (count / recent.length) >= 0.7 ? name : null;
-    }, [recentSessions]);
-
-    const nextDeadline = useMemo(() => {
-        const upcoming = (assessments || [])
-            .filter(a => a.due_date)
-            .map(a => ({ days: differenceInDays(parseISO(a.due_date), new Date()), title: a.title }))
-            .filter(x => x.days >= 0)
-            .sort((a, b) => a.days - b.days);
-        return upcoming[0] || null;
-    }, [assessments]);
-
-    const dueFlashcardCount = flashcards.length;
-    const streakDays = userProfile?.streak_days || 0;
-    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
-    const hour = new Date().getHours();
-    const hasStudiedAnything = recentSessions.length > 0 || studySessions.length > 0;
-
-    const baseCoachLine = getCoachLine({
-        name: firstName,
-        hour,
-        todayMins,
-        weekMins,
-        streakDays,
-        hasStudiedAnything,
-        dueFlashcards: dueFlashcardCount,
-        urgentDays: nextDeadline?.days ?? null,
+    // ─── The one next step ─────────────────────────────────────────────────────
+    // The duel coach line that used to lead here is gone with the duels: they
+    // cannot be started from the app any more (Compete is one market now), and
+    // it spoke a betting vocabulary — "defend your ante", "the pot" — the floor
+    // has since dropped for forecasting. Nothing else here read `useStakes`.
+    const step = isLoading ? null : nextStep({
+        todayMins: minutes.today,
+        ready: flashcards.length,
+        deadline,
+        intent: todaysIntent(userProfile),
+        timerLive: timerIsLive(),
+        dominant: dominantTechnique(recentSessions),
     });
 
-    // ─── Live stakes feed the coach ────────────────────────────────────────────
-    // When a duel is in its final 24 hours, the coach talks stakes — the most
-    // urgent duel wins the mic.
-    const { stakes } = useStakes();
-    const duelUrgency = useMemo(() => {
-        const me = stakes?.me;
-        if (!me) return null;
-        const info = (stakes.duels || [])
-            .filter(d => d.status === "active" && d.live_scores)
-            .map(d => {
-                const isChallenger = d.challenger_email === me;
-                const rivalEmail = isChallenger ? d.opponent_email : d.challenger_email;
-                const mine = d.live_scores[me] || 0;
-                const theirs = d.live_scores[rivalEmail] || 0;
-                return {
-                    duel: d,
-                    rival: rivalFirstName(isChallenger ? d.opponent_name : d.challenger_name),
-                    mine, theirs,
-                    gap: Math.abs(mine - theirs),
-                    unit: DUEL_METRICS[d.metric]?.unit || "XP",
-                    hoursLeft: Math.max(0, Math.round((new Date(d.ends_at) - Date.now()) / 3600000)),
-                };
-            })
-            .sort((a, b) => a.hoursLeft - b.hoursLeft);
-        return info[0] || null;
-    }, [stakes]);
+    const streakDays = userProfile?.streak_days || 0;
+    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
+    const greeting = greetingFor(now.getHours());
 
-    let duelCoachLine = null;
-    if (duelUrgency && duelUrgency.hoursLeft <= 24) {
-        const { rival, mine, theirs, gap, unit, hoursLeft } = duelUrgency;
-        const hrs = hoursLeft <= 1 ? "under an hour" : `${hoursLeft}h`;
-        if (mine < theirs) duelCoachLine = `${rival} leads by ${gap} ${unit} with ${hrs} left — one good session flips it.`;
-        else if (mine === theirs) duelCoachLine = `Dead level with ${rival}, ${hrs} on the clock — the next session decides it.`;
-        else duelCoachLine = `You lead ${rival} by ${gap} ${unit} with ${hrs} left — keep the pot in sight.`;
-    }
-    const coachLine = duelCoachLine || baseCoachLine;
-
-    // ─── Featured "Suggested today" panel ──────────────────────────────────────
-    const featured = useMemo(() => {
-        // A duel entering its final day outranks everything except an exam —
-        // and it points at the technique that actually scores its yardstick.
-        const duelTab = { flashcards: "spaced_repetition", study_minutes: "pomodoro", xp: "pomodoro" };
-        if (duelUrgency && duelUrgency.hoursLeft <= 24 && duelUrgency.mine <= duelUrgency.theirs
-            && duelTab[duelUrgency.duel.metric] && !(nextDeadline && nextDeadline.days <= 1)) {
-            return {
-                label: "Duel on the line",
-                title: `Your duel with ${duelUrgency.rival} ends in ${duelUrgency.hoursLeft <= 1 ? "under an hour" : `${duelUrgency.hoursLeft}h`}.`,
-                sub: duelUrgency.mine === duelUrgency.theirs
-                    ? "It's dead level. The next session takes the pot."
-                    : `${duelUrgency.gap} ${duelUrgency.unit} between you and the pot.`,
-                cta: "Defend your ante",
-                tab: duelTab[duelUrgency.duel.metric],
-                accent: "chart-4",
-                icon: Swords,
-            };
-        }
-        if (nextDeadline && nextDeadline.days <= 7) {
-            return {
-                label: nextDeadline.days === 0 ? "Exam today" : `Exam in ${nextDeadline.days} day${nextDeadline.days === 1 ? '' : 's'}`,
-                title: `${nextDeadline.title} is coming up`,
-                sub: "Open Revision Mode and run a timed mock from your own material.",
-                cta: "Open Revision Mode",
-                tab: "exam",
-                accent: "streak",
-                icon: GraduationCap,
-            };
-        }
-        if (dueFlashcardCount >= 5) {
-            return {
-                label: "Cards waiting",
-                title: `${dueFlashcardCount} flashcards waiting.`,
-                sub: "A short Spaced Repetition session clears the queue.",
-                cta: "Open Spaced Rep",
-                tab: "spaced_repetition",
-                accent: "chart-3",
-                icon: Layers,
-            };
-        }
-        if (todayMins === 0) {
-            return {
-                label: "Easiest start",
-                title: "A 25-minute Pomodoro is the easiest start.",
-                sub: "Show up, stay focused, walk away with momentum.",
-                cta: "Start a Pomodoro",
-                tab: "pomodoro",
-                accent: "primary",
-                icon: Timer,
-            };
-        }
-        if (dominantRecentTechnique && dominantRecentTechnique !== "active_recall") {
-            return {
-                label: "Switch it up",
-                title: "Switch it up — try Active Recall.",
-                sub: "Testing what you remember locks it in deeper than re-reading.",
-                cta: "Open Active Recall",
-                tab: "active_recall",
-                accent: "chart-4",
-                icon: Brain,
-            };
-        }
-        if (todayMins > 0 && todayMins < 60) {
-            return {
-                label: "Stack the win",
-                title: "Good start — stack another short block.",
-                sub: "One more Pomodoro and today becomes a real session.",
-                cta: "Start a Pomodoro",
-                tab: "pomodoro",
-                accent: "xp",
-                icon: Sparkles,
-            };
-        }
-        return {
-            label: "Pick a path",
-            title: "Pick a technique above and let's work.",
-            sub: "Each one suits a different kind of study — try the one that fits today.",
-            cta: "Start a Pomodoro",
-            tab: "pomodoro",
-            accent: "primary",
-            icon: Sparkles,
-        };
-    }, [nextDeadline, dueFlashcardCount, todayMins, dominantRecentTechnique, duelUrgency]);
-
-    // Diverse "suggested today" options — one per technique, each with a
-    // dynamic, context-aware one-liner. The smart top pick (featured.tab) gets
-    // a badge; every tool is offered so the student has varied options.
-    const suggestionSub = (id) => {
-        switch (id) {
-            case "pomodoro":          return todayMins === 0 ? "Easiest way to start today." : "Stack another focused block.";
-            case "spaced_repetition": return dueFlashcardCount > 0 ? `${dueFlashcardCount} cards ready now.` : "Keep your flashcards fresh.";
-            case "active_recall":     return "Quiz yourself — beats re-reading.";
-            case "blurting":          return "Brain-dump a topic, spot the gaps.";
-            case "exam":              return nextDeadline && nextDeadline.days <= 14 ? `Exam in ${nextDeadline.days}d — run a timed mock.` : "Practice under exam conditions.";
-            case "mind_map":          return "Map a topic blind, find the gaps.";
-            default:                  return "";
-        }
-    };
+    // THE BUTTON OPENS THE TECHNIQUE AND TAKES THEM TO IT. On a phone the tool
+    // starts below the strip, so switching the tab alone would change
+    // something off screen and look like the button did nothing.
+    const toolRef = useRef(null);
+    const openTechnique = useCallback((id) => {
+        if (id) setActiveTab(id);
+        requestAnimationFrame(() => {
+            toolRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+    }, []);
 
     if (authError) {
         return (
@@ -587,33 +388,26 @@ export default function Study() {
     if (userSubjects.length === 0 && !isLoading) {
         return (
             <div className="min-h-screen bg-background">
-                <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-6">
-                    <motion.section
+                <div className="max-w-6xl mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6">
+                    <motion.header
                         initial={{ opacity: 0, y: 12 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.35 }}
+                        className="flex items-start justify-between gap-3"
                     >
-                        <div className="flex items-start justify-between mb-1">
-                            <p className="text-sm text-muted-foreground font-medium">Practice</p>
-                            <HelpButton page="Study" />
-                        </div>
-                        <h1 className="font-display text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground">
-                            Study
+                        <h1 className="font-display text-[1.65rem] sm:text-3xl lg:text-[2.5rem] font-extrabold tracking-tight leading-[1.1] text-foreground">
+                            <span className="text-muted-foreground">{greeting}, {firstName}.</span> Pick your subjects first.
                         </h1>
-                        <p className="text-muted-foreground mt-2 text-sm lg:text-base">
-                            Five evidence-based techniques to make your study time count.
-                        </p>
-                    </motion.section>
+                        <HelpButton page="Study" />
+                    </motion.header>
 
-                    <div className="card-soft p-8 max-w-2xl mx-auto text-center">
+                    <div className="card-soft p-8 max-w-2xl text-center">
                         <div className="w-14 h-14 rounded-2xl bg-chart-3/10 flex items-center justify-center mx-auto mb-4">
                             <BookOpen className="w-7 h-7 text-chart-3" />
                         </div>
-                        <h2 className="font-display font-extrabold text-foreground text-xl mb-2">
-                            Add subjects first
-                        </h2>
                         <p className="text-muted-foreground text-sm mb-6 leading-relaxed">
-                            Pick the subjects you're studying so we can tailor sessions, flashcards, and exam practice to them.
+                            Every technique here works from your subjects: the flashcards, the recall questions and the
+                            timed mocks are all built from them.
                         </p>
                         <Button onClick={() => window.location.href = '/Subjects'}>
                             Go to subjects
@@ -626,151 +420,95 @@ export default function Study() {
 
     return (
         <div className="min-h-screen bg-background">
-            <div className="max-w-[1600px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
+            <div className="max-w-6xl mx-auto px-4 lg:px-8 pt-6 lg:pt-10 pb-16">
 
-                {/* ── COACH STRIP ─────────────────────────────────────── */}
-                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
-                    <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2 text-xs">
-                            <span className="font-bold text-muted-foreground uppercase tracking-wider">{format(new Date(), 'EEE · MMM d')}</span>
+                {/* ── TODAY: the one next step ────────────────────────────
+                    It used to be "Six techniques to make studying actually
+                    work" over a "Selected technique" card and a "Today" card
+                    — a pitch, the technique named a second time, and the
+                    dashboard's figures repeated. The heading is the step now,
+                    with the button that takes them to it; the minutes are one
+                    quiet line above, and only when there are any. */}
+                <motion.header
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.35 }}
+                    className="pb-6 lg:pb-8"
+                >
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            <span>{format(now, "EEE d MMM")}</span>
                             {streakDays > 0 && (
                                 <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-streak">
-                                        <Flame className="w-3.5 h-3.5" /> {streakDays}d streak
+                                    <span className="text-muted-foreground/40" aria-hidden="true">·</span>
+                                    <span className="inline-flex items-center gap-1 text-streak">
+                                        <Flame className="w-3.5 h-3.5" aria-hidden="true" /> {streakDays}-day streak
                                     </span>
                                 </>
                             )}
-                            {todayMins > 0 && (
+                            {minutes.today > 0 && (
                                 <>
-                                    <span className="text-muted-foreground/40">·</span>
-                                    <span className="inline-flex items-center gap-1 font-extrabold text-primary">
-                                        <Clock className="w-3.5 h-3.5" /> {fmtTime(todayMins)} today
-                                    </span>
+                                    <span className="text-muted-foreground/40" aria-hidden="true">·</span>
+                                    <span className="text-foreground tabular-nums">{fmtMinutes(minutes.today)} today</span>
                                 </>
                             )}
-                        </div>
+                            {/* The week only when it says something today does not. */}
+                            {minutes.week > minutes.today && (
+                                <>
+                                    <span className="text-muted-foreground/40" aria-hidden="true">·</span>
+                                    <span className="tabular-nums">{fmtMinutes(minutes.week)} this week</span>
+                                </>
+                            )}
+                        </p>
                         <HelpButton page="Study" />
                     </div>
-                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
-                        {coachLine}
-                    </h1>
-                </motion.section>
 
-                {/* ── HERO ROW: Technique panel (3/5) + Today stats (2/5) ── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.05, duration: 0.4 }}
-                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
-                >
-                    {/* Technique panel */}
-                    <div className="md:col-span-3">
-                        <div className={`relative overflow-hidden rounded-3xl ${currentTheme.bg} border-2 ${currentTheme.border} p-6 lg:p-8 h-full transition-colors`}>
-                            <div className="relative">
-                                <p className={`stat-label ${currentTheme.iconText}/80 mb-2`}>Selected technique</p>
-                                <h2
-                                    className="font-display font-extrabold text-foreground leading-none mb-3"
-                                    style={{ fontSize: 'clamp(1.75rem, 4.5vw, 2.75rem)' }}
-                                >
-                                    {currentTechnique.name}
-                                </h2>
-                                <p className="text-foreground text-sm lg:text-base font-medium leading-snug max-w-md mb-3">
-                                    {currentTechnique.blurb}
-                                </p>
-                                <div className={`inline-flex items-center px-3 py-1.5 rounded-xl ${currentTheme.pillBg} ${currentTheme.pillText}`}>
-                                    <span className="text-xs font-bold">Good for: {currentTechnique.goodFor}</span>
-                                </div>
-                            </div>
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between lg:gap-10">
+                        <div className="min-w-0 max-w-3xl">
+                            <h1 className="font-display text-[1.65rem] sm:text-3xl lg:text-[2.5rem] font-extrabold tracking-tight leading-[1.1] text-foreground">
+                                <span className={step ? "text-muted-foreground" : ""}>{greeting}, {firstName}.</span>
+                                {step && <> {step.title}</>}
+                            </h1>
+                            {step?.sub && (
+                                <p className="mt-2 text-sm sm:text-base text-muted-foreground leading-snug">{step.sub}</p>
+                            )}
                         </div>
+                        {step?.cta && (
+                            <Button
+                                onClick={() => openTechnique(step.tab)}
+                                className="btn-3d h-12 px-6 rounded-xl gap-2 font-bold w-full sm:w-auto flex-shrink-0"
+                            >
+                                {step.cta}
+                                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                            </Button>
+                        )}
                     </div>
+                </motion.header>
 
-                    {/* Today stats panel — colour-matched to the selected technique */}
-                    <div className="md:col-span-2">
-                        <div className={`rounded-3xl ${currentTheme.bg} border-2 ${currentTheme.border} p-6 h-full flex flex-col transition-colors`}>
-                            <p className={`stat-label ${currentTheme.iconText}/80 mb-2`}>Today</p>
-                            <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
-                                {fmtTime(todayMins)}
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-2 leading-snug">
-                                {todayMins === 0
-                                    ? "Nothing logged yet — let's change that."
-                                    : todayMins >= 90
-                                        ? "Solid day so far. Keep cooking."
-                                        : todayMins >= 30
-                                            ? "Good start — stack another?"
-                                            : "Just getting started."}
-                            </p>
-                            <div className={`space-y-2.5 mt-4 pt-4 border-t-2 ${currentTheme.divider}`}>
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground">This week</p>
-                                    <p className="text-xs font-bold text-foreground">{fmtTime(weekMins)}</p>
-                                </div>
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground">Sessions</p>
-                                    <p className="text-xs font-bold text-foreground">{sessionsThisWeek}</p>
-                                </div>
-                                <div className="flex items-baseline justify-between">
-                                    <p className="text-xs font-bold text-muted-foreground">Top technique</p>
-                                    <p className="text-xs font-bold text-foreground truncate ml-2">
-                                        {bestTechnique ? bestTechnique.name : '—'}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
+                {/* ── THE SWITCHER ─────────────────────────────────────── */}
+                <TechniqueTabs
+                    techniques={TECHNIQUES}
+                    value={activeTab}
+                    onChange={setActiveTab}
+                    facts={facts}
+                    suggested={step?.tab || null}
+                />
+
+                {/* ── THE TOOL, under ONE header ───────────────────────────
+                    Each technique used to print its own title card as well —
+                    "Pomodoro Timer / Focus and productivity timer" — so the
+                    name appeared three times before anything could be pressed.
+                    This is the one place it is named, with what it is for.
+                    `scroll-mt` clears the top bar and the sticky strip, so the
+                    heading's button lands the header in view rather than
+                    under them. */}
+                <section ref={toolRef} className="scroll-mt-[7.5rem] pt-6 lg:pt-8" aria-labelledby="study-technique">
+                    <div className="mb-5 lg:mb-6 max-w-3xl">
+                        <h2 id="study-technique" className="font-display text-xl sm:text-2xl font-extrabold tracking-tight text-foreground">
+                            {currentTechnique.name}
+                        </h2>
+                        <p className="mt-1 text-sm text-muted-foreground leading-snug">{currentTechnique.blurb}</p>
                     </div>
-                </motion.section>
-
-                {/* ── SUGGESTED TODAY — diverse, colour-coded per technique ── */}
-                <motion.section
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                >
-                    <p className="stat-label mb-3">Suggested today</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                        {TECHNIQUES.map((t) => {
-                            const th = ACCENT_THEME[t.accent];
-                            const Icon = t.icon;
-                            const isTop = featured?.tab === t.id;
-                            return (
-                                <button
-                                    key={t.id}
-                                    onClick={() => setActiveTab(t.id)}
-                                    className={`relative text-left rounded-2xl border-2 p-4 transition-all hover:-translate-y-0.5 ${th.bg} ${th.border} ${isTop ? 'shadow-soft' : ''}`}
-                                >
-                                    {isTop && (
-                                        <span className={`absolute top-2.5 right-2.5 pill ${th.pillBg} ${th.pillText}`}>Top pick</span>
-                                    )}
-                                    <div className={`w-10 h-10 rounded-xl ${th.iconBg} flex items-center justify-center mb-2.5`}>
-                                        <Icon className={`w-5 h-5 ${th.iconText}`} />
-                                    </div>
-                                    <p className="font-display font-extrabold text-foreground text-sm leading-tight">{t.name}</p>
-                                    <p className="text-xs text-muted-foreground mt-1 leading-snug">{suggestionSub(t.id)}</p>
-                                </button>
-                            );
-                        })}
-                    </div>
-                </motion.section>
-
-                {/* ── ACTIVE TOOL + THE SCIENCE ─────────────────────────── */}
-                {/* Tool switching happens via the colour-coded suggestion grid
-                    above and the selected-technique panel — the old tab bar was
-                    redundant, so it's removed.
-
-                    The tool sits left and the evidence rail fills the space that
-                    used to be dead margin. It only splits at xl: below that the
-                    rail would squeeze the tool, so it stacks underneath — still
-                    read, just after the thing the student came for.
-
-                    FOLDED AWAY, THE GRID GOES WITH IT. Keeping the 380px column
-                    and putting a bar in it would leave the tool at the same
-                    width with a hole beside it, which is the whole thing the
-                    student was collapsing. One column, and the technique takes
-                    the page. */}
-                <div className={scienceOpen
-                    ? "grid xl:grid-cols-[minmax(0,1fr)_380px] gap-6 items-start"
-                    : "space-y-4"}>
                     <motion.div
                         key={activeTab}
                         initial={{ opacity: 0, y: 12 }}
@@ -780,18 +518,19 @@ export default function Study() {
                     >
                         {techniqueComponents[activeTab]}
                     </motion.div>
+                </section>
 
-                    {/* Sticky only while it is a rail. A one-line bar that
-                        follows the page down is a thing stuck to the screen for
-                        no reason. */}
-                    <div className={scienceOpen ? "xl:sticky xl:top-6" : ""}>
-                        <NeuroPanel
-                            techniqueId={activeTab}
-                            techniqueName={(TECHNIQUES.find(t => t.id === activeTab) || {}).name || "this"}
-                            open={scienceOpen}
-                            onToggle={toggleScience}
-                        />
-                    </div>
+                {/* ── THE SCIENCE, after the work ──────────────────────────
+                    It was a 380px rail beside the tool on every technique. The
+                    tool takes the page now and this is a named fold after it,
+                    shut unless the student has opened it before. */}
+                <div className="mt-10 lg:mt-14">
+                    <NeuroPanel
+                        techniqueId={activeTab}
+                        techniqueName={currentTechnique.name}
+                        open={scienceOpen}
+                        onToggle={toggleScience}
+                    />
                 </div>
             </div>
         </div>

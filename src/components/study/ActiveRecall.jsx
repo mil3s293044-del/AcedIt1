@@ -1205,17 +1205,8 @@ For each answer:
 
     return (
         <div className="space-y-5">
-            {/* Header */}
-            <div className="flex items-center gap-4 px-1">
-                <div className="w-12 h-12 bg-chart-4 rounded-2xl flex items-center justify-center shadow-soft">
-                    <Brain className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                    <h2 className="text-xl font-bold text-foreground">Active Recall</h2>
-                    <p className="text-sm text-muted-foreground">Test yourself without notes to strengthen memory</p>
-                </div>
-            </div>
-
+            {/* No header of its own: the Study page names the technique once,
+                above the tool, and says what it is for. */}
             {renderContent()}
 
             {/* Focus prompt dialog */}
