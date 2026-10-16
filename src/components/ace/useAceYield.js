@@ -102,7 +102,12 @@ const owners = () => [...holders.keys()];
 // nothing is happening — on a page that IS saying something, they stand down.
 // "premium" is the reveal for an upgrade, which Layout can play over any page
 // — a celebration, so second only to the XP moment it would never coincide with.
-export const ACE_ORDER = ["reacts", "premium", "onboarding", "first-win", "tour", "report", "buddy", "intro", "roam", "launcher"];
+// "chat" is /AITools, which draws NO Ace and claims anyway: the page is itself
+// a chatbot, and the companion's launcher — a second one — stood on its send
+// button on a phone. Ranked under everything that is about the student's
+// moment and over the buddy and the launcher, which are what is there when
+// nothing is happening.
+export const ACE_ORDER = ["reacts", "premium", "onboarding", "first-win", "tour", "report", "chat", "buddy", "intro", "roam", "launcher"];
 
 /** An id nobody registered loses to everything, rather than winning by accident. */
 const rank = (id) => {

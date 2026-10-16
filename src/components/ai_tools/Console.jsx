@@ -21,20 +21,21 @@
  * full-bleed block that owns its own width and pads inside, like every other
  * page in the app.
  *
- * ─── THE LATTICE IS A SIBLING, NOT A BACKGROUND ON THE CONTENT ──────────────
- * Drawn as its own absolutely positioned layer so the content sits over it with
- * no stacking context of its own to fight, and `pointer-events-none` so a grid
- * covering the page cannot swallow a click on the thing underneath it.
+ * ─── THE LATTICE IS NOT DRAWN HERE ANY MORE ─────────────────────────────────
+ * It covered the whole route, behind a bordered chat panel that covered most of
+ * it, so it showed only in the margins and lined up with nothing. The chat is
+ * full-bleed now, and the grid is drawn behind the welcome (`ChatWelcome`), in
+ * the box its content column is centred in — the only place a line can land on
+ * the column's edges. The room keeps its ground and its tokens.
  */
 import React from "react";
 
 export default function Console({ children, className = "" }) {
     return (
         <div
-            className={`console relative isolate min-h-[calc(100dvh-8rem)] md:min-h-[calc(100dvh-3rem)]
+            className={`console relative min-h-[calc(100dvh-8rem)] md:min-h-[calc(100dvh-3rem)]
                 bg-[var(--console-ground)] text-[var(--console-ink)] ${className}`}
         >
-            <div className="console-lattice absolute inset-0 -z-10 pointer-events-none" aria-hidden="true" />
             {children}
         </div>
     );

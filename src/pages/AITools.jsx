@@ -51,6 +51,10 @@ import { toolUsage } from "@/lib/aiChats";
 import { loadSavedResults } from "@/lib/saveResult";
 import { deckCards, isBankCard } from "@/lib/mistakeBank";
 import { isReady, todayISO } from "@/lib/due";
+import { openingTool } from "@/lib/chatModel";
+import { chatRows } from "@/lib/aiChats";
+import { todaysIntent } from "@/lib/studyIntent";
+import { claimAce } from "@/components/ace/useAceYield";
 
 /** A fresh thread, opened on nothing in particular. */
 const BLANK = { key: "new", tool: null, subject: "", seed: "", conv: null };
@@ -63,6 +67,16 @@ export default function AITools() {
     const [premium, setPremium] = useState(undefined);
     const [rows, setRows] = useState(null);
     const [convs, setConvs] = useState([]);
+    const [me, setMe] = useState(null);
+
+    /**
+     * THE CHAT PAGE IS THE ONLY ACE-FREE CORNER, ON PURPOSE. The companion's
+     * launcher is a second chatbot, and on this page it stood on the send
+     * button on a phone and over the composer's corner on a laptop. Claimed as
+     * "chat" in ACE_ORDER: above the buddy and the launcher, which stand down,
+     * and below a celebration, which still plays.
+     */
+    useEffect(() => claimAce("chat"), []);
 
     /**
      * What the chat is currently opened on.
@@ -97,6 +111,7 @@ export default function AITools() {
                 ]);
                 if (!alive) return;
                 setPremium(isPremium(profiles?.[0] ?? null));
+                setMe({ profile: profiles?.[0] ?? null, user: u });
                 setConvs(saved || []);
                 setRows({
                     // `deckCards` is the filter every DECK surface reads
@@ -127,6 +142,22 @@ export default function AITools() {
         const today = todayISO();
         return toolBrief({ ...rows, isReady: (c) => isReady(c, today) });
     }, [rows]);
+
+    /**
+     * The tool a fresh chat opens on, worked out from rows already loaded so
+     * the first paint is right. The chat runs the same `openingTool` again once
+     * it has its own read, and a link or a reopened conversation beats this.
+     */
+    const defaultTool = useMemo(() => openingTool({
+        link: new URLSearchParams(window.location.search).get("tool"),
+        intent: todaysIntent(me?.profile)?.plan?.tool || null,
+        rows: chatRows(convs),
+    }).id, [me, convs]);
+
+    const firstName = useMemo(() => {
+        const p = me?.profile;
+        return String(p?.username || p?.full_name || me?.user?.full_name || "").trim().split(/\s+/)[0] || "";
+    }, [me]);
 
     // UNCAPPED, unlike `recentChats`: four is the length of a list, not the
     // most anybody has ever used a tool. Same rows, same predicate.
@@ -184,30 +215,26 @@ export default function AITools() {
     // A FIXED VIEWPORT COLUMN: 100dvh less the 48px top nav, and the ~80px
     // bottom tab bar as well on a phone. That is what lets the thread scroll
     // inside the page rather than the page scrolling under a composer that has
-    // left the screen.
+    // left the screen. FULL-BLEED: the chat used to sit in a padded `max-w-7xl`
+    // box as a bordered panel, a box inside a box; it owns the width now.
     return (
         <Console>
             <div className="h-[calc(100dvh-8rem)] md:h-[calc(100dvh-3rem)]">
-                {/* `px-4` AT EVERY WIDTH, because the lattice behind this is origined
-                    at this column's own left edge and a gutter that changes at
-                    `lg` would move the grid out from under the content at one
-                    breakpoint. See `--lattice-x` in index.css: the two numbers
-                    are one decision. */}
-                <div className="h-full max-w-7xl mx-auto px-4 py-3 flex flex-col min-h-0">
-                    <UnifiedChat
-                        key={session.key}
-                        locked={!premium}
-                        startTool={session.tool}
-                        startSubject={session.subject}
-                        startSeed={session.seed}
-                        startConversation={session.conv}
-                        cards={cards}
-                        usage={usage}
-                        briefLoading={rows === null}
-                        onOpenCard={openCard}
-                        onSaved={noteSaved}
-                    />
-                </div>
+                <UnifiedChat
+                    key={session.key}
+                    locked={!premium}
+                    startTool={session.tool}
+                    startSubject={session.subject}
+                    startSeed={session.seed}
+                    startConversation={session.conv}
+                    defaultTool={defaultTool}
+                    firstName={firstName}
+                    cards={cards}
+                    usage={usage}
+                    briefLoading={rows === null}
+                    onOpenCard={openCard}
+                    onSaved={noteSaved}
+                />
             </div>
         </Console>
     );
