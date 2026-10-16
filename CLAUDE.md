@@ -6163,9 +6163,9 @@ silently stops being true.
 - **Search the history**, on the title and the tool's name only. The rows are
   loaded so it could search message bodies, and a hit buried in turn nine would
   show a title that does not contain the word — a result nobody can see the
-  reason for. The box appears only past `HISTORY_SEARCH_AT`, because a filter
-  over three chats is a control with nothing to do taking the list's space. A
-  query that matches nothing SAYS SO: an empty drawer reads as "you have no
+  reason for. (It appeared only past `HISTORY_SEARCH_AT`; since the full-bleed
+  rebuild below it shows whenever there is any history, and matches the subject
+  too, because the row prints it.) A query that matches nothing SAYS SO: an empty drawer reads as "you have no
   chats", which is a different and much more alarming claim.
 
 **A USER MESSAGE IS NO LONGER A BRAND SLAB.** Every one was `tool.accentSolid`
@@ -6196,6 +6196,95 @@ second and calls every assertion in it vacuous. The sweep checks the exit code
 as well now. That is the injection-harness twin of the lesson this file keeps
 recording about scans: **a sweep that cannot observe the failure proves
 nothing**, and it fails in the direction that quietly deletes guards.
+
+## The chat is full-bleed, and a phone can use it
+
+**"Make the AI tools as aesthetic as possible, more user friendly, effective and
+premium."** The chat stayed the page — the section above records four shapes
+that put something in front of it and lost — and everything else about how it
+behaves was rebuilt around it. The decisions that can be wrong without anything
+throwing are pure functions in `src/lib/chatModel.js`; `chatModel.test.mjs`
+holds them and scans the screen for the rest (34 injections, every one biting).
+
+**IT WAS A PANEL IN A ROOM.** A rounded, bordered card with its own rail, set
+inside a padded lattice page, so the grid showed only in the margins and lined
+up with nothing. History is the page's left edge now and the conversation fills
+the rest. **The lattice moved INTO the welcome** — the box the content column is
+centred in, which is the only place `--lattice-x`'s `50%` means the column's
+half-width — and it goes when a conversation starts, because a thread is read.
+`Console` lost its `isolate` with it: the stacking context existed for the
+lattice's `-z-10`, and kept the phone history drawer UNDER the app's own nav.
+
+**THINGS A PHONE COULD NOT DO, OR SAW WRONG:**
+
+- **Copy, Edit and Try again were `opacity-0` until hovered** — never, on touch —
+  and so was deleting a chat. `HOVER_REVEAL` scopes every reveal to
+  `[@media(hover:hover)]`; a bare `group-hover` cannot tell a phone from a
+  laptop. The latest reply's controls are always shown, on every device.
+- **Ace's launcher stood on the send button.** The page is itself a chatbot, so
+  it claims the stage as `"chat"` and draws no Ace at all — ranked over the buddy
+  and the launcher, under a celebration and the first minutes.
+- **The option chips ran off the right edge** and the header's three buttons
+  wrapped to two lines each, leaving about a third of the screen for the
+  conversation. One header row now, and the options live behind one chip.
+
+**ONE TOOL PICKER** (`ToolPalette`). There were three: a dropdown in the
+composer (flat, no blurbs, and DISABLED once a chat began — the one moment
+somebody notices they picked the wrong tool), the twelve rows, and a big icon at
+the top. The tool chip opens a searchable palette grouped by phase, and typing
+`/` at the start of a message opens the same panel with the composer as its
+search box (`slashQuery`: "1/2" and "and/or" are messages, not commands).
+**Picking a tool mid-chat starts a new chat, and the palette says so above the
+list before the choice.** It is positioned against the composer, NOT portalled:
+the room's tokens are declared on `.console`, and a Radix popover renders under
+`<body>` where every `--console-*` is blank — which is why the old dropdown was
+cream. `consoleInk.test.mjs` refuses a portalling primitive in the room.
+
+**THE SUBJECT AND THE STRAND WERE TWO CONTROLS FOR ONE FACT** — "No subject"
+beside a strand reading "Mathematical Methods", with the prompt letting the
+strand win silently. `strandFor` makes a maths subject set the strand, and the
+strand row is drawn only when no maths subject decides it. Subject and options
+sit behind one setup chip (`ComposerSetup`) whose label is the subject plus only
+the settings moved off their default.
+
+**A FRESH CHAT OPENED ON MATH TUTOR FOR EVERYBODY**, because it is
+`CHAT_TOOLS[0]`. `openingTool` states the order instead: a reopened
+conversation, a link, today's intent, the tool used last, then Study Coach. Every
+candidate is checked against the catalogue first — `toolById` falls back to the
+first tool, so trusting it makes every stale link look valid. The page computes
+it from rows it already loaded so the first paint is right.
+
+**HISTORY IS BY DATE** (`historyGroups`): Today, Yesterday, Last 7 days,
+Earlier, on LOCAL days through `dayKey`, newest first on the last touch. "Last 7
+days", never "This week" — two weeks on two screens has shipped here once. An
+undated row is kept and goes last. Search is shown whenever there is history,
+and matches what the row shows: title, tool, subject — never a reply. **Delete
+asks once**: the first press arms "Delete?", the second deletes, and it disarms
+itself. Titles are cut on a word (`clipTitle`), not sliced at sixty.
+
+**THE PRICE IS ON SCREEN BEFORE IT IS SPENT.** The footer said each send
+"spends from this week's chips" and named no number, while the tools cost 8 or
+15. The price sits by the send button (in words under the composer on a phone),
+and the count left moves with what this session spent. **Follow-up chips**
+(`FOLLOW_UPS`) are a fixed list per tool in the STUDENT's voice, because a tap
+SENDS — and so the row prints its price first. They are never generated, and
+never offered under a failed reply. Every other seed on this page still goes in
+the composer unsent.
+
+**SMALLER, AND EACH WAS A REAL FAULT:** the thread used to `scrollIntoView` on
+every token, dragging a student who had scrolled up back down twenty times a
+second — it follows only at the bottom now, a `ResizeObserver` follows KaTeX and
+the follow-up row that land after the last change, and a "Latest" button appears
+otherwise. A file DROPPED anywhere is always taken, because a drop the page does
+not prevent replaces the app with the file. Photos go through `acceptFiles` like
+every other upload surface. A locked tool row goes to /Subscription rather than
+changing a composer that is not on screen. And the upgrade panel said "what is
+above" about suggestions that are below it.
+
+Draw it with the network-level harness against `/AITools` (welcome, thread,
+palette, `/`, setup, locked, empty, the phone drawer), in both themes and at
+390 with touch emulation — `isMobile` is what makes `(hover: hover)` false, and
+without it the touch fix cannot be seen at all.
 
 ## The setup screens asked for one paper and offered one mark
 
@@ -7971,12 +8060,18 @@ student looking free in the nav, the planner and the companion.
   CHAT is inside the room now, which was sixty of those tokens in one file.
   `--lattice-x` is origined on the column the content is SET IN (the welcome's
   `max-w-3xl`, 736 = 23 × 32), never the chat's outer shell; the test does the
-  division because the column has already moved twice
-- `src/components/ai_tools/UnifiedChat.jsx` — the chat, which is the page. Copy
-  on every message (there was none at all), regenerate and edit-and-resend
-  through ONE `send()` that takes an explicit prompt and history, and a history
-  search over titles. A user message is the room's quiet panel rather than a
-  brand slab with hard-coded white ink
+  division because the column has already moved twice. The lattice is DRAWN in
+  the welcome now, in the box that column is centred in, and nothing in the
+  room may portal out of it
+- `src/components/ai_tools/UnifiedChat.jsx` — the chat, which is the page,
+  full-bleed. Copy, edit, try again and follow-ups all through ONE `send()`;
+  every message control reachable on touch (`HOVER_REVEAL`); the price by the
+  send button. `ChatHistory.jsx` (by date, delete asks once), `ToolPalette.jsx`
+  (the one picker, also opened by `/`) and `ComposerSetup.jsx` (subject and
+  options behind one chip) are its pieces, none of them portalled
+- `src/lib/chatModel.js` + `chatModel.test.mjs` — the chat's decisions: history
+  buckets on local days, which tool a fresh chat opens on, the follow-ups, the
+  palette search and the slash command, and the strand a maths subject is
 - `src/lib/toolBrief.js` + `toolBrief.test.mjs`,
   `src/components/ai_tools/ChatWelcome.jsx`, `src/lib/toolLabels.js`,
   `src/lib/aiChats.js` — the chat's EMPTY STATE, which is what /AITools opens

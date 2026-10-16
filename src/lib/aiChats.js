@@ -52,7 +52,7 @@ const TITLE_MAX = 64;
  * complaint the mistake bank's clipped questions drew, one surface along. The
  * ellipsis is what says it was cut; without it a sentence simply stops.
  */
-function clipTitle(text) {
+export function clipTitle(text) {
     const t = String(text || "").replace(/\s+/g, " ").trim();
     if (t.length <= TITLE_MAX) return t;
     const cut = t.slice(0, TITLE_MAX);
@@ -154,4 +154,4 @@ export function toolUsage(rows = []) {
     return out;
 }
 
-export default { chatRows, recentChats, toolUsage, RECENT_MAX };
+export default { chatRows, recentChats, toolUsage, clipTitle, RECENT_MAX };

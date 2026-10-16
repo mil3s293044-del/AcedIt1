@@ -74,7 +74,12 @@ const DEFINED = new Set([...CSS.matchAll(/(--console-[\w-]+)\s*:/g)].map((m) => 
  */
 const ROOM = ["components/ai_tools/Console.jsx",
     "components/ai_tools/UnifiedChat.jsx",
-    "components/ai_tools/ChatWelcome.jsx"];
+    "components/ai_tools/ChatWelcome.jsx",
+    // The chat's own pieces since the full-bleed rebuild: the history rail,
+    // the tool palette and the setup panel all draw inside the room.
+    "components/ai_tools/ChatHistory.jsx",
+    "components/ai_tools/ToolPalette.jsx",
+    "components/ai_tools/ComposerSetup.jsx"];
 
 check("the palette is actually declared, light and dark", () => {
     // A FLOOR, not a census. It was 14 and went red when `--console-rail`
@@ -100,7 +105,45 @@ check("THE ROOM CARRIES THE `console` CLASS", () => {
     assert.match(code(room), /className=\{`console /,
         "Console.jsx must put `console` on its wrapper — the tokens are scoped to it");
     assert.match(code(room), /bg-\[var\(--console-ground\)\]/);
-    assert.match(code(room), /console-lattice/, "the lattice layer is what makes it a console");
+});
+
+check("THE LATTICE IS DRAWN IN THE BOX THE COLUMN IS CENTRED IN", () => {
+    // It covered the whole route, behind a bordered chat panel that covered
+    // most of it, so the grid showed only in the margins and `--lattice-x`'s
+    // `50%` was half of a width the content column had nothing to do with.
+    // The chat is full-bleed now and the grid sits in the welcome, as a
+    // positioned layer of the same element whose child is the centred column —
+    // which is the only arrangement in which the arithmetic below describes
+    // what is on screen.
+    const welcome = code(read("components/ai_tools/ChatWelcome.jsx"));
+    const layer = welcome.match(/<div className="console-lattice[^"]*"/);
+    assert.ok(layer, "the welcome no longer draws the lattice");
+    assert.match(layer[0], /\babsolute\b/);
+    assert.match(layer[0], /\binset-0\b/);
+    assert.match(layer[0], /pointer-events-none/, "a grid over the page must not swallow clicks");
+    const at = welcome.indexOf(layer[0]);
+    const column = welcome.indexOf("mx-auto w-full max-w-3xl px-4");
+    assert.ok(column > at, "the column is not a sibling after the lattice layer");
+    // And it is not drawn twice, which would double its ink over the welcome.
+    assert.ok(!/console-lattice/.test(code(read("components/ai_tools/Console.jsx"))),
+        "the room draws a second lattice under the welcome's");
+});
+
+check("NOTHING IN THE ROOM PORTALS OUT OF IT", () => {
+    // The tokens are declared on `.console` and inherit DOWN the tree. A Radix
+    // popover, select or menu portals its content to <body>, outside the room,
+    // where every `--console-*` is blank — the old tool dropdown rendered in
+    // the app's cream for exactly this reason. The palette and the setup panel
+    // are positioned against the composer instead.
+    const bad = [];
+    for (const r of ROOM) {
+        const src = code(read(r));
+        for (const prim of ["@/components/ui/popover", "@/components/ui/select", "@/components/ui/dropdown-menu",
+            "@/components/ui/dialog", "@/components/ui/sheet", "createPortal"]) {
+            if (src.includes(prim)) bad.push(`${r}: ${prim}`);
+        }
+    }
+    assert.deepEqual(bad, []);
 });
 
 check("the lattice is declared and its gauge is fixed", () => {

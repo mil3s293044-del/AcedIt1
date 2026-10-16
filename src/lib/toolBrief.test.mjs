@@ -479,7 +479,10 @@ ok("ONE chat-row predicate, and the sidebar reads it", () => {
     // Two copies would let the sidebar and the dashboard's Recent list
     // disagree about what the student has, on two lists of one table.
     const src = stripped("../components/ai_tools/UnifiedChat.jsx");
-    assert.ok(/import \{ chatRows \} from "@\/lib\/aiChats"/.test(src));
+    // The NAME inside the braces, never the whole line: adding `clipTitle`
+    // beside it broke a test about nothing — the name-pinning lesson this file
+    // already records once about `<RecentRow`.
+    assert.ok(/import \{[^}]*\bchatRows\b[^}]*\} from "@\/lib\/aiChats"/.test(src));
     assert.ok(src.includes("chatRows(convs)"));
     assert.ok(
         !/input_data\?\.messages\)\s*&&/.test(src),

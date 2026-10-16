@@ -87,6 +87,24 @@ check("the Progress verdict sits under the first minutes and over the ambient Ac
     assert.equal(holder(["report", "first-win"]), "first-win");
 });
 
+check("THE CHAT PAGE STANDS THE AMBIENT ACE DOWN, and draws none of its own", () => {
+    // /AITools is a chatbot, and the companion's launcher is a second one: on a
+    // phone it stood on the send button, on a laptop over the composer's
+    // corner. The page claims "chat" without drawing a body — the one claim in
+    // the app that exists to make the corner EMPTY.
+    assert.equal(holder(["chat", "launcher"]), "chat");
+    assert.equal(holder(["chat", "buddy"]), "chat");
+    assert.equal(holder(["chat", "intro"]), "chat");
+    // A celebration still plays over it, and so would anything belonging to a
+    // student's first minutes.
+    assert.equal(holder(["reacts", "chat"]), "reacts");
+    assert.equal(holder(["tour", "chat"]), "tour");
+    const page = strip(fs.readFileSync("src/pages/AITools.jsx", "utf8"));
+    assert.ok(/useEffect\(\(\) => claimAce\(\s*["']chat["']\s*\)/.test(page),
+        "the chat page no longer claims the stage, so the launcher is back on its send button");
+    assert.ok(!/AceBody|AceWalker/.test(page), "the chat page draws an Ace of its own");
+});
+
 check("THE BUDDY ASKS BY NAME, so a higher claim actually stands it down", () => {
     // It used to hide only for its own hard-coded reasons, so ACE_ORDER ranked
     // it under the report and nothing made it act on that ranking: two Aces.
