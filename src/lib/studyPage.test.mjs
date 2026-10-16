@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
     daysUntil, fmtMinutes, minutesSummary, nextDeadline, dominantTechnique,
-    techniqueFacts, nextStep, greetingFor, TECHNIQUE_IDS, FALLBACK_FACT,
+    techniqueFacts, nextStep, greetingFor, stepFigure, todayRing, subjectReviewCards, TECHNIQUE_IDS, FALLBACK_FACT,
     READY_NUDGE, DEADLINE_URGENT, DEADLINE_SOON, DEADLINE_SHOWN,
 } from "@/lib/studyPage";
 import { dayKey } from "@/lib/studyLog";
@@ -259,6 +259,45 @@ check("fmtMinutes", () => {
     assert.equal(fmtMinutes(null), "0m");
 });
 
+// ─── the step card's figure and the today ring ──────────────────────────────
+
+check("the step card's figure is the number its own sentence states", () => {
+    const dl = { days: 4, title: "Chem SAC" };
+    const f = stepFigure(nextStep({ deadline: dl }), { deadline: dl });
+    assert.deepEqual(f, { value: "4", unit: "days" });
+    assert.match(nextStep({ deadline: dl }).title, new RegExp(`\\b${f.value}\\b`), "the figure and the sentence disagree");
+    assert.deepEqual(stepFigure(nextStep({ deadline: { days: 1, title: "x" } }), { deadline: { days: 1 } }),
+        { value: "1", unit: "day" });
+    assert.equal(stepFigure(nextStep({ deadline: { days: 0, title: "x" } }), { deadline: { days: 0 } }).value, "Today");
+    const cards = nextStep({ ready: 14 });
+    assert.deepEqual(stepFigure(cards, { ready: 14 }), { value: "14", unit: "ready" });
+    assert.match(cards.title, /\b14\b/);
+});
+
+check("a step with nothing countable gets no figure, never a filler number", () => {
+    assert.equal(stepFigure(nextStep({ timerLive: true })), null);
+    assert.equal(stepFigure(nextStep({ intent: intent("pomodoro") })), null);
+    assert.equal(stepFigure(nextStep({ todayMins: 10, dominant: "pomodoro" })), null);
+    assert.equal(stepFigure(null), null);
+    // A pile with nothing in it is not a figure of zero.
+    assert.equal(stepFigure({ id: "cards" }, { ready: 0 }), null);
+    assert.equal(stepFigure({ id: "done" }, { todayMins: 0 }), null);
+});
+
+check("the ring is drawn only against what they SAID today would take", () => {
+    assert.equal(todayRing({ intent: null, todayMins: 40 }), null, "a ring with no declared target invents one");
+    assert.equal(todayRing({ intent: { duration: 0, plan: {} }, todayMins: 40 }), null);
+    const r = todayRing({ intent: { duration: 60, plan: { label: "Cramming" } }, todayMins: 40 });
+    assert.equal(r.done, 40);
+    assert.equal(r.target, 60);
+    assert.equal(r.met, false);
+    assert.ok(Math.abs(r.pct - 40 / 60) < 1e-9);
+    const over = todayRing({ intent: { duration: 25, plan: {} }, todayMins: 90 });
+    assert.equal(over.pct, 1, "the ring never draws past a full turn");
+    assert.equal(over.met, true);
+    assert.equal(todayRing({ intent: { duration: 30, plan: {} }, todayMins: null }).done, 0);
+});
+
 // ─── today's intent is read on a LOCAL day ──────────────────────────────────
 
 check("an intent set at 8am in Melbourne is today's intent", () => {
@@ -335,6 +374,128 @@ check("the betting vocabulary is gone from the page", () => {
 check("the deck shelf counts READY and says so", () => {
     const s = code("src/components/study/SpacedRepetition.jsx");
     absent(s, /\}\s*due\s*<\/span>/);
+});
+
+// ─── The six tools share one shape ──────────────────────────────────────────
+
+const AR = "src/components/study/ActiveRecall.jsx";
+const BL = "src/components/study/BlurtingMethod.jsx";
+const EXAM = "src/components/study/ExamMode.jsx";
+const POMO = "src/components/study/PomodoroTimer.jsx";
+const SR = "src/components/study/SpacedRepetition.jsx";
+const SHELL = "src/components/study/SetupShell.jsx";
+const SETUPS = [AR, BL, EXAM];
+
+check("the step card carries the sentence's own figure and the ring", () => {
+    const s = code(STUDY);
+    present(s, /<NextStepCard\b[^>]*\bfigure=\{figure\}/, "the card is handed the figure");
+    present(s, /=\s*stepFigure\(/);
+    present(s, /=\s*isLoading\s*\?\s*null\s*:\s*todayRing\(/, "the ring comes from todayRing");
+    present(code("src/components/study/NextStepCard.jsx"), /<h1\b/, "the page's heading lives in the card");
+});
+
+check("every setup screen starts from ONE pinned bar", () => {
+    for (const f of SETUPS) {
+        const n = (code(f).match(/<StartBar\b/g) || []).length;
+        assert.equal(n, 1, `${f}: ${n} start bars`);
+    }
+    const shell = code(SHELL);
+    const bar = shell.slice(shell.indexOf("export function StartBar"), shell.indexOf("export function HistoryDialog"));
+    present(bar, /className="sticky\b/, "the start bar is not sticky");
+});
+
+check("the card holding a start bar does not make itself a scroll container", () => {
+    // `overflow-hidden` makes the card a scroll container, and a sticky child
+    // then sticks to a box that never scrolls — it renders exactly like no
+    // sticky at all. Read off the card that actually encloses the bar.
+    for (const f of SETUPS) {
+        const s = read(f);
+        const at = s.indexOf("<StartBar");
+        const card = s.lastIndexOf("card-soft", at);
+        assert.ok(card > 0, `${f}: no card around the start bar`);
+        const cls = s.slice(card, s.slice(card).search(/["`]/) + card);
+        absent(cls, /\boverflow-hidden\b/, `${f}: the setup card is overflow-hidden`);
+    }
+});
+
+check("the start bar keeps the Ace launcher's corner clear below xl", () => {
+    const shell = code(SHELL);
+    const bar = shell.slice(shell.indexOf("export function StartBar"), shell.indexOf("export function HistoryDialog"));
+    const pr = bar.match(/(?:^|\s)pr-(\d+)(?=\s)/);
+    // The launcher is 64px wide on a phone and 80 from sm, fixed bottom-right.
+    assert.ok(pr && Number(pr[1]) >= 16, "no right-hand reserve of at least 4rem under the launcher");
+    present(bar, /\bxl:pr-\d/, "the reserve is never released, though the column clears the launcher at xl");
+    // And on a phone the bar stacks rather than truncating its figure.
+    absent(bar, /<p\b[^>]*\btruncate\b[^>]*>\s*\{figure\}/, "a truncated figure");
+});
+
+check("history is a dialog, opened from the page's own header", () => {
+    const study = code(STUDY);
+    const ids = [...study.matchAll(/id:\s*"(\w+)"[^}]*?\bhistory:\s*true/g)].map((m) => m[1]);
+    assert.ok(ids.length >= 2, `only ${ids.length} techniques carry a history`);
+    for (const id of ids) {
+        present(study, new RegExp(`historyOpen=\\{historyFor === "${id}"\\}`), `${id}'s history is not wired to the header`);
+    }
+    present(study, /onClick=\{\(\)\s*=>\s*setHistoryFor\(currentTechnique\.id\)\}/, "a header button that opens it");
+    for (const f of [AR, BL]) present(code(f), /<HistoryDialog\b/, `${f}: history is not a dialog`);
+});
+
+check("a history row's delete is reachable without a hover", () => {
+    for (const f of [AR, BL]) {
+        absent(code(f), /(^|[\s"'`])group-hover:opacity-100/m, `${f}: a control revealed only by hover`);
+        present(code(f), /\bHOVER_REVEAL\b/, `${f}: the delete does not use the touch-safe reveal`);
+    }
+});
+
+check("Revision Mode draws the shared controls, not black pills", () => {
+    const s = code(EXAM);
+    present(s, /<Segmented\b/);
+    absent(s, /bg-foreground\s+border-foreground\s+text-background/, "a black selected pill");
+});
+
+check("a block-length chip goes through the path that banks studied minutes first", () => {
+    const s = code(POMO);
+    const at = s.search(/<Segmented\b[^>]*value=\{settings\.workTime\}/);
+    assert.ok(at > 0, "the block length chips are gone");
+    const tag = s.slice(at, s.indexOf("/>", at));
+    present(tag, /handleSettingsChange\(\s*'workTime'/, "the chip writes workTime around the banking path");
+    present(tag, /!isRunning/, "a running block can be resized from a chip");
+});
+
+// ─── A subject's review ─────────────────────────────────────────────────────
+
+const learned = { repetitions: 2, total_reviews: 2 };
+const shelf = [
+    { cards: [
+        { id: "new1" },
+        { id: "due1", ...learned, next_review_date: off(-1) },
+        { id: "sched", ...learned, next_review_date: off(5) },
+    ] },
+    { cards: [
+        { id: "over", ...learned, next_review_date: off(-10) },
+        { id: "known", ...learned, retired_at: "2026-10-01T00:00:00Z" },
+        { id: "snoozed", ...learned, next_review_date: off(-2), snoozed_until: off(2) },
+        { id: "new2" },
+    ] },
+];
+
+check("a subject's review plays its ready cards, lapsed before new, and nothing else", () => {
+    const ids = subjectReviewCards(shelf, off(0)).map((c) => c.id);
+    assert.deepEqual(ids, ["due1", "over", "new1", "new2"]);
+});
+
+check("a subject with nothing ready offers no session", () => {
+    assert.deepEqual(subjectReviewCards([{ cards: [{ id: "s", ...learned, next_review_date: off(3) }] }], off(0)), []);
+    assert.deepEqual(subjectReviewCards([], off(0)), []);
+    assert.deepEqual(subjectReviewCards([{}, null], off(0)), []);
+});
+
+check("the band's count is the session its button opens", () => {
+    const s = code(SR);
+    present(s, /totalReady\s*=\s*subjectReviewCards\(subjectDecks\)\.length/, "the count is computed apart from the session");
+    present(s, /cards:\s*subjectReviewCards\(subjectDecks\)/, "the session is built apart from the count");
+    present(s, /Review \{totalReady\} ready/, "the button does not say what it plays");
+    absent(s, /w-3 h-3 rounded-full[^>]*backgroundColor:\s*groupColor/, "the old subject dot");
 });
 
 check("no banned word in anything the model prints", () => {

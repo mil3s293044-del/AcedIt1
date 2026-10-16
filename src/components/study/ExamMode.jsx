@@ -20,6 +20,8 @@ import { normaliseStimulus } from "@/lib/quizSchema";
 // had not been marked. See quizScore.js.
 import { markedPct } from "@/lib/quizScore";
 import SourcePanel from "@/components/quizzes/SourcePanel";
+import { Field, Segmented, TONE as SETUP_TONE } from "@/components/shared/SetupControls";
+import { StartBar } from "./SetupShell";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
   ChevronLeft, ChevronRight, Play, Trophy, RefreshCw,
@@ -470,175 +472,154 @@ Return exactly ${openQs.length} results, in order.`,
     const willUse = config.questionCount === "all" ? available : Math.min(config.questionCount, available);
 
     return (
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
-                {/* WHAT THE PAPER IS BUILT FROM, and nothing else. This was a
-                    centred hero repeating "Revision Mode" under a mortarboard
-                    tile — the third time the name was printed — with the one
-                    useful thing in it, the size of each pool, in its footer.
-                    The Study page names the technique; this says what a paper
-                    can draw on, which is what decides whether to build one. */}
-                {!isLoadingData &&
-            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 rounded-2xl border-2 border-border bg-surface px-5 py-3.5">
-                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your pool</p>
-                        {[
-              { label: "flashcards", val: allQuestions.filter((q) => q.source === "Flashcards").length, Icon: BookOpen, color: "text-chart-3" },
-              { label: "quiz questions", val: allQuestions.filter((q) => q.source === "Quizzes").length, Icon: FileText, color: "text-chart-4" },
-              { label: "recall questions", val: allQuestions.filter((q) => q.source === "Active Recall").length, Icon: Brain, color: "text-primary" }].
-              map((s) =>
-              <p key={s.label} className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                                <s.Icon className={`w-3.5 h-3.5 ${s.color}`} aria-hidden="true" />
-                                <span className="font-display font-extrabold text-foreground tabular-nums">{s.val}</span> {s.label}
-                            </p>
-              )}
-                    </div>
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        {/* ── ONE CARD ───────────────────────────────────────────────────
+            Revision Mode was FIVE stacked boxes — a pool strip, the subject,
+            the sources, the count beside the clock, and a summary box with the
+            button in it — with black-filled pills that matched nothing else on
+            the page. It is the shape Active Recall and Blurting already have:
+            one card, the shared option rows, and the start bar pinned to its
+            foot stating the paper it builds. */}
+        <div className="card-soft p-5 sm:p-6 overflow-clip">
+          {/* WHAT THE PAPER IS BUILT FROM, as the card's own first line. The
+              size of each pool is what decides whether a paper is worth
+              building, so it leads. */}
+          <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 pb-5 mb-5 border-b border-border">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your pool</p>
+            {isLoadingData ?
+            <span className="h-4 w-48 rounded bg-secondary animate-pulse" aria-hidden="true" /> :
+            [
+            { label: "flashcards", val: allQuestions.filter((q) => q.source === "Flashcards").length, Icon: BookOpen, color: "text-chart-3" },
+            { label: "quiz questions", val: allQuestions.filter((q) => q.source === "Quizzes").length, Icon: FileText, color: "text-chart-4" },
+            { label: "recall questions", val: allQuestions.filter((q) => q.source === "Active Recall").length, Icon: Brain, color: "text-primary" }].
+            map((p) =>
+            <p key={p.label} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                <p.Icon className={`w-3.5 h-3.5 ${p.color}`} aria-hidden="true" />
+                <span className="font-display font-extrabold text-foreground tabular-nums">{p.val}</span> {p.label}
+              </p>
+            )}
+          </div>
+
+          {isLoadingData ?
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+              <AceShuffle size="lg" />
+              <span className="text-muted-foreground text-sm">Loading your study materials…</span>
+            </div> :
+
+          <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Subject" tone="streak">
+                  {/* Topic belongs to a subject — switching subject has to clear it,
+                      or you get a paper filtered to a topic that isn't in there. */}
+                  <Select value={config.subject} onValueChange={(v) => setConfig((c) => ({ ...c, subject: v, topic: "all" }))}>
+                    <SelectTrigger className="h-11 border-2 border-border focus:border-streak rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All subjects</SelectItem>
+                      {(userSubjects || []).map((s) => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Topic" tone="streak">
+                  <Select value={config.topic} onValueChange={(v) => setConfig((c) => ({ ...c, topic: v }))} disabled={!availableTopics.length}>
+                    <SelectTrigger className="h-11 border-2 border-border focus:border-streak rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All topics</SelectItem>
+                      {availableTopics.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      {/* A deep link can name a topic with nothing behind it any
+                          more. Keep it selectable so the label isn't blank. */}
+                      {config.topic !== "all" && !availableTopics.includes(config.topic) &&
+                      <SelectItem value={config.topic}>{config.topic}</SelectItem>}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+              {config.topic !== "all" &&
+            <p className="mt-2 text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Target className="w-3 h-3 text-streak flex-shrink-0" />
+                  Drilling <span className="font-bold text-foreground">{config.topic}</span> only.
+                  <button onClick={() => setConfig((c) => ({ ...c, topic: "all" }))} className="font-bold text-streak hover:underline">
+                    Widen it
+                  </button>
+                </p>
             }
 
-                {isLoadingData ?
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-                        <AceShuffle size="lg" />
-                        <span className="text-muted-foreground text-sm">Loading your study materials...</span>
-                    </div> :
+              <div className="mt-4 space-y-4">
+                {/* Several at once, so not a Segmented row — but drawn in its
+                    cells, so it reads as one of the same family. At least one
+                    stays on: a paper drawn from nothing is not a paper. */}
+                <Field label="Draw from" tone="streak">
+                  {/* Three cells across a phone left "Flashcards" sixty
+                      pixels and it came out "Flash…". Below sm each source is
+                      a row, its count at the end; three across from sm. */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+                    {SOURCES.map((src) => {
+                    const cnt = allQuestions.filter((q) => getSourceKey(q.source) === src.id && (config.subject === "all" || q.subject === config.subject) && (config.topic === "all" || q.topic === config.topic)).length;
+                    const sel = config.sources.includes(src.id);
+                    const SourceIcon = src.icon;
+                    return (
+                      <button key={src.id} type="button" aria-pressed={sel}
+                      onClick={() => {
+                        if (sel && config.sources.length === 1) return;
+                        setConfig((c) => ({ ...c, sources: sel ? c.sources.filter((x) => x !== src.id) : [...c.sources, src.id] }));
+                      }}
+                      className={`min-w-0 flex items-center justify-between gap-3 sm:block rounded-xl border-2 px-3 sm:px-2 py-2.5
+                          font-bold text-left sm:text-center transition-colors
+                          ${sel ? SETUP_TONE.streak.on : "border-border text-muted-foreground hover:text-foreground hover:border-muted-foreground/40"}`}>
+                          <span className="min-w-0 flex items-center sm:justify-center gap-1.5 text-sm">
+                            <SourceIcon className={`w-4 h-4 flex-shrink-0 ${SOURCE_CLASSES[src.id].chipText}`} aria-hidden="true" />
+                            <span className="truncate">{src.label}</span>
+                          </span>
+                          <span className="flex-shrink-0 block text-[11px] font-medium opacity-70 tabular-nums">{cnt} question{cnt === 1 ? "" : "s"}</span>
+                        </button>);
 
-        <div className="space-y-4">
-                        {/* Subject + Topic */}
-                        <div className="card-soft p-5 space-y-3">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                <div className="space-y-3">
-                                    <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                        <BookOpen className="w-4 h-4 text-muted-foreground" /> Subject
-                                    </label>
-                                    {/* Topic belongs to a subject — switching subject has to clear it,
-                                        or you get a paper filtered to a topic that isn't in there. */}
-                                    <Select value={config.subject} onValueChange={(v) => setConfig((c) => ({ ...c, subject: v, topic: "all" }))}>
-                                        <SelectTrigger className="border-2 border-border rounded-xl h-11 bg-secondary/50 focus:border-streak/40">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all"><span className="inline-flex items-center gap-2"><Sparkles className="w-3.5 h-3.5 text-xp" /> All Subjects</span></SelectItem>
-                                            {(userSubjects || []).map((s) => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                  })}
+                  </div>
+                </Field>
 
-                                <div className="space-y-3">
-                                    <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                        <Target className="w-4 h-4 text-muted-foreground" /> Topic
-                                    </label>
-                                    <Select value={config.topic} onValueChange={(v) => setConfig((c) => ({ ...c, topic: v }))} disabled={!availableTopics.length}>
-                                        <SelectTrigger className="border-2 border-border rounded-xl h-11 bg-secondary/50 focus:border-streak/40">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">All topics</SelectItem>
-                                            {availableTopics.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                                            {/* A deep link can name a topic with nothing behind it any
-                                                more. Keep it selectable so the label isn't blank. */}
-                                            {config.topic !== "all" && !availableTopics.includes(config.topic) &&
-                                            <SelectItem value={config.topic}>{config.topic}</SelectItem>}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            {config.topic !== "all" &&
-                            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-                                <Target className="w-3 h-3 text-streak flex-shrink-0" />
-                                Drilling <span className="font-bold text-foreground">{config.topic}</span> only.
-                                <button onClick={() => setConfig((c) => ({ ...c, topic: "all" }))} className="font-bold text-streak hover:underline">
-                                    Widen it
-                                </button>
-                            </p>
-              }
-                        </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field label="Questions" tone="streak">
+                    <Segmented tone="streak" value={config.questionCount}
+                    onChange={(v) => setConfig((c) => ({ ...c, questionCount: v }))}
+                    options={[...COUNT_OPTIONS.map((n) => ({ value: n, label: String(n) })), { value: "all", label: "All" }]} />
+                  </Field>
+                  <Field label="Time limit" tone="streak">
+                    <Segmented tone="streak" size="sm" value={config.timeLimit}
+                    onChange={(v) => setConfig((c) => ({ ...c, timeLimit: v }))}
+                    options={TIME_OPTIONS.map((t) => ({ value: t.value, label: t.value === 0 ? "None" : t.label }))} />
+                  </Field>
+                </div>
+              </div>
 
-                        {/* Sources */}
-                        <div className="card-soft p-5 space-y-3">
-                            <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                <Layers className="w-4 h-4 text-muted-foreground" /> Question Sources
-                            </label>
-                            <div className="grid grid-cols-3 gap-3">
-                                {SOURCES.map((s) => {
-                const cnt = allQuestions.filter((q) => getSourceKey(q.source) === s.id && (config.subject === "all" || q.subject === config.subject) && (config.topic === "all" || q.topic === config.topic)).length;
-                const sel = config.sources.includes(s.id);
-                const cls = SOURCE_CLASSES[s.id];
-                const SourceIcon = s.icon;
-                return (
-                  <button key={s.id}
-                  onClick={() => {
-                    if (sel && config.sources.length === 1) return;
-                    setConfig((c) => ({ ...c, sources: sel ? c.sources.filter((x) => x !== s.id) : [...c.sources, s.id] }));
-                  }}
-                  className={`relative flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all duration-200 ${sel ? cls.selected : "border-border text-muted-foreground hover:border-border bg-secondary/50"}`}>
-                                            {sel && <Check className="absolute top-2 right-2 w-3.5 h-3.5" />}
-                                            <SourceIcon className="w-6 h-6" />
-                                            <span className="text-xs font-bold">{s.label}</span>
-                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sel ? "bg-surface text-foreground" : "bg-secondary text-muted-foreground"}`}>{cnt}</span>
-                                        </button>);
+              {available === 0 &&
+            <p className="mt-5 text-sm text-streak font-medium">
+                  {config.topic !== "all" ?
+              <>Nothing on <span className="font-bold">{config.topic}</span> in these sources. Widen the topic, or make cards for it first.</> :
+              "No questions match your selection. Add flashcards or quizzes first."}
+                </p>
+            }
 
-              })}
-                            </div>
-                        </div>
+              {/* ── THE START BAR, pinned — the paper it builds, stated. */}
+              <StartBar
+              figure={available === 0 ? "Nothing to sit yet" : `${willUse} question${willUse === 1 ? "" : "s"}`}
+              line={available === 0 ? null : [
+              willUse < available ? `of ${available} available` : null,
+              config.timeLimit > 0 ? `${config.timeLimit} minute limit` : "no time limit"].
+              filter(Boolean).join(" · ")}>
 
-                        {/* Count + Time in a grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="card-soft p-5 space-y-3">
-                                <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                    <Target className="w-4 h-4 text-muted-foreground" /> Questions
-                                </label>
-                                <div className="flex flex-wrap gap-2">
-                                    {COUNT_OPTIONS.map((n) =>
-                <button key={n} onClick={() => setConfig((c) => ({ ...c, questionCount: n }))}
-                className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${config.questionCount === n ? "bg-foreground border-foreground text-background" : "border-border text-muted-foreground hover:border-muted-foreground"}`}>
-                                            {n}
-                                        </button>
-                )}
-                                    <button onClick={() => setConfig((c) => ({ ...c, questionCount: "all" }))}
-                className={`px-4 py-2 rounded-xl text-sm font-bold border-2 transition-all ${config.questionCount === "all" ? "bg-foreground border-foreground text-background" : "border-border text-muted-foreground hover:border-muted-foreground"}`}>
-                                        All
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="card-soft p-5 space-y-3">
-                                <label className="text-sm font-bold text-foreground flex items-center gap-2">
-                                    <Clock className="w-4 h-4 text-muted-foreground" /> Time Limit
-                                </label>
-                                <div className="flex flex-wrap gap-2">
-                                    {TIME_OPTIONS.map((t) =>
-                <button key={t.value} onClick={() => setConfig((c) => ({ ...c, timeLimit: t.value }))}
-                className={`px-3 py-2 rounded-xl text-xs font-bold border-2 transition-all text-center ${config.timeLimit === t.value ? "bg-foreground border-foreground text-background" : "border-border text-muted-foreground hover:border-muted-foreground"}`}>
-                                            {t.label}
-                                        </button>
-                )}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Start Button */}
-                        <div className="card-soft p-5">
-                            <div className="flex items-center justify-between gap-4">
-                                <div>
-                                    {available === 0 ?
-                <p className="text-sm text-streak font-medium">
-                                        {config.topic !== "all" ?
-                  <>Nothing on <span className="font-bold">{config.topic}</span> in these sources. Widen the topic, or make cards for it first.</> :
-                  "No questions match your selection. Add flashcards or quizzes first."}
-                                    </p> :
-
-                <>
-                                            <p className="text-sm text-muted-foreground"><span className="font-black text-foreground text-lg">{willUse}</span> <span className="text-muted-foreground/60">of {available} questions</span></p>
-                                            <p className="text-xs text-muted-foreground/60 mt-0.5">{config.timeLimit > 0 ? `${config.timeLimit} minute limit` : "No time limit"}</p>
-                                        </>
-                }
-                                </div>
-                                <Button onClick={handleStartExam} disabled={available === 0}
-              className="bg-streak hover:bg-streak/90 text-white rounded-2xl px-8 h-12 gap-2 font-bold btn-3d transition-all">
-                                    <Play className="w-4 h-4" /> Begin Exam
-                                </Button>
-                            </div>
-                        </div>
-                    </div>
-        }
-            </motion.div>);
+                <Button onClick={handleStartExam} disabled={available === 0}
+              className="h-11 px-5 bg-streak hover:bg-streak/90 text-white rounded-xl gap-2 font-bold shadow-soft">
+                  <Play className="w-4 h-4" /> Begin exam
+                </Button>
+              </StartBar>
+            </>
+          }
+        </div>
+      </motion.div>);
 
   }
 

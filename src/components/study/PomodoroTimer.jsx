@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Field, Segmented } from "@/components/shared/SetupControls";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Play, Pause, RotateCcw, BookOpen, Coffee, Settings, Maximize, X, Zap } from "lucide-react";
+import { Play, Pause, RotateCcw, Coffee, Settings, Maximize, X, Zap } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
@@ -56,6 +57,9 @@ const COLOR_SCHEMES = {
 // Display only — the award itself is calculated server-side in
 // calcStudySessionXP. Keep the two in step.
 const XP_PER_MINUTE = 4;
+
+/** The lengths offered on the page. Anything else is set in the dialog. */
+const BLOCK_LENGTHS = [25, 50, 90];
 
 export default function PomodoroTimer({ onSessionComplete, userSubjects: initialUserSubjects = [] }) {
     const [settings, setSettings] = useState({
@@ -772,154 +776,165 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                     </div>
                 </div>
 
-                <div className="pb-10 relative z-10 px-6">
-                    <div className="flex flex-col items-center space-y-10">
-                        {/* Timer Circle */}
-                        <div className="relative w-80 h-80 flex items-center justify-center">
-                            <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                                <circle
-                                    className="stroke-current text-secondary"
-                                    strokeWidth="3"
-                                    cx="50"
-                                    cy="50"
-                                    r="45"
-                                    fill="transparent"
-                                />
-                                <motion.circle
-                                    key={`${isBreak}-${session}`}
-                                    className="stroke-current"
-                                    strokeWidth="3"
-                                    strokeLinecap="round"
-                                    cx="50" cy="50" r="45"
-                                    fill="transparent"
-                                    strokeDasharray="282.743"
-                                    strokeDashoffset={282.743 - (progress / 100) * 282.743}
-                                    initial={{ strokeDashoffset: 282.743 }}
-                                    animate={{ strokeDashoffset: 282.743 - (progress / 100) * 282.743 }}
-                                    transition={{ duration: 1 }}
-                                    style={{
-                                        color: colorScheme.accentVar,
-                                        filter: `drop-shadow(0 0 12px ${colorScheme.accentVar})`
-                                    }}
-                                />
-                            </svg>
-                            <div className="text-center">
-                                <motion.h2
-                                    key={timeLeft}
-                                    initial={{ scale: 1.05 }}
-                                    animate={{ scale: 1 }}
-                                    className={`text-7xl font-bold tracking-tighter mb-3 ${colorScheme.timerText}`}
-                                >
-                                    {formatTime(timeLeft)}
-                                </motion.h2>
-                                <p className="text-muted-foreground text-base font-medium mb-3">Time Remaining</p>
-                                <div className={`pill px-4 py-2 ${colorScheme.badge}`}>
-                                    <StatusIcon className="w-4 h-4" />
-                                    <span className="font-bold text-sm">
-                                        {isBreak ? (isLongBreak(session - 1) ? 'Long Break' : 'Short Break') : 'Work Time'}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Control Buttons */}
-                        <div className="flex items-center gap-3">
-                            <Button
-                                onClick={toggleTimer}
-                                size="lg"
-                                className={`w-44 text-base font-semibold ${colorScheme.button} text-white shadow-soft transition-all rounded-2xl h-14`}
-                            >
-                                {isRunning ? <Pause className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
-                                {getButtonText()}
-                            </Button>
-                            <Button
-                                onClick={resetTimer}
-                                aria-label="Reset timer"
-                                variant="outline"
-                                size="lg"
-                                className="w-14 h-14 rounded-2xl hover:bg-secondary border-2"
-                            >
-                                <RotateCcw className="w-5 h-5" />
-                            </Button>
-                            {isBreak && (
-                                <Button
-                                    onClick={skipBreak}
-                                    variant="outline"
-                                    size="lg"
-                                    className="rounded-2xl hover:bg-secondary border-2 h-14 px-6"
-                                >
-                                    Skip Break
-                                </Button>
-                            )}
-                        </div>
-
-                        {/* Subject and Topic Selection - Only show when not running and not in break mode */}
-                        {!isRunning && !isBreak && (
-                            <motion.div
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className="w-full max-w-2xl space-y-4"
-                            >
-                                <div className="card-soft">
-                                    <div className="p-6 space-y-4">
-                                        <h3 className="font-bold text-base text-foreground mb-4 flex items-center gap-2">
-                                            <BookOpen className="w-5 h-5 text-muted-foreground" />
-                                            Session Details
-                                        </h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-muted-foreground">Subject *</Label>
-                                                <Select onValueChange={setSelectedSubject} value={selectedSubject}>
-                                                    <SelectTrigger className="h-12 rounded-xl border-2">
-                                                        <SelectValue placeholder="Select a subject" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {userSubjects.map(sub => (
-                                                            <SelectItem key={sub.id} value={sub.subject_name}>
-                                                                {sub.subject_name}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-sm font-semibold text-muted-foreground">Topic (Optional)</Label>
-                                                <Input
-                                                    value={topic}
-                                                    onChange={(e) => setTopic(e.target.value)}
-                                                    placeholder="e.g., Chapter 3 Review"
-                                                    className="h-12 rounded-xl border-2"
-                                                />
-                                            </div>
+                {/* ── TWO COLUMNS ON A WIDE SCREEN ───────────────────────────
+                    It was one centred column inside a full-width card: a 320px
+                    clock with a quarter of the screen empty either side, and
+                    the session details in a second card nested under it. The
+                    clock and its buttons hold the left; what the block is FOR
+                    — subject, topic, how long — sits beside it, at the height
+                    of the thing it sets up. Stacked on a phone. */}
+                <div className="pb-8 relative z-10 px-5 sm:px-6">
+                    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-center">
+                        <div className="flex flex-col items-center gap-8">
+                                {/* Timer Circle */}
+                                <div className="relative w-64 h-64 sm:w-80 sm:h-80 flex items-center justify-center">
+                                    <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                                        <circle
+                                            className="stroke-current text-secondary"
+                                            strokeWidth="3"
+                                            cx="50"
+                                            cy="50"
+                                            r="45"
+                                            fill="transparent"
+                                        />
+                                        <motion.circle
+                                            key={`${isBreak}-${session}`}
+                                            className="stroke-current"
+                                            strokeWidth="3"
+                                            strokeLinecap="round"
+                                            cx="50" cy="50" r="45"
+                                            fill="transparent"
+                                            strokeDasharray="282.743"
+                                            strokeDashoffset={282.743 - (progress / 100) * 282.743}
+                                            initial={{ strokeDashoffset: 282.743 }}
+                                            animate={{ strokeDashoffset: 282.743 - (progress / 100) * 282.743 }}
+                                            transition={{ duration: 1 }}
+                                            style={{
+                                                color: colorScheme.accentVar,
+                                                filter: `drop-shadow(0 0 12px ${colorScheme.accentVar})`
+                                            }}
+                                        />
+                                    </svg>
+                                    <div className="text-center">
+                                        <motion.h2
+                                            key={timeLeft}
+                                            initial={{ scale: 1.05 }}
+                                            animate={{ scale: 1 }}
+                                            className={`text-6xl sm:text-7xl font-bold tracking-tighter mb-3 ${colorScheme.timerText}`}
+                                        >
+                                            {formatTime(timeLeft)}
+                                        </motion.h2>
+                                        <p className="text-muted-foreground text-base font-medium mb-3">Time Remaining</p>
+                                        <div className={`pill px-4 py-2 ${colorScheme.badge}`}>
+                                            <StatusIcon className="w-4 h-4" />
+                                            <span className="font-bold text-sm">
+                                                {isBreak ? (isLongBreak(session - 1) ? 'Long Break' : 'Short Break') : 'Work Time'}
+                                            </span>
                                         </div>
                                     </div>
                                 </div>
-                            </motion.div>
-                        )}
 
-                        {/* Break Message */}
-                        {isBreak && (
-                            <motion.div
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                className="card-soft text-center p-8 max-w-md"
-                                style={{ borderColor: colorScheme.accentVar }}
-                            >
-                                {/* The break belongs to Ace. Five minutes of
-                                    dead screen is the biggest uninterrupted
-                                    space in the product, and it used to be a
-                                    coffee cup in a rounded square. */}
-                                <div data-ace-break className="flex justify-center">
-                                    <AceBody className="w-24 sm:w-28" pose="sleep" title="Ace" />
+                                {/* Control Buttons */}
+                                <div className="flex items-center gap-3">
+                                    <Button
+                                        onClick={toggleTimer}
+                                        size="lg"
+                                        className={`w-44 text-base font-semibold ${colorScheme.button} text-white shadow-soft transition-all rounded-2xl h-14`}
+                                    >
+                                        {isRunning ? <Pause className="w-5 h-5 mr-2" /> : <Play className="w-5 h-5 mr-2" />}
+                                        {getButtonText()}
+                                    </Button>
+                                    <Button
+                                        onClick={resetTimer}
+                                        aria-label="Reset timer"
+                                        variant="outline"
+                                        size="lg"
+                                        className="w-14 h-14 rounded-2xl hover:bg-secondary border-2"
+                                    >
+                                        <RotateCcw className="w-5 h-5" />
+                                    </Button>
+                                    {isBreak && (
+                                        <Button
+                                            onClick={skipBreak}
+                                            variant="outline"
+                                            size="lg"
+                                            className="rounded-2xl hover:bg-secondary border-2 h-14 px-6"
+                                        >
+                                            Skip Break
+                                        </Button>
+                                    )}
                                 </div>
-                                <h3 className="text-2xl font-bold text-foreground mt-2 mb-3">
-                                    {isLongBreak(session - 1) ? 'Long Break Time!' : 'Short Break Time!'}
-                                </h3>
-                                <p className="text-muted-foreground leading-relaxed" data-ace-break-line>
-                                    {breakLine}
-                                </p>
-                            </motion.div>
-                        )}
+
+                        </div>
+
+                        <div className="w-full">
+                            {!isBreak && (
+                                <div className="space-y-4">
+                                    <Field label="Subject" tone="primary">
+                                        <Select onValueChange={setSelectedSubject} value={selectedSubject} disabled={isRunning}>
+                                            <SelectTrigger className="h-11 rounded-xl border-2 border-border focus:border-primary">
+                                                <SelectValue placeholder="Select a subject" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {userSubjects.map(sub => (
+                                                    <SelectItem key={sub.id} value={sub.subject_name}>
+                                                        {sub.subject_name}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </Field>
+                                    <Field label="Topic" optional tone="primary">
+                                        <Input
+                                            value={topic}
+                                            onChange={(e) => setTopic(e.target.value)}
+                                            disabled={isRunning}
+                                            placeholder="e.g. Chapter 3 review"
+                                            className="h-11 rounded-xl border-2 border-border focus:border-primary"
+                                        />
+                                    </Field>
+                                    {/* THE LENGTH IS ON THE PAGE, not behind
+                                        the gear. It goes through
+                                        `handleSettingsChange`, which banks
+                                        whatever was genuinely studied FIRST
+                                        and restarts the block — the one path
+                                        that changes a block's length without
+                                        inventing minutes. Locked while the
+                                        clock runs. */}
+                                    <Field label="Block length" tone="primary"
+                                        hint={Number(settings.workTime) > 0 && !BLOCK_LENGTHS.includes(settings.workTime)
+                                            ? `Set to ${settings.workTime} minutes in the settings.`
+                                            : null}>
+                                        <Segmented tone="primary" value={settings.workTime}
+                                            onChange={(v) => { if (!isRunning) handleSettingsChange('workTime', v); }}
+                                            options={BLOCK_LENGTHS.map(m => ({ value: m, label: `${m} min` }))} />
+                                    </Field>
+                                </div>
+                            )}
+                            {/* Break Message */}
+                            {isBreak && (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="card-soft text-center p-8 max-w-md"
+                                    style={{ borderColor: colorScheme.accentVar }}
+                                >
+                                    {/* The break belongs to Ace. Five minutes of
+                                        dead screen is the biggest uninterrupted
+                                        space in the product, and it used to be a
+                                        coffee cup in a rounded square. */}
+                                    <div data-ace-break className="flex justify-center">
+                                        <AceBody className="w-24 sm:w-28" pose="sleep" title="Ace" />
+                                    </div>
+                                    <h3 className="text-2xl font-bold text-foreground mt-2 mb-3">
+                                        {isLongBreak(session - 1) ? 'Long Break Time!' : 'Short Break Time!'}
+                                    </h3>
+                                    <p className="text-muted-foreground leading-relaxed" data-ace-break-line>
+                                        {breakLine}
+                                    </p>
+                                </motion.div>
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>

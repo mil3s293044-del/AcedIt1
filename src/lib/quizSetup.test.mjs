@@ -323,8 +323,16 @@ ok("three minutes a question is ONE number now", () => {
     const src = code(RECALL);
     assert.ok(!/length \* 180/.test(src), "the session clock went back to a hard-coded 180");
     assert.ok(/\* pace \* 60/.test(src), "the clock stopped reading the pace control");
-    assert.ok(/questionCount \* pace/.test(src),
+    // Read off the START BAR, which is where the estimate is printed now. It
+    // pinned `questionCount * pace` and went red when the bar started counting
+    // the questions that will actually be asked — the same number the clock
+    // uses, and a better one. The property is that the estimate reads the
+    // pace control, not which count it multiplies.
+    const bar = src.slice(src.indexOf("<StartBar"), src.indexOf("</StartBar>"));
+    assert.ok(bar.length > 0, "the estimate's start bar is gone");
+    assert.ok(/\* pace\b/.test(bar),
         "the estimate under the control is a second copy of the pace again");
+    assert.ok(!/\*\s*3\b/.test(bar), "the estimate hard-codes three minutes a question");
 });
 
 /* ── BLURTING ────────────────────────────────────────────────────────────── */

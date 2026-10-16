@@ -18,6 +18,7 @@ const TONE = {
   primary: { range: "bg-primary", thumb: "border-primary", ring: "focus-visible:ring-primary/40" },
   chart4:  { range: "bg-chart-4", thumb: "border-chart-4", ring: "focus-visible:ring-chart-4/40" },
   xp:      { range: "bg-xp",      thumb: "border-xp",      ring: "focus-visible:ring-xp/40" },
+  streak:  { range: "bg-streak",  thumb: "border-streak",  ring: "focus-visible:ring-streak/40" },
 };
 
 const Slider = React.forwardRef(({ className, tone = "primary", ...props }, ref) => {

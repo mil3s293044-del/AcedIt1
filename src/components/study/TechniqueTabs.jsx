@@ -16,12 +16,18 @@
  * `h-12`; the strip is a child of the page column, so it stops sticking where
  * the column ends.
  *
- * ─── COLOUR IS ON THE GLYPH AND THE UNDERLINE ───────────────────────────────
+ * ─── IT IS THE PROGRESS BAR'S CONTROL ───────────────────────────────────────
+ * A segmented bar with one pill that slides to the live cell — ProgressTabs'
+ * own idiom, so the two pages a student moves between most use one control.
+ * It was an underline strip in a six-column grid, and equal cells around
+ * names of unequal length read as uneven gaps rather than as six tabs — and
+ * in equal cells "Spaced Repetition" ran into the pill beside it. The cells
+ * are sized by their content (`flex-auto`) and share what is left.
+ *
+ * ─── COLOUR IS ON THE GLYPH AND THE LIVE FACT ───────────────────────────────
  * A repeated set keeps its icons, because they tell six siblings apart. The
- * hue goes where it identifies the technique — the glyph, and the bar that
- * slides under the live one — and nowhere else. The bar SLIDES (one element,
- * `layoutId`) because a move between tabs says "the same page, another tool",
- * where a cut says "another page"; ProgressTabs makes the same call.
+ * hue goes where it identifies the technique — the glyph, and a fact worth
+ * pressing for — and nowhere else.
  *
  * The technique the page is suggesting carries a dot, so the heading's
  * suggestion can be found in the strip without reading it twice.
@@ -63,9 +69,13 @@ export default function TechniqueTabs({ techniques = [], value, onChange, facts 
     };
 
     return (
-        <div className="sticky top-12 z-20 -mx-4 lg:-mx-8 px-4 lg:px-8 bg-background/95 backdrop-blur-xl border-b border-border">
+        // THE BAND IS THE PAGE'S OWN GROUND, so content scrolling under the
+        // sticky bar is hidden behind it rather than showing through the gaps
+        // between the cells.
+        <div className="sticky top-12 z-20 -mx-4 lg:-mx-8 px-4 lg:px-8 py-2 bg-background/90 backdrop-blur-xl">
             <div ref={rowRef} role="tablist" aria-label="Study techniques" onKeyDown={onKey}
-                className="relative flex overflow-x-auto scrollbar-none lg:grid lg:grid-cols-6 lg:overflow-visible">
+                className="relative flex gap-1 overflow-x-auto scrollbar-none p-1.5 rounded-2xl bg-surface border-2 border-border
+                    shadow-soft lg:overflow-visible">
                 {techniques.map((t) => {
                     const on = t.id === value;
                     const Icon = t.icon;
@@ -79,13 +89,25 @@ export default function TechniqueTabs({ techniques = [], value, onChange, facts 
                             aria-selected={on}
                             tabIndex={on ? 0 : -1}
                             onClick={() => onChange(t.id)}
-                            className="group relative flex-shrink-0 min-w-[8.25rem] lg:min-w-0 px-3 pt-3 pb-3.5 text-left
-                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset rounded-t-lg"
+                            className="group relative flex-shrink-0 min-w-[8.5rem] lg:min-w-0 lg:flex-auto px-3 py-2 rounded-xl text-left
+                                transition-colors hover:bg-secondary/70
+                                focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                            <span className="flex items-center gap-2">
+                            {/* ONE PILL THAT TRAVELS, the ProgressTabs idiom: a
+                                move says "the same page, another tool", where a
+                                cut says "another page". */}
+                            {on && (
+                                <motion.span
+                                    layoutId="study-technique-pill"
+                                    aria-hidden="true"
+                                    className="absolute inset-0 rounded-xl bg-foreground"
+                                    transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 480, damping: 38 }}
+                                />
+                            )}
+                            <span className="relative flex items-center gap-2">
                                 <Icon className={`w-4 h-4 flex-shrink-0 ${t.ink}`} aria-hidden="true" />
                                 <span className={`text-sm font-bold whitespace-nowrap transition-colors
-                                    ${on ? "text-foreground" : "text-muted-foreground group-hover:text-foreground"}`}>
+                                    ${on ? "text-background" : "text-foreground/80 group-hover:text-foreground"}`}>
                                     {t.name}
                                 </span>
                                 {suggested === t.id && !on && (
@@ -93,19 +115,18 @@ export default function TechniqueTabs({ techniques = [], value, onChange, facts 
                                         aria-label="Suggested" role="img" />
                                 )}
                             </span>
+                            {/* A LIVE FACT IS IN THE TECHNIQUE'S INK, a
+                                description is not. "14 ready" is a reason to
+                                press; "Flashcards" is a label, and colouring
+                                both the same would say they were equally worth
+                                reading. */}
                             {fact && (
-                                <span className={`mt-0.5 block pl-6 text-xs whitespace-nowrap truncate tabular-nums
-                                    ${fact.live ? "font-semibold text-muted-foreground" : "text-muted-foreground/70"}`}>
+                                <span className={`relative mt-0.5 block pl-6 text-xs whitespace-nowrap truncate tabular-nums
+                                    ${on
+                                        ? (fact.live ? "font-semibold text-background/75" : "text-background/55")
+                                        : (fact.live ? `font-semibold ${t.ink}` : "text-muted-foreground/70")}`}>
                                     {fact.text}
                                 </span>
-                            )}
-                            {on && (
-                                <motion.span
-                                    layoutId="study-technique-tab"
-                                    aria-hidden="true"
-                                    className={`absolute left-3 right-3 bottom-0 h-[3px] rounded-full ${t.bar}`}
-                                    transition={reduce ? { duration: 0 } : { type: "spring", stiffness: 480, damping: 38 }}
-                                />
                             )}
                         </button>
                     );
