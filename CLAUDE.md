@@ -1764,7 +1764,8 @@ is cap-bounded and would quietly keep part of it.
 `forecast.js`, `portfolio.js` with their tests — all superseded, zero importers,
 and `market.test.mjs` carries its own properness sweep so nothing was lost.
 Kept: `integrity.js` (the server implements the same caps), `StakesPill` /
-`useStakes` / `arenaMeta` (Layout, the nav and Study read them), and
+`useStakes` / `arenaMeta` (Layout and the nav read them; Study stopped when its
+duel coach line went), and
 `arenaHelpers` (League uses `Countdown`).
 
 **The server endpoints for the seven old objects are deliberately still there.**
@@ -4162,32 +4163,99 @@ Draw both with `scripts/_floorProbe.jsx?v=study` (the setup card against picks
 of every kind), `?v=setup` (the REAL components, which is the only way to see
 the no-picks path a fixture cannot reach) and `?v=planner`.
 
-## The science rail folds away
+## The Study page leads with one step, and names a technique once
 
-`NeuroPanel` is 380px of every Study screen, on every technique, permanently —
-and it is REFERENCE. Read once, maybe twice, then sitting beside the thing the
-student actually opened the page to do. A timer running next to a brain diagram
-is the diagram winning an argument it should not be having.
+**"Rework the study page."** Measured before anything was drawn, and every fault
+was a number. The page opened on *"Six techniques to make studying actually
+work"* — a pitch, read by somebody who had already arrived (and the no-subjects
+screen said *Five*). Under it, a "Selected technique" card, a "Today" card
+repeating the dashboard, six pastel tiles that were really tabs, and then the
+tool's own title card. **The technique was named three times before anything
+could be pressed**, and the tool began ~730px down on a laptop and ~1,200px down
+on a phone. The one thing the page had worked out — what is worth doing NOW —
+was a "Top pick" badge in the corner of one tile.
 
-It collapses now, and **the grid goes with it**: keeping the 380px column and
-putting a bar in it would leave the tool at the same width with a hole beside
-it, which is the whole thing the student was collapsing. One column, and the
-technique takes the page.
+`src/lib/studyPage.js` is the model and `studyPage.test.mjs` holds it (TZ pinned
+to Melbourne, 24 injections, every one biting).
 
-**It is not deleted and it does not hide itself.** What is worth reading once is
-worth being able to find again, so the collapsed state is a real control that
-NAMES what is behind it — "The science behind Pomodoro" — rather than a chevron
-on nothing.
+### The heading IS the next step
 
-**ONE preference for every technique**, keyed `acedit.study.science`. A student
-who folds it away on Pomodoro has said what they think of a reference rail;
-asking again on Active Recall is the app not listening. It defaults OPEN —
-folding somebody's content away for them on a first visit is not the app's
-decision to make — and a blocked or absent `localStorage` costs a render rather
-than a crash, the same posture every other stored preference here takes.
+`nextStep` ranks, in an order a student could check: a focus block already
+running → an assessment inside 3 days → **what they said today was for**, until
+they have done that much (their own word beats our guess, which is why the
+dashboard asks) → an assessment inside 7 days → 5+ cards ready → nothing yet
+today → one technique has been ≥70% of the week (breadth is an ATAR component)
+→ under an hour → done, which draws **no button at all**.
 
-Sticky only while it is a rail. A one-line bar that follows the page down is a
-thing stuck to the screen for no reason.
+**EVERY BUTTON NAMES WHERE IT GOES.** It opens the technique and scrolls to it.
+It does not start the timer or build a session, so it may not say "Start" —
+`startFromSuggestion`'s rule, kept by promising only the door. Free study with
+nothing ready skips to the next rule rather than sending somebody to an empty
+deck. The greeting is muted beside the step, so the sentence reads as one line
+with the part that matters in full ink.
+
+**The duel coach line is gone**, with the duels it described — nothing can start
+one now — and it spoke the betting vocabulary ("defend your ante", "the pot")
+the floor dropped for forecasting. Nothing else on the page read `useStakes`.
+
+### The switcher says one counted thing per technique
+
+`TechniqueTabs` is one row with a sliding underline, sticky at `top-12` (the top
+bar's own `h-12`), scrolling sideways on a phone. Under each name,
+`techniqueFacts`: "14 ready", "SAC in 3 days", "25m today", "Yesterday". Colour
+is on the glyph and the underline only — six pastel boxes were the generated
+grid this app keeps deleting. The suggested technique carries a dot so the
+heading's step can be found in the strip.
+
+**"NOT TRIED YET" IS NEVER SAID OFF A TRUNCATED READ.** `study_techniques` is
+read 50 rows deep (`TECHNIQUE_READ_LIMIT`); a technique missing from a FULL read
+may simply be older than it. Then the strip prints what the technique IS rather
+than a claim about somebody's history. On a phone the ROW is scrolled to the live
+tab, never `scrollIntoView` on the tab, which also scrolls the page.
+
+### Days are local, and three of them were not
+
+- **`differenceInDays(dueDate, now)` counts 24-hour spans**, so at 3pm a SAC due
+  TOMORROW was nine hours away, floored to 0, and the page said "Exam today".
+  `daysUntil` counts calendar days, and survives a daylight-saving day.
+- **Today's and this week's minutes** were summed inline, parsing `date` as UTC
+  midnight. They go through `studyEvents` (both tables) on `dayKey` days now.
+- **`todaysIntent` read today as `toISOString`** — UTC — while the Dashboard
+  writes the intent with a LOCAL day. In Melbourne, before 10 or 11am, a
+  breakfast answer read as yesterday's, so the Study page ignored the one thing
+  the student had told it. Fixed at the read, which is the shared one.
+
+### One header, and the techniques lost theirs
+
+The page prints the technique's name and one sentence of what it is for, above
+the tool. Pomodoro's "Pomodoro Timer / Focus and productivity timer" card, Active
+Recall's and Blurting's title rows, Revision Mode's centred hero and Mind Maps'
+"One map per subject" card are gone — Revision Mode keeps the one useful thing
+its hero had, the size of each question pool, as a strip. Its selected source
+tiles were solid saturated fills; they are tinted now, the selected state every
+other control on the page uses. The deck shelf's "6 due" beside a deck face
+reading "6 READY" says **ready**.
+
+### The science is a fold UNDER the tool
+
+It was a 380px rail beside every technique, open by default, and REFERENCE:
+read once or twice, permanently taking a third of the width. Its own header
+clipped ("…SPACED REPETIT…") and the deck shelf beside it lost the end of its
+toolbar. The tool takes the page now; `NeuroPanel` is a named fold after it
+("Why Pomodoro works — the science, with sources"), two columns when open.
+
+**IT DEFAULTS FOLDED, and that reverses an earlier call on purpose.**
+Open-by-default was right while it was a rail beside the tool, where folding it
+gave nothing back but width. Under the tool and open, it is two screens of
+reference between the student and the bottom of the page on every technique.
+One preference across all six (`acedit.study.science`), and only an explicit
+"open" opens it.
+
+Draw it with the network-level harness against `/Study`, with `study_techniques`
+and `study_sessions` fixtures (the facts and the minutes are blank without them)
+and an assessment inside a week (the heading's first rule). Both themes, at 390
+with touch, and the button's scroll — `scroll-mt` has to clear the top bar AND
+the sticky strip, or the header lands underneath them.
 
 ## Study intent
 
@@ -7863,6 +7931,11 @@ student looking free in the nav, the planner and the companion.
 - `src/data/vceSubjects.js` — VCE subject catalog (`assessment_structure` and
   `key_skills` are read by `subjectHub.js`)
 - `src/lib/subjectHub.js`, `src/pages/SubjectHub.jsx` — one subject, gathered
+- `src/lib/studyPage.js` + `studyPage.test.mjs`,
+  `src/components/study/TechniqueTabs.jsx` — the Study page's heading (one
+  next step, ranked, with a button that only ever names a door), the counted
+  fact under each technique, and today's minutes through `studyEvents` on local
+  days. `NeuroPanel` is the science fold under the tool, shut by default
 - `src/components/study/WhatToTest.jsx`, `SourceRow.jsx`,
   `src/lib/recallSuggest.js` + `recallSuggest.test.mjs` — the picks that open a
   session and the sources it runs on, drawn as the TOP OF the setup card rather

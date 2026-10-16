@@ -683,7 +683,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             toast({
                 variant: "success",
                 title: `${reviewed} card${reviewed === 1 ? '' : 's'} reviewed`,
-                description: `${xp > 0 ? `+${xp} XP banked · ` : ''}They're off today's due list.`,
+                description: `${xp > 0 ? `+${xp} XP banked · ` : ''}They're off today's review list.`,
             });
         }
 
@@ -1162,7 +1162,10 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                     Object.entries(decksBySubject).map(([subjectName, subjectDecks]) => {
                         const groupColor = subjectColor(
                             userSubjects.find(s => s.subject_name === subjectName), subjectName);
-                        const totalDue = subjectDecks.reduce((sum, d) => sum + d.cards.filter(isReady).length, 0);
+                        // READY, and the word goes with the number: this pill
+                        // said "6 due" directly beside a deck face reading
+                        // "6 READY" — one count, two names. due.js's rule.
+                        const totalReady = subjectDecks.reduce((sum, d) => sum + d.cards.filter(isReady).length, 0);
                         return (
                             <div key={subjectName} className="space-y-3">
                                 <div className="flex items-center gap-3">
@@ -1171,7 +1174,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                     <span className="text-xs text-muted-foreground/60">
                                         {subjectDecks.length} deck{subjectDecks.length === 1 ? "" : "s"}
                                     </span>
-                                    {totalDue > 0 && <span className="pill bg-chart-3/10 text-chart-3">{totalDue} due</span>}
+                                    {totalReady > 0 && <span className="pill bg-chart-3/10 text-chart-3">{totalReady} ready</span>}
                                 </div>
                                 {/* Wrapped rather than gridded. A four-column
                                     grid leaves a subject with one deck sitting

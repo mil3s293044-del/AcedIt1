@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { Play, Pause, RotateCcw, BookOpen, Coffee, Settings, Maximize, X, Zap, Clock } from "lucide-react";
+import { Play, Pause, RotateCcw, BookOpen, Coffee, Settings, Maximize, X, Zap } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
@@ -731,24 +731,18 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
 
                 <div className={`h-1 ${colorScheme.tile10}`} />
 
+                {/* NO TITLE OF ITS OWN. The Study page names the technique
+                    once, above the tool; this card used to print "Pomodoro
+                    Timer / Focus and productivity timer" beside a clock tile as
+                    well, the third naming before anything could be pressed.
+                    What is left is the card's real state and its controls. */}
                 <div className="pb-6 relative z-10 p-6">
-                    <div className="flex items-center justify-between flex-wrap gap-4">
-                        <div className="flex items-center gap-4">
-                            <div className={`w-14 h-14 rounded-2xl ${colorScheme.tile10} flex items-center justify-center`}>
-                                <Clock className={`w-7 h-7 ${colorScheme.timerText}`} />
-                            </div>
-                            <div>
-                                <h3 className="text-2xl font-bold text-foreground">
-                                    Pomodoro Timer
-                                </h3>
-                                <p className="text-sm text-muted-foreground mt-0.5">Focus and productivity timer</p>
-                            </div>
+                    <div className="flex items-center justify-between flex-wrap gap-3">
+                        <div className={`pill px-4 py-2 border-2 ${colorScheme.badge} text-sm`}>
+                            <StatusIcon className="w-4 h-4" />
+                            <span className="font-bold text-sm">{statusText}</span>
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className={`pill px-5 py-2.5 border-2 ${colorScheme.badge} text-sm`}>
-                                <StatusIcon className="w-5 h-5" />
-                                <span className="font-bold text-sm">{statusText}</span>
-                            </div>
                             {hasBeenStarted && (
                                 <Button
                                     variant="outline"

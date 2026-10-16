@@ -30,17 +30,17 @@ import {
 // Static class lookup for SOURCES (Tailwind JIT-safe)
 const SOURCE_CLASSES = {
   flashcards: {
-    selected: "bg-chart-3 border-chart-3 text-white shadow-soft",
+    selected: "bg-chart-3/10 border-chart-3 text-chart-3",
     chipBg: "bg-chart-3/10",
     chipText: "text-chart-3"
   },
   quizzes: {
-    selected: "bg-chart-4 border-chart-4 text-white shadow-soft",
+    selected: "bg-chart-4/10 border-chart-4 text-chart-4",
     chipBg: "bg-chart-4/10",
     chipText: "text-chart-4"
   },
   active_recall: {
-    selected: "bg-primary border-primary text-white shadow-soft",
+    selected: "bg-primary/10 border-primary text-primary",
     chipBg: "bg-primary/10",
     chipText: "text-primary"
   }
@@ -470,33 +470,28 @@ Return exactly ${openQs.length} results, in order.`,
     const willUse = config.questionCount === "all" ? available : Math.min(config.questionCount, available);
 
     return (
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-5 px-1">
-                {/* Hero */}
-                <div className="relative overflow-hidden bg-streak/10 rounded-3xl p-8 text-center">
-                    <div className="relative">
-                        <div className="w-16 h-16 bg-streak/15 rounded-2xl flex items-center justify-center mx-auto mb-4 ring-1 ring-streak/20">
-                            <GraduationCap className="w-8 h-8 text-streak" />
-                        </div>
-                        <h2 className="text-3xl font-black mb-2 text-foreground">Revision Mode</h2>
-                        <p className="text-muted-foreground text-sm max-w-sm mx-auto">Simulate real conditions with timed questions from your personal study materials.</p>
-                        {!isLoadingData &&
-            <div className="flex justify-center gap-6 mt-5 pt-5 border-t border-border">
-                                {[
-              { label: "Flashcards", val: allQuestions.filter((q) => q.source === "Flashcards").length, Icon: BookOpen, color: "text-chart-3" },
-              { label: "Quiz Q's", val: allQuestions.filter((q) => q.source === "Quizzes").length, Icon: FileText, color: "text-chart-4" },
-              { label: "Recall", val: allQuestions.filter((q) => q.source === "Active Recall").length, Icon: Brain, color: "text-primary" }].
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
+                {/* WHAT THE PAPER IS BUILT FROM, and nothing else. This was a
+                    centred hero repeating "Revision Mode" under a mortarboard
+                    tile — the third time the name was printed — with the one
+                    useful thing in it, the size of each pool, in its footer.
+                    The Study page names the technique; this says what a paper
+                    can draw on, which is what decides whether to build one. */}
+                {!isLoadingData &&
+            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-2 rounded-2xl border-2 border-border bg-surface px-5 py-3.5">
+                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Your pool</p>
+                        {[
+              { label: "flashcards", val: allQuestions.filter((q) => q.source === "Flashcards").length, Icon: BookOpen, color: "text-chart-3" },
+              { label: "quiz questions", val: allQuestions.filter((q) => q.source === "Quizzes").length, Icon: FileText, color: "text-chart-4" },
+              { label: "recall questions", val: allQuestions.filter((q) => q.source === "Active Recall").length, Icon: Brain, color: "text-primary" }].
               map((s) =>
-              <div key={s.label} className="text-center">
-                                        <p className="text-xl font-bold text-foreground">{s.val}</p>
-                                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-center mt-0.5">
-                                            <s.Icon className={`w-3 h-3 ${s.color}`} /> {s.label}
-                                        </p>
-                                    </div>
+              <p key={s.label} className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                                <s.Icon className={`w-3.5 h-3.5 ${s.color}`} aria-hidden="true" />
+                                <span className="font-display font-extrabold text-foreground tabular-nums">{s.val}</span> {s.label}
+                            </p>
               )}
-                            </div>
-            }
                     </div>
-                </div>
+            }
 
                 {isLoadingData ?
         <div className="flex flex-col items-center justify-center py-16 gap-3">
@@ -576,7 +571,7 @@ Return exactly ${openQs.length} results, in order.`,
                                             {sel && <Check className="absolute top-2 right-2 w-3.5 h-3.5" />}
                                             <SourceIcon className="w-6 h-6" />
                                             <span className="text-xs font-bold">{s.label}</span>
-                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sel ? "bg-surface/20" : "bg-secondary text-muted-foreground"}`}>{cnt}</span>
+                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${sel ? "bg-surface text-foreground" : "bg-secondary text-muted-foreground"}`}>{cnt}</span>
                                         </button>);
 
               })}
