@@ -30,7 +30,7 @@ import { studyEvents } from "@/lib/studyLog";
 import { deckCards } from "@/lib/mistakeBank";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot, { useAceCue } from "@/components/ace/AceSpot";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtTime = (m) => {
@@ -438,6 +438,29 @@ const MOVE_THEME = {
 
 
 // ─── Component ────────────────────────────────────────────────────────────────
+/**
+ * No streak yet. Its own component so hovering the button re-renders this
+ * card and not the dashboard. Ace hops in waving, settles, and leans in while
+ * the pointer is on the one thing the card asks for.
+ */
+function StreakStart() {
+    const ace = useAceCue();
+    return (
+        <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center on-table">
+            <AceSpot className="w-28 mb-1" pose="stand" intro="wave" entrance="hop" cue={ace.cue} title="Ace" />
+            <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
+                Ready to start a streak?
+            </h2>
+            <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-5">
+                A study session today gets you started. Show up tomorrow to keep it.
+            </p>
+            <Link to={createPageUrl("Study")} {...ace.hover("eager")}>
+                <Button><Play className="w-4 h-4" /> Start your first session</Button>
+            </Link>
+        </div>
+    );
+}
+
 export default function Dashboard() {
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
@@ -1015,18 +1038,7 @@ export default function Dashboard() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="rounded-2xl bg-surface border border-dashed border-border p-6 lg:p-8 text-center h-full flex flex-col items-center justify-center on-table">
-                                <AceBody className="w-28 mb-1" pose="point" title="Ace" />
-                                <h2 className="font-display font-extrabold text-foreground text-xl lg:text-2xl mb-2">
-                                    Ready to start a streak?
-                                </h2>
-                                <p className="text-muted-foreground text-sm max-w-sm mx-auto mb-5">
-                                    A study session today gets you started. Show up tomorrow to keep it.
-                                </p>
-                                <Link to={createPageUrl("Study")}>
-                                    <Button><Play className="w-4 h-4" /> Start your first session</Button>
-                                </Link>
-                            </div>
+                            <StreakStart />
                         )}
                     </div>
 

@@ -7871,6 +7871,63 @@ a student's old rows. Apply it AFTER the deploy.
 `guides.test.mjs` holds 25 checks, and all 25 injections were caught against a
 green baseline.
 
+## A placed Ace arrives, settles and reacts
+
+**"Improve the Ace animations in all the places where he is static, like the
+planner — instead of feeling slapped on, make him more dynamic."** AceBody
+already breathes, blinks and follows the pointer, so what read as a sticker
+was not the drawing. It was three things about how he was placed:
+
+- **He was there on the first frame.** He now ARRIVES (rise, hop or slide) a
+  beat after the content he belongs to.
+- **He held one pose forever.** AceBody only fidgets from a RESTING pose
+  (stand, happy, peek, offer), so every placement handed "point", "think" or
+  "wave" never moved again. The pose a placement asks for is now what he DOES
+  on arrival (or whenever it changes). After that he settles (`settleFor`)
+  into the nearest resting pose, where the fidgets reach him. Sleep stays
+  asleep.
+- **Nothing beside him changed him.** A page tells him what happened through
+  `useAceCue`, named for the EVENT rather than the pose, so one event gets the
+  same reaction everywhere: `added` (a SAC tracked, a request sent), `done` (a
+  session ticked ON; un-ticking is a correction, not news), `copied`, and the
+  held hover reactions `eager` and `point`. A hover reaction ignores touch.
+
+`src/lib/aceSpot.js` holds the rules as pure functions and
+`src/components/ace/AceSpot.jsx` is the wrapper. Every placement on the
+planner, Dashboard, Friends, Mistake bank, the Pomodoro break, What to test,
+Mind maps, the Progress verdict, session complete and the strategy check-in
+goes through it.
+
+**CALM, ON PURPOSE.** A fidget every 8–12 seconds (`CALM_IDLE`, passed to
+AceBody as `idleEvery`) rather than his corner's 3–7, because these sit on
+screens somebody is working on. He holds still while ANY text field has focus,
+and while a reaction plays. A mascot that moves while you write is one you
+switch off. **Under reduced motion he is exactly what he was before**: the
+pose asked for, with no arrival, no settling and no reactions. That is why the
+break screen passes `pose="sleep" intro="yawn"` rather than `pose="yawn"`:
+reduced motion must show him asleep, not mid-yawn.
+
+**`hold` is for mid-task.** The check-in holds "think" while a plan builds,
+because a fidget there reads as not working.
+
+**Deliberately left alone:** the flashcard reviewer's Ace, whose own comment
+explains why he does not react per card (it happens dozens of times a
+sitting), and the ones that already perform (AceDeal, PremiumReveal,
+QuizTable, AceHost, StreakCelebration, the AI loading screen).
+
+The three hover reactions live in small components (`StreakStart`,
+`EmptyBank`, the runway's `EmptyHeader`), so a hover re-renders a card rather
+than the Dashboard or the planner.
+
+`aceSpot.test.mjs` holds 18 checks, and all 26 injections were caught against
+a green baseline. It pins `RESTING` and every pose named here against
+AceBody's own tables, refuses an easing framer throws on, and checks that the
+keyframes and their `times` agree in length. The typing watch removes exactly
+the listeners it adds: the first draft added an anonymous `focusout` listener
+that no unmount could remove. To check motion, sample `data-ace-pose` over
+time rather than judging one frame. The harness's TIMELINE probe does that,
+and found nothing a screenshot could have.
+
 ## Premium codes (the Year 10 program)
 
 A student taps "Have a code?" on /Subscription, types their name and a code,
@@ -8127,6 +8184,11 @@ student looking free in the nav, the planner and the companion.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
+- `src/lib/aceSpot.js` + `aceSpot.test.mjs`, `src/components/ace/AceSpot.jsx`:
+  every PLACED Ace (not the floating one). He arrives, does the pose asked
+  for, settles where his fidgets can reach him, and reacts to events the page
+  fires through `useAceCue`. Calm cadence, still while typing, unchanged under
+  reduced motion
 - `src/components/ace/useAceYield.js` + `src/lib/aceStage.test.mjs` —
   `ACE_ORDER`, the one list that decides which Ace is on screen. The scan is
   what catches a surface that draws him and forgets to claim

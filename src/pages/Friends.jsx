@@ -60,7 +60,7 @@ import { XP_RANKS } from "@/lib/xpRanks";
 import { createPageUrl } from "@/utils";
 import { useToast } from "@/components/ui/use-toast";
 import HelpButton from "@/components/shared/HelpButton";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot, { useAceCue } from "@/components/ace/AceSpot";
 import AceShuffle from "@/components/ace/AceShuffle";
 import Band from "@/components/shared/Band";
 import Avatar from "@/components/shared/InitialAvatar";
@@ -90,6 +90,8 @@ function headline({ incoming, shared, friends }) {
 
 export default function Friends() {
     const { toast } = useToast();
+    // What Ace in the empty list sees: a link copied, a request sent.
+    const ace = useAceCue();
     const location = useLocation();
     const navigate = useNavigate();
 
@@ -179,7 +181,7 @@ export default function Friends() {
             return;
         }
         const out = await run("add", () => requestFriend(by), sentTitle);
-        if (out) setAddInput("");
+        if (out) { setAddInput(""); ace.react("added"); }
     };
 
     const link = data.code ? friendLink(data.code, window.location.origin) : null;
@@ -188,6 +190,7 @@ export default function Friends() {
         try {
             await navigator.clipboard.writeText(link);
             toast({ title: "Link copied", description: "Send it to a friend. Opening it lets them send you a request." });
+            ace.react("copied");
         } catch {
             toast({ title: "Couldn't copy", description: link });
         }
@@ -407,7 +410,7 @@ export default function Friends() {
                     )}>
                     {data.friends.length === 0 ? (
                         <div className="flex items-center gap-4 py-2" data-friends-block="empty">
-                            <AceBody className="w-16 flex-shrink-0" pose="wave" title="Ace" />
+                            <AceSpot className="w-16 flex-shrink-0" pose="happy" intro="wave" cue={ace.cue} title="Ace" />
                             <p className="text-sm text-muted-foreground max-w-md">
                                 Nobody yet. Send your link above to someone in your class — when they open it they can send you a
                                 request, and once you're friends you can share decks and quizzes and see each other on Ranked.

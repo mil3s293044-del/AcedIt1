@@ -53,7 +53,7 @@ import {
 } from "@/lib/mindmap";
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot from "@/components/ace/AceSpot";
 
 const TYPE_ICON = {
     idea: Lightbulb, cause: Zap, effect: Target, step: ListOrdered,
@@ -959,7 +959,7 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
                     <div className="flex justify-center py-10"><AceShuffle size="lg" /></div>
                 ) : subjects.length === 0 ? (
                     <div className="text-center py-8">
-                        <AceBody className="w-24 mx-auto" pose="point" title="Ace" />
+                        <AceSpot className="w-24 mx-auto" pose="point" title="Ace" />
                         <p className="text-sm font-bold text-foreground">Add a subject first</p>
                         <p className="text-xs text-muted-foreground mt-0.5">Your maps are organised by subject.</p>
                     </div>
@@ -1078,7 +1078,7 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
             {!recallOf && map.nodes.length <= 1 && (
                 <div className="rounded-2xl border-2 border-map/25 bg-map/5 p-3.5 flex items-end gap-3"
                     data-ace-mapnudge>
-                    <AceBody className="w-16 sm:w-20 flex-shrink-0" pose="alert" title="Ace" />
+                    <AceSpot className="w-16 sm:w-20 flex-shrink-0" pose="alert" title="Ace" />
                     <p className="text-xs text-muted-foreground leading-snug flex-1 min-w-0 pb-1">
                         <span className="font-bold text-foreground">Shut your notes first.</span> Built with them
                         open this is note-taking with extra steps; built from memory it&rsquo;s retrieval practice, and
@@ -1102,7 +1102,7 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
             {shouldPromptRebuild({ map, allMaps, recallOf, dismissed: dismissedRebuild }) && (
                 <div className="rounded-2xl border-2 border-xp/30 bg-xp/5 p-3.5 flex items-end gap-3"
                     data-ace-rebuildnudge>
-                    <AceBody className="w-16 sm:w-20 flex-shrink-0" pose="alert" title="Ace" />
+                    <AceSpot className="w-16 sm:w-20 flex-shrink-0" pose="alert" title="Ace" />
                     <div className="flex-1 min-w-0 pb-1">
                         <p className="text-xs text-muted-foreground leading-snug">
                             <span className="font-bold text-foreground">There&rsquo;s a map here now. Rebuild it from memory.</span>{" "}

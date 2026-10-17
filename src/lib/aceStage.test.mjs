@@ -149,7 +149,8 @@ check("EVERY SURFACE THAT DRAWS A BODY CLAIMS ONE", () => {
     };
     for (const [file, id] of Object.entries(drawers)) {
         const src = fs.readFileSync(file, "utf8");
-        assert.ok(/AceBody|AceWalker/.test(src), `${file} no longer draws him — drop it from this list`);
+        // AceSpot is a body too: it is AceBody with an entrance and reactions.
+        assert.ok(/AceBody|AceWalker|AceSpot/.test(src), `${file} no longer draws him — drop it from this list`);
         assert.ok(new RegExp(`claimAce\\(\\s*["']${id}["']`).test(src),
             `${file} draws an Ace and never claims the stage — that is a second one on screen`);
         assert.ok(ORDER.includes(id), `${file} claims "${id}", which ACE_ORDER does not rank`);

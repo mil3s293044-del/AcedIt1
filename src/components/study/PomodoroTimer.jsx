@@ -11,7 +11,7 @@ import { format } from "date-fns";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot from "@/components/ace/AceSpot";
 import { BREAK, pick } from "@/lib/aceVoice";
 
 // Static class lookup so Tailwind JIT can see every class string.
@@ -659,7 +659,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                 sabotages the thing the timer protects. */}
                             {isBreak && (
                                 <div className="flex flex-col items-center" data-ace-break>
-                                    <AceBody className="w-24 sm:w-32" pose="sleep" title="Ace"
+                                    <AceSpot className="w-24 sm:w-32" pose="sleep" intro="yawn" title="Ace"
                                         tone="fill-white" card="fill-slate-900"
                                         cardStroke="stroke-slate-900" />
                                     <p className="text-white/90 text-lg sm:text-xl text-center max-w-md mt-3"
@@ -916,7 +916,7 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
                                     space in the product, and it used to be a
                                     coffee cup in a rounded square. */}
                                 <div data-ace-break className="flex justify-center">
-                                    <AceBody className="w-24 sm:w-28" pose="sleep" title="Ace" />
+                                    <AceSpot className="w-24 sm:w-28" pose="sleep" intro="yawn" title="Ace" />
                                 </div>
                                 <h3 className="text-2xl font-bold text-foreground mt-2 mb-3">
                                     {isLongBreak(session - 1) ? 'Long Break Time!' : 'Short Break Time!'}
