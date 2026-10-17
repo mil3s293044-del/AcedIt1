@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { base44 } from "@/api/base44Client";
 import { getFriends, shareWithFriends } from "@/api/friendsApi";
-import { outgoingDeck } from "@/lib/sharedDeck";
+import { getGroups, shareToGroup } from "@/api/groupsApi";
 import { acceptFiles, uploadAll, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import MegaPicker from "@/components/shared/MegaPicker";
 import { PRICE } from "@/lib/chips";
@@ -311,17 +311,12 @@ export default function SpacedRepetition() {
 
     const loadGroups = async () => {
         try {
-            // Two things were wrong and each one alone emptied this list.
-            // `study_groups` has no `is_active` column — a group is deleted
-            // outright rather than flagged — so the filter 400'd. And
-            // `member_emails` is a `text[]`: the shim turns a scalar into an
-            // `eq`, which compares the whole array against one address and
-            // matches nothing. Membership is applied here, the same way
-            // StudyGroups.jsx does it.
-            const allGroups = await base44.entities.StudyGroup.filter({});
-            setGroups((allGroups || []).filter(
-                g => g.owner_email === user.email || g.member_emails?.includes(user.email)
-            ));
+            // Off the server, like friends above. This read `study_groups`
+            // directly and filtered membership itself, which handed every
+            // member's email to the browser; the rows are the server's to read
+            // now (migration 0043). A group is a name, a size and an id here.
+            const res = await getGroups();
+            setGroups(res?.groups || []);
         } catch (error) { console.error(error); }
     };
 
@@ -591,11 +586,10 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     const handleShareDeck = async () => {
         if (!selectedFriends.length && !selectedGroups.length) { toast({ title: "No recipients", variant: "destructive" }); return; }
         try {
-            // One answer to "what does a shared deck carry", shared with
-            // Friends.jsx and with the group importer. `subject_code` used to
-            // ride along here — seventy lines under this file's own comment
-            // saying flashcards has no such column — and 400'd every accept.
-            const deckData = outgoingDeck(sharingDeck);
+            // What a shared deck carries is decided on the server now, off this
+            // student's own rows (`ownShareContent`, through `outgoingCard`) —
+            // so nothing here assembles the cards. `subject_code` used to ride
+            // along in a payload built on this page and 400'd every accept.
             const promises = [];
             // Friends go through the server, which reads the deck off this
             // student's own rows and checks every recipient is a friend.
@@ -603,7 +597,12 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                 kind: "deck", friendship_ids: selectedFriends, deck_id: sharingDeck.id,
                 subject_name: sharingDeck.subject_name, topic: sharingDeck.topic,
             }));
-            if (selectedGroups.length > 0) promises.push(...selectedGroups.map(groupId => base44.entities.GroupSharedResource.create({ group_id: groupId, resource_type: "flashcard_deck", title: `${sharingDeck.subject_name} - ${sharingDeck.topic}`, description: `Flashcard deck with ${deckData.length} cards`, shared_by_email: user.email, shared_by_name: user.full_name, resource_data: { flashcards: deckData }, subject_name: sharingDeck.subject_name, topic: sharingDeck.topic, tags: [sharingDeck.subject_name, sharingDeck.unit] })));
+            // A group share goes through the server too, which reads the deck
+            // off this student's own rows — the same `ownShareContent` a share
+            // to a friend uses — and checks they are in every group named.
+            if (selectedGroups.length > 0) promises.push(shareToGroup(selectedGroups, {
+                kind: "deck", deck_id: sharingDeck.id, subject_name: sharingDeck.subject_name, topic: sharingDeck.topic,
+            }));
             await Promise.all(promises);
             toast({ title: "Deck shared!" });
             setSharingDeck(null); setSelectedFriends([]); setSelectedGroups([]);
@@ -1294,7 +1293,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                     groups.map(g => (
                                         <div key={g.id} className="flex items-center gap-3 p-3 hover:bg-secondary/50 rounded-xl border border-border mb-2">
                                             <Checkbox checked={selectedGroups.includes(g.id)} onCheckedChange={c => setSelectedGroups(c ? [...selectedGroups, g.id] : selectedGroups.filter(id => id !== g.id))} />
-                                            <div><p className="font-medium text-sm">{g.name}</p><p className="text-xs text-muted-foreground">{g.subject} · {g.member_emails?.length || 0} members</p></div>
+                                            <div><p className="font-medium text-sm">{g.name}</p><p className="text-xs text-muted-foreground">{[g.subject, `${g.members} member${g.members === 1 ? "" : "s"}`].filter(Boolean).join(" · ")}</p></div>
                                         </div>
                                     ))}
                             </ScrollArea>

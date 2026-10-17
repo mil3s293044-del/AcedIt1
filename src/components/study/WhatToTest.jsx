@@ -33,7 +33,7 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Layers, Network } from "lucide-react";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot, { useAceCue } from "@/components/ace/AceSpot";
 import { suggestTopics, ownMaterial, SUGGESTION_KIND } from "@/lib/recallSuggest";
 
 // Spine, pill ground and pill ink per kind. Static classes only — the JIT
@@ -57,6 +57,8 @@ export default function WhatToTest({
     flashcards = [], assessments = [], techniques = [], maps = [],
     picks = null, onPick, limit = 4, verb = "Test",
 }) {
+    // He holds the options out; hovering one, he points at it.
+    const ace = useAceCue();
     const computed = useMemo(
         () => suggestTopics({ flashcards, assessments, techniques, limit }),
         [flashcards, assessments, techniques, limit]);
@@ -78,7 +80,7 @@ export default function WhatToTest({
                 is a question nobody is being asked BY anyone. He's holding the
                 options out to you, which is what the list actually is. */}
             <div className="flex items-end gap-3">
-                <AceBody className="w-16 sm:w-20 flex-shrink-0 -mb-1" pose="offer" title="Ace" />
+                <AceSpot className="w-16 sm:w-20 flex-shrink-0 -mb-1" pose="offer" cue={ace.cue} title="Ace" />
                 <div className="min-w-0 mb-1">
                     <h3 className="font-display font-extrabold text-foreground text-base leading-snug">
                         {verb === "Blurt" ? "Right — what are we blurting?" : "Right — what are we testing?"}
@@ -100,7 +102,7 @@ export default function WhatToTest({
                             initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: Math.min(i * 0.05, 0.25) }}
                             className="border-t border-border">
-                            <button onClick={() => onPick?.(s)}
+                            <button onClick={() => onPick?.(s)} {...ace.hover("point")}
                                 className="group relative w-full text-left pl-5 pr-4 sm:pl-6 sm:pr-5 py-3
                                     hover:bg-secondary/40 transition-colors">
                                 <span aria-hidden

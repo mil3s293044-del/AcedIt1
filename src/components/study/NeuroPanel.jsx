@@ -30,9 +30,17 @@ const TONE_PILL = {
     streak: "bg-streak/15 text-streak", map: "bg-map/15 text-map",
 };
 
-export default function NeuroPanel({ techniqueId, techniqueName, open = true, onToggle }) {
+/**
+ * `layout="page"` is the same panel as the body of a technique's guide: no
+ * fold (the page IS the science, so there is nothing to put away) and two
+ * columns at every width it has room for. The rail is the default, so Study
+ * renders exactly as it did.
+ */
+export default function NeuroPanel({ techniqueId, techniqueName, open = true, onToggle, layout = "rail" }) {
+    const page = layout === "page";
     const data = TECHNIQUE_NEURO[techniqueId];
-    const [showSources, setShowSources] = useState(false);
+    // On a guide the sources are the point of the page, so they start open.
+    const [showSources, setShowSources] = useState(layout === "page");
     if (!data) return null;
     const utility = data.utility ? UTILITY[data.utility] : null;
 
@@ -47,7 +55,7 @@ export default function NeuroPanel({ techniqueId, techniqueName, open = true, on
     // once is worth being able to find again, so the collapsed state is a real
     // control that names what is behind it rather than a chevron on nothing.
     // Study remembers the choice, so this is answered once and not per visit.
-    if (!open) {
+    if (!open && !page) {
         return (
             <button
                 type="button"
@@ -74,13 +82,13 @@ export default function NeuroPanel({ techniqueId, techniqueName, open = true, on
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.3 }}
-            className="grid gap-3 items-start md:grid-cols-2 xl:grid-cols-1"
+            className={`grid gap-3 items-start md:grid-cols-2 ${page ? "" : "xl:grid-cols-1"}`}
             aria-label={`The science behind ${techniqueName}`}
         >
             {/* The way out. In the grid's flow rather than floated over a card,
                 so it cannot land on top of the brain at the width where the
                 rail becomes two columns. */}
-            <button
+            {!page && <button
                 type="button"
                 onClick={onToggle}
                 aria-expanded
@@ -93,7 +101,7 @@ export default function NeuroPanel({ techniqueId, techniqueName, open = true, on
                     The science behind {techniqueName}
                 </span>
                 <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0 rotate-180" />
-            </button>
+            </button>}
             {/* ── The brain ──────────────────────────────────────────────── */}
             <div className="rounded-3xl border-2 border-border bg-gradient-to-b from-secondary/40 to-transparent overflow-hidden">
                 <div className="flex items-center gap-2 px-4 pt-4">
@@ -133,7 +141,8 @@ export default function NeuroPanel({ techniqueId, techniqueName, open = true, on
                         </span>
                     )}
                 </div>
-                <p className="text-sm font-bold text-foreground leading-snug">{data.headline}</p>
+                {/* A guide prints the headline as its lead, directly above. */}
+                {!page && <p className="text-sm font-bold text-foreground leading-snug">{data.headline}</p>}
                 <EvidenceChart chart={data.chart} max={chartMax(data.chart)} />
                 {data.effect && (
                     <div className="rounded-xl bg-secondary/50 px-3 py-2">

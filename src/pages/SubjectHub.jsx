@@ -45,6 +45,9 @@ import { subjectColor, colorFor } from "@/components/cards/cardIdentity";
 import { alpha } from "@/components/cards/PlayingCard";
 import ScoreCurve from "@/components/subjects/ScoreCurve";
 import ScalingMark from "@/components/subjects/ScalingMark";
+import MarkSplitList from "@/components/subjects/MarkSplitList";
+import SubjectGuide from "@/components/guides/SubjectGuide";
+import { subjectGuide } from "@/lib/guides";
 import { scaledScore, clampScore } from "@/lib/studyScore";
 import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
@@ -161,6 +164,8 @@ export default function SubjectHub() {
         () => VCE_SUBJECTS.find((s) => String(s.name).toLowerCase() === name.toLowerCase()) || null,
         [name],
     );
+
+    const guide = useMemo(() => subjectGuide(name), [name]);
 
     const stats = useMemo(
         () => subjectStats(name, {
@@ -357,44 +362,7 @@ export default function SubjectHub() {
                         transition={{ delay: 0.05 }}
                         className="card-soft on-table p-5 lg:p-6">
                         <p className="stat-label mb-1">Where the marks are</p>
-                        <p className="text-[13px] text-muted-foreground leading-relaxed mb-4">
-                            VCAA's split for this subject, heaviest first. Revising the
-                            {" "}{split.parts[split.parts.length - 1].percentage}% before the
-                            {" "}{split.parts[0].percentage}% is the trade nobody means to make.
-                        </p>
-                        <ul className="space-y-3">
-                            {split.parts.map((p) => (
-                                <li key={p.component}>
-                                    <div className="flex items-baseline justify-between gap-3">
-                                        <span className="text-[13px] font-bold text-foreground truncate">
-                                            {p.component}
-                                        </span>
-                                        <span className="text-[12px] font-bold tabular-nums text-muted-foreground
-                                            flex-shrink-0">{p.percentage}%</span>
-                                    </div>
-                                    <span className="block h-1.5 rounded-full bg-secondary overflow-hidden mt-1">
-                                        <motion.span className="block h-full rounded-full"
-                                            style={{ background: hex }}
-                                            initial={{ width: 0 }}
-                                            animate={{ width: `${p.percentage}%` }}
-                                            transition={{ duration: 0.6 }} />
-                                    </span>
-                                    {p.description && (
-                                        <span className="block text-[11px] text-muted-foreground/70 mt-1">
-                                            {p.description}
-                                        </span>
-                                    )}
-                                </li>
-                            ))}
-                        </ul>
-                        {/* Said out loud rather than scaled to fit. A study
-                            design whose components do not add to 100 is a fact
-                            about the data, not something to paper over. */}
-                        {split.total !== 100 && (
-                            <p className="text-[11px] text-muted-foreground/60 mt-3">
-                                These add to {split.total}% — the rest is not in our catalogue.
-                            </p>
-                        )}
+                        <MarkSplitList split={split} hex={hex} />
                     </motion.section>
                 )}
 
@@ -468,6 +436,22 @@ export default function SubjectHub() {
                     </motion.section>
                 )}
             </div>
+
+            {/* ── How it's marked ───────────────────────────────────────
+                The subject's guide, drawn by the component /Guides draws it
+                with, so the two screens cannot word a convention differently.
+                `place="hub"` leaves out the split and the tips, which this
+                page already draws, and a subject with no examiner profile
+                (one the student made up) has no guide and no section. */}
+            {guide && (
+                <motion.section
+                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.12 }}
+                    className="card-soft on-table p-5 lg:p-6" data-hub-guide>
+                    <p className="stat-label mb-4">How it&apos;s marked</p>
+                    <SubjectGuide guide={guide} place="hub" hex={hex} />
+                </motion.section>
+            )}
 
             {/* ── The study design's own advice, if the catalogue has it ── */}
             {full?.study_tips?.length > 0 && (

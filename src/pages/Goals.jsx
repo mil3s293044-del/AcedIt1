@@ -42,6 +42,7 @@ import { takeFn } from "@/lib/fnResult";
 import { markPercent } from "@/lib/market";
 import MarkEntry from "@/components/planner/MarkEntry";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { useAceCue } from "@/components/ace/AceSpot";
 
 const TYPE_OPTIONS = [
     { value: "sac", label: "SAC" },
@@ -331,6 +332,8 @@ function SectionHead({ icon: Icon, tone, title, count = null, actions = null, ac
 
 export default function Planner() {
     const { toast } = useToast();
+    // What Ace on the runway sees happen: a SAC tracked, a session ticked off.
+    const ace = useAceCue();
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
@@ -708,6 +711,7 @@ export default function Planner() {
                 due_date: date, is_completed: false,
             });
             toast({ title: "SAC tracked", description: "Study, Revision Mode and your Dashboard now plan around it." });
+            ace.react("added");
             loadData(user.email);
             return true;
         } catch (e) {
@@ -762,6 +766,7 @@ export default function Planner() {
             } catch { /* no line on it, or the board is not up — neither is this action's problem */ }
             setMarking(null);
             loadData(user.email);
+            ace.react("done");
             toast(settled?.market
                 ? { title: "Mark saved — and your line just settled",
                     description: "Compete has the result and everyone who traded it has been paid." }
@@ -931,6 +936,8 @@ export default function Planner() {
         try {
             await base44.entities.StudyPlan.update(p.id, { is_completed: !p.is_completed });
             setPlans(prev => prev.map(x => x.id === p.id ? { ...x, is_completed: !p.is_completed } : x));
+            // Ticked ON, not off: un-ticking is a correction, not news.
+            if (!p.is_completed) ace.react("done");
         } catch { toast({ title: "Couldn't update", variant: "destructive" }); }
     };
 
@@ -1213,7 +1220,7 @@ export default function Planner() {
                     data-planner-block="runway">
                     <TermRunway runway={runway} railClassFor={subjectRailClass}
                         lead={coachLine} aside={<HelpButton page="Planner" />}
-                        onOpen={openSacWeek} onTrack={() => setAddSacOpen(true)} />
+                        onOpen={openSacWeek} onTrack={() => setAddSacOpen(true)} cue={ace.cue} />
                 </motion.section>
 
                 {/* ── Strategy check-in ───────────────────────────────── */}

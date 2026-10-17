@@ -37,7 +37,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import MarkdownMath from "@/components/shared/MarkdownMath";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot, { useAceCue } from "@/components/ace/AceSpot";
 import { isReady } from "@/lib/due";
 import { calculateNextReview, reviewPatch, formatIntervalShort, RATINGS } from "@/lib/sm2";
 import {
@@ -412,6 +412,34 @@ function Runner({ queue, onGraded, onDone }) {
     );
 }
 
+/**
+ * Nothing banked yet. Its own component so the hover reaction re-renders this
+ * card, not the page: Ace arrives thinking it over, settles, and leans in
+ * while the pointer is on the way to Quizzes.
+ */
+function EmptyBank() {
+    const ace = useAceCue();
+    return (
+        <div className="p-4 sm:p-6 max-w-2xl mx-auto">
+            <div className="card-soft border-2 border-border p-6 text-center">
+                <AceSpot pose="think" cue={ace.cue} className="w-24 h-24 mx-auto" />
+                <h1 className="text-xl font-display font-black text-foreground mt-3">
+                    Nothing in the bank yet
+                </h1>
+                <p className="text-sm text-muted-foreground leading-snug mt-1.5 max-w-sm mx-auto">
+                    Take a quiz and mark it. Every mark you drop can be saved from the marking,
+                    and it comes back here on its own schedule until you have it.
+                </p>
+                <Link to={createPageUrl("Quizzes")} {...ace.hover("eager")}>
+                    <Button className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl mt-4 gap-2">
+                        <Sparkles className="w-4 h-4" /> Go to Quizzes
+                    </Button>
+                </Link>
+            </div>
+        </div>
+    );
+}
+
 export default function MistakeBank() {
     const { toast } = useToast();
     const [cards, setCards] = useState([]);
@@ -693,27 +721,7 @@ export default function MistakeBank() {
 
     // Nothing banked yet. This is a real state and not a failure — it says
     // where mistakes come from rather than apologising for being empty.
-    if (summary.total === 0) {
-        return (
-            <div className="p-4 sm:p-6 max-w-2xl mx-auto">
-                <div className="card-soft border-2 border-border p-6 text-center">
-                    <AceBody pose="think" className="w-24 h-24 mx-auto" />
-                    <h1 className="text-xl font-display font-black text-foreground mt-3">
-                        Nothing in the bank yet
-                    </h1>
-                    <p className="text-sm text-muted-foreground leading-snug mt-1.5 max-w-sm mx-auto">
-                        Take a quiz and mark it. Every mark you drop can be saved from the marking,
-                        and it comes back here on its own schedule until you have it.
-                    </p>
-                    <Link to={createPageUrl("Quizzes")}>
-                        <Button className="btn-3d bg-primary hover:bg-primary text-primary-foreground rounded-xl mt-4 gap-2">
-                            <Sparkles className="w-4 h-4" /> Go to Quizzes
-                        </Button>
-                    </Link>
-                </div>
-            </div>
-        );
-    }
+    if (summary.total === 0) return <EmptyBank />;
 
     // Scoped, so the buttons at the top of the page play what the list below
     // them is showing. A "Review 12" that ignores the subject you just picked
@@ -1124,7 +1132,9 @@ function RedoTab({ groups, cases, onSit }) {
     if (!groups.length) {
         return (
             <div className="card-soft border-2 border-border p-6 text-center">
-                <AceBody pose="think" className="w-20 h-20 mx-auto" />
+                {/* Proud when the tab is empty BECAUSE questions were closed out
+                    for full marks; thinking when there was simply nothing. */}
+                <AceSpot pose={closed.length > 0 ? "proud" : "think"} className="w-20 h-20 mx-auto" />
                 <p className="text-sm font-bold text-foreground mt-2">Nothing to sit again.</p>
                 <p className="text-xs text-muted-foreground leading-snug mt-1 max-w-sm mx-auto">
                     A question lands here when you have missed it more than once, or when you are

@@ -217,6 +217,11 @@ export default function AceBody({
     idle = true,
     /** Follow the pointer with his eyes. */
     eyes = true,
+    /**
+     * How often he fidgets, `{ min, spread }` in ms. Placed on a page he is
+     * calmer than in his own corner — see `CALM_IDLE` in aceSpot.js.
+     */
+    idleEvery = null,
     title,
     step = 0,
 }) {
@@ -276,11 +281,11 @@ export default function AceBody({
                 const pick = IDLES[Math.floor(Math.random() * IDLES.length)];
                 setFidget(pick.pose);
                 hold = setTimeout(() => { setFidget(null); schedule(); }, pick.ms);
-            }, IDLE_MIN + Math.random() * IDLE_SPREAD);
+            }, (idleEvery?.min ?? IDLE_MIN) + Math.random() * (idleEvery?.spread ?? IDLE_SPREAD));
         };
         schedule();
         return () => { clearTimeout(next); clearTimeout(hold); };
-    }, [idle, reduce, pose]);
+    }, [idle, reduce, pose, idleEvery?.min, idleEvery?.spread]);
 
     const open = blinking ? 0.06 : p.lids;
     const shut = open < 0.12;

@@ -211,10 +211,16 @@ check("a share goes only to ACCEPTED friends, with a note or nothing", () => {
 });
 
 check("a share is read off the sender's OWN rows, not taken from the request", () => {
+    // The reading lives in `ownShareContent`, which a share to a study group
+    // goes through too — one copy of "what leaves", so neither can drift.
+    const at = SERVER.indexOf("async function ownShareContent(");
+    assert.ok(at >= 0, "ownShareContent is gone — re-point this check");
+    const own = SERVER.slice(at, SERVER.indexOf("\n}\n", at));
+    assert.match(own, /from\("quizzes"\)[\s\S]{0,140}\.eq\("created_by", me\)/);
+    assert.match(own, /from\("flashcards"\)[\s\S]{0,140}\.eq\("created_by", me\)/);
+    assert.match(own, /from\("ai_saved_results"\)[\s\S]{0,160}\.eq\("created_by", me\)/);
     const h = handler(SERVER, "shareWithFriends");
-    assert.match(h, /from\("quizzes"\)[\s\S]{0,140}\.eq\("created_by", me\)/);
-    assert.match(h, /from\("flashcards"\)[\s\S]{0,140}\.eq\("created_by", me\)/);
-    assert.match(h, /from\("ai_saved_results"\)[\s\S]{0,160}\.eq\("created_by", me\)/);
+    assert.match(h, /await ownShareContent\(me, kind, req\.body\)/, "the friend share reads its content some other way");
     assert.ok(!/flashcard_data:\s*req\.body|quiz_data:\s*req\.body/.test(h));
 });
 

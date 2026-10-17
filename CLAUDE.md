@@ -7712,6 +7712,222 @@ policies). 43 injections across both files, every one biting — two only after
 their fixtures grew the case (a flagged topic with a 0% miss rate, a repeat
 fixed every time).
 
+## Study groups: a class, not a chat room
+
+**Joining by code had never worked, and everything that did work was unsafe.**
+The page wrote `study_groups` from the browser under policies written for a
+feature that trusted its members:
+
+- **A code could not be looked up by the people it was for.** A group is
+  readable only by its members, so a non-member's lookup came back empty —
+  "Invalid code" for every code ever shared.
+- **Any member could rewrite the group** — rename it, empty the member list,
+  set `owner_email` to themselves — because the update policy asked only that
+  they still be in it afterwards.
+- **Anybody could post as "system"**, so "Sam was removed for cheating" was
+  one insert away, in the app's own voice.
+- **The chat was free text between minors**, checked for swear words in the
+  SENDER'S browser and nowhere else, blind to bullying that swears at nobody,
+  and impossible to delete. The exact thing 0034 refused for Compete.
+- **An import said "Failed" after it had worked.** The cards were created,
+  then the import count was written to a row only its SHARER may update — so
+  everybody the share was for was told it failed, tapped again, and got the
+  deck twice.
+- And every member could read every other member's email off the row.
+
+**Every group read and write is the server's now** (`getGroups`, `getGroup`,
+`lookupGroupCode`, `createGroup`, `joinGroup`, `leaveGroup`,
+`removeGroupMember`, `resetGroupCode`, `deleteGroup`, `postGroupPhrase`,
+`shareToGroup`, `importGroupItem`, `reactToGroupItem`, `removeGroupItem`,
+`setGroupSacSharing`), through `groupsApi`. `src/lib/groups.js` is the rules,
+imported by the server. **Migration 0043 takes away every browser policy on the
+four group tables, reads included** — the reads were what published the
+addresses. Apply it AFTER the deploy, like 0042. A member is a name and a
+profile id; nothing returns an email.
+
+**THREE DECISIONS, ALL THE STUDENT'S CALL AND ALL MADE:**
+
+- **Set phrases, not a chat.** `GROUP_PHRASES` is the whole vocabulary ("Who's
+  studying tonight?", "Phones down, 25 minutes?"), drawn by ID so a row whose
+  stored text was edited still prints the phrase, rate limited per student per
+  group, named off the profile. Reactions on shared items are four glyphs. The
+  one free line in a group is its NAME, which refuses links, handles, emails and
+  phone numbers — the ways a group of fifteen-year-olds gets moved somewhere
+  nobody can see. Old free-text messages and old client-written "system" lines
+  are not drawn at all, `shownNote`'s rule.
+- **Code or link, and the owner can remove.** Opening `?join=` ASKS — it never
+  joins on arrival, because links get forwarded; a code TYPED into the box is
+  that choice and joins. Removed is permanent for that code (`extra.removed`),
+  and the owner can mint a new code if one leaks. Nobody is ever added without
+  their own tap: the old "invite friends" wrote other students into a group
+  directly, which is how a group named after somebody gets them as a member.
+  Codes are `GRP-` plus six from the friend-code alphabet; the old
+  eight-character codes on existing groups still work. Thirty members, twelve
+  groups a student, three new groups a day.
+- **The group LEADS with this week.** Counted minutes on the league's own
+  Monday (`countableStudyMinutes`, paged and ordered), so it cannot tell a
+  student a different week from the board. **Somebody who has not started is
+  COUNTED, never NAMED** — "three haven't started" is a fact about the group; a
+  list of who is a list of who to have a go at. SAC dates appear only for
+  members who switched it on PER GROUP, and as the subject and the day, never
+  the planner title, which is free text the student wrote for themselves. The
+  page counts the days off its own local today, because the server's is UTC.
+
+**`ownShareContent` is the one reading of "what may be shared"**, used by both
+`shareWithFriends` and `shareToGroup`. Two copies of "what leaves" is how one
+of them starts leaking; `friends.test.mjs` was repointed at the helper.
+
+**`casUpdate` is a compare-and-set on `updated_date`.** PostgREST has no
+transaction across calls, so two students joining in the same second would
+each append to the list they read and the second write would drop the first.
+The join re-checks the refusal rules against the row it is writing.
+
+**An import creates the rows FIRST, as the importer, then records it** — and a
+failure to record is logged, never reported as a failed import, because the
+rows exist.
+
+`GroupDecks.jsx` was mounted nowhere and is deleted with `GroupChat` and
+`GroupResources`; `group_flashcard_decks` is closed by 0043 rather than left
+open. Study groups is in both navs now — its only entrance was a link inside
+the flashcard share dialog. Account deletion leaves every group with `purge`
+(your calls and shares go too) and deletes the ones you started.
+
+**`GROUPS` IS A BASH BUILTIN.** A fixture switch named `GROUPS=empty` silently
+does nothing, because bash owns that variable (the user's group ids) and the
+child never sees it. The harness uses `NO_GROUPS=1`.
+
+**Not fixed, recorded:** `compliance.js` says the 13–15 band gets "no social
+surfaces", and `maySeeSocial` gates only whether somebody can be a MARKET
+subject. Friends, groups, Compete and the boards are all open to that band.
+With no free text left on any of them the risk is much smaller than it was,
+but the policy line and the product still disagree, and it belongs in the
+security sweep before the trial.
+
+**What could not be verified here:** none of the group endpoints ran against
+the real database — the container has no service key. The server boots, every
+endpoint answers 401 without a token, every column it names passes
+`dbColumns.test.mjs`, and `groups.test.mjs` holds 44 checks, every one of the
+34 injections biting against a green baseline. Draw it with the network-level
+harness against `/StudyGroups` and `/StudyGroups?g=<id>`.
+
+## Guides are built from what the app knows, and nobody writes them
+
+**/Guides was a page of student posts.** Any signed-in student could write one,
+every signed-in student could read every one, and the author ticked their own
+"featured" box. That is free text between students, published to the whole
+site with nothing checking a word of it. It is the thing migration 0034 refused
+for Compete and 0043 took out of study groups. It was also not in either nav.
+
+**Meanwhile the app had been showing its real knowledge to a model and nobody
+else.** `subjectExaminerPrompts.js` holds 35 subjects of mark conventions, how
+candidates lose marks and the terms examiners want. The MARKER reads it on
+every call. A student revising for the same exam had never seen a line of it.
+
+`src/lib/guides.js` builds every guide from three sources: the examiner
+profiles (through `examinerProfile`), VCAA's split (through `markSplit`, the
+hub's own function) and `neuro.js`. Nothing is stored and nothing is written.
+There are three kinds of guide:
+
+- **Subjects:** where the marks are, the exam, what examiners reward, how marks
+  are lost (`lostMarks` parses the three shapes the profiles use, splitting
+  only outside brackets), the words examiners want, what the course covers,
+  and what works.
+- **Techniques:** the panel Study already draws (`NeuroPanel layout="page"`),
+  so the science is written down once.
+- **Command terms:** ONE guide rather than thirty-five copies of the same table.
+
+**THE GENERIC FALLBACK IS NEVER A SUBJECT'S MARKING.** The prompts fall back to
+`_default` so a prompt always has something. Printed under a subject's name,
+that would be the app making up a subject's marking. `examinerProfile` returns
+null instead, and a subject with no profile has no guide. `examplePromptStyle`
+is instructions TO a model ("use phrasing students see on real exams…"), so
+the accessor does not return it at all.
+
+**TWO SCREENS, ONE COMPONENT.** `SubjectGuide` is the body of the guide on
+/Guides and the "How it's marked" section of that subject's hub. `place="hub"`
+leaves out the split, the course and the tips, which the hub already draws
+above it, rather than printing them twice. The split itself is
+`MarkSplitList`, lifted out of the hub so both screens draw it with one list.
+
+**THE DATA DISAGREED WITH ITSELF, AND NOW A TEST SAYS SO.** Specialist's exam
+format said "~17% each" against a 20/14 split. Media's said 30/10 against
+20/20. Both sat one block away from their own split. Every % in an exam format
+must now be a weight the catalogue can produce, or a sum of weights. General
+Maths warned against "using $r = 1.05$ instead of $r = 1.05$", which names the
+same number on both sides. And three catalogue tips said "don't", already on
+every hub. All five are fixed at the source, so the marker reads the corrected
+text too.
+
+**EVERY GUIDE ENDS IN A DOOR**, built as data so a test can check each one
+lands on a real page, a real tool and a technique Study honours. The subject
+door is chosen by `personaFor`, the same as the AI Tools brief: maths is worked
+through, English is planned and marked, everything else is sat.
+
+**Migration 0044 unpublishes the posts.** It drops the read-all, insert and
+update policies, and adds a read-own policy beside the existing delete-own, so
+account deletion ("Study guides" in `accountTables`) can still find and remove
+a student's old rows. Apply it AFTER the deploy.
+
+`guides.test.mjs` holds 25 checks, and all 25 injections were caught against a
+green baseline.
+
+## A placed Ace arrives, settles and reacts
+
+**"Improve the Ace animations in all the places where he is static, like the
+planner — instead of feeling slapped on, make him more dynamic."** AceBody
+already breathes, blinks and follows the pointer, so what read as a sticker
+was not the drawing. It was three things about how he was placed:
+
+- **He was there on the first frame.** He now ARRIVES (rise, hop or slide) a
+  beat after the content he belongs to.
+- **He held one pose forever.** AceBody only fidgets from a RESTING pose
+  (stand, happy, peek, offer), so every placement handed "point", "think" or
+  "wave" never moved again. The pose a placement asks for is now what he DOES
+  on arrival (or whenever it changes). After that he settles (`settleFor`)
+  into the nearest resting pose, where the fidgets reach him. Sleep stays
+  asleep.
+- **Nothing beside him changed him.** A page tells him what happened through
+  `useAceCue`, named for the EVENT rather than the pose, so one event gets the
+  same reaction everywhere: `added` (a SAC tracked, a request sent), `done` (a
+  session ticked ON; un-ticking is a correction, not news), `copied`, and the
+  held hover reactions `eager` and `point`. A hover reaction ignores touch.
+
+`src/lib/aceSpot.js` holds the rules as pure functions and
+`src/components/ace/AceSpot.jsx` is the wrapper. Every placement on the
+planner, Dashboard, Friends, Mistake bank, the Pomodoro break, What to test,
+Mind maps, the Progress verdict, session complete and the strategy check-in
+goes through it.
+
+**CALM, ON PURPOSE.** A fidget every 8–12 seconds (`CALM_IDLE`, passed to
+AceBody as `idleEvery`) rather than his corner's 3–7, because these sit on
+screens somebody is working on. He holds still while ANY text field has focus,
+and while a reaction plays. A mascot that moves while you write is one you
+switch off. **Under reduced motion he is exactly what he was before**: the
+pose asked for, with no arrival, no settling and no reactions. That is why the
+break screen passes `pose="sleep" intro="yawn"` rather than `pose="yawn"`:
+reduced motion must show him asleep, not mid-yawn.
+
+**`hold` is for mid-task.** The check-in holds "think" while a plan builds,
+because a fidget there reads as not working.
+
+**Deliberately left alone:** the flashcard reviewer's Ace, whose own comment
+explains why he does not react per card (it happens dozens of times a
+sitting), and the ones that already perform (AceDeal, PremiumReveal,
+QuizTable, AceHost, StreakCelebration, the AI loading screen).
+
+The three hover reactions live in small components (`StreakStart`,
+`EmptyBank`, the runway's `EmptyHeader`), so a hover re-renders a card rather
+than the Dashboard or the planner.
+
+`aceSpot.test.mjs` holds 18 checks, and all 26 injections were caught against
+a green baseline. It pins `RESTING` and every pose named here against
+AceBody's own tables, refuses an easing framer throws on, and checks that the
+keyframes and their `times` agree in length. The typing watch removes exactly
+the listeners it adds: the first draft added an anonymous `focusout` listener
+that no unmount could remove. To check motion, sample `data-ace-pose` over
+time rather than judging one frame. The harness's TIMELINE probe does that,
+and found nothing a screenshot could have.
+
 ## Premium codes (the Year 10 program)
 
 A student taps "Have a code?" on /Subscription, types their name and a code,
@@ -7968,6 +8184,11 @@ student looking free in the nav, the planner and the companion.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
+- `src/lib/aceSpot.js` + `aceSpot.test.mjs`, `src/components/ace/AceSpot.jsx`:
+  every PLACED Ace (not the floating one). He arrives, does the pose asked
+  for, settles where his fidgets can reach him, and reacts to events the page
+  fires through `useAceCue`. Calm cadence, still while typing, unchanged under
+  reduced motion
 - `src/components/ace/useAceYield.js` + `src/lib/aceStage.test.mjs` —
   `ACE_ORDER`, the one list that decides which Ace is on screen. The scan is
   what catches a surface that draws him and forgets to claim
@@ -8134,6 +8355,17 @@ student looking free in the nav, the planner and the companion.
   `supabase/migrations/0042_friendships_server_only.sql` — friends by code and
   link, every friendship and share write on the server, set notes instead of
   free text. Apply 0042 AFTER the deploy
+- `src/lib/guides.js` + `guides.test.mjs`, `src/pages/Guides.jsx`,
+  `src/components/guides/SubjectGuide.jsx`, `src/components/subjects/MarkSplitList.jsx`,
+  `supabase/migrations/0044_study_guides_private.sql`: every guide built from
+  the examiner profiles, the catalogue split and the technique science, drawn
+  by one component on /Guides and on each subject's hub. Apply 0044 AFTER the
+  deploy
+- `src/lib/groups.js` + `groups.test.mjs`, `src/api/groupsApi.js`,
+  `src/pages/StudyGroups.jsx`, `src/components/groups/`,
+  `supabase/migrations/0043_study_groups_server_only.sql` — study groups on the
+  server: codes and links that ask, set phrases instead of a chat, this week
+  first, a shelf you add from in one tap. Apply 0043 AFTER the deploy
 - `src/lib/premiumGrant.js` + `premiumGrant.test.mjs` — when a checkout grants
   premium (a $0 promotion code included, a trial deliberately not), that the
   session is the caller's, and the reveal owed on the profile until a screen

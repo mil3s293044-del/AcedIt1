@@ -18,7 +18,7 @@ import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { useToast } from "@/components/ui/use-toast";
 import { Check, X, Minus, ChevronRight, RotateCcw } from "lucide-react";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot from "@/components/ace/AceSpot";
 import { TECHNIQUES, TECHNIQUE_IDS, applyRules } from "@/lib/strategise";
 import { describeOutcomes, describeRemaining, strategyStanding, dayKey } from "@/lib/strategyState";
 import { durationOf } from "@/lib/planTags";
@@ -225,7 +225,10 @@ Rules:
             className="rounded-2xl border-2 border-border bg-surface p-4 shadow-soft">
 
             <div className="flex items-end gap-3">
-                <AceBody className="w-20 sm:w-24 flex-shrink-0"
+                {/* Each answer gets its reaction, then he settles. While a
+                    plan is being built he HOLDS the thinking pose — he is
+                    mid-task, and a fidget there would read as not working. */}
+                <AceSpot className="w-20 sm:w-24 flex-shrink-0" hold={busy}
                     pose={busy ? "think" : lastAnswer?.pose || "offer"} title="Ace" />
 
                 <div className="flex-1 min-w-0 mb-1">

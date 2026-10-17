@@ -498,6 +498,24 @@ const PORTED_FUNCTIONS = {
   cancelFriend:             '/local-ai/fn/cancelFriend',
   removeFriend:             '/local-ai/fn/removeFriend',
   shareWithFriends:         '/local-ai/fn/shareWithFriends',
+  // Study groups — every read and write is the server's, because the rows
+  // carry every member's email and the browser's policies let any member
+  // rewrite a group. See src/lib/groups.js and migration 0043.
+  getGroups:                '/local-ai/fn/getGroups',
+  getGroup:                 '/local-ai/fn/getGroup',
+  lookupGroupCode:          '/local-ai/fn/lookupGroupCode',
+  createGroup:              '/local-ai/fn/createGroup',
+  joinGroup:                '/local-ai/fn/joinGroup',
+  leaveGroup:               '/local-ai/fn/leaveGroup',
+  removeGroupMember:        '/local-ai/fn/removeGroupMember',
+  resetGroupCode:           '/local-ai/fn/resetGroupCode',
+  deleteGroup:              '/local-ai/fn/deleteGroup',
+  postGroupPhrase:          '/local-ai/fn/postGroupPhrase',
+  shareToGroup:             '/local-ai/fn/shareToGroup',
+  importGroupItem:          '/local-ai/fn/importGroupItem',
+  reactToGroupItem:         '/local-ai/fn/reactToGroupItem',
+  removeGroupItem:          '/local-ai/fn/removeGroupItem',
+  setGroupSacSharing:       '/local-ai/fn/setGroupSacSharing',
   // stripe-webhook is NOT here — it's called by Stripe, not the frontend.
   // stripeCheckout:   '/local-ai/fn/stripeCheckout',  // 3b-4c
   // ...
@@ -524,6 +542,8 @@ const READ_ONLY_FUNCTIONS = new Set([
   // `getFriends` mints a friend code into `extra` on first ask and is here for
   // getPranks' reason: nothing reads `friend_code` through the entity cache.
   'getFriends', 'lookupFriendCode',
+  // Pure reads: nothing in a group is read through the entity cache.
+  'getGroups', 'getGroup', 'lookupGroupCode',
   'extractDocumentText', 'invokeAI', 'mindMapGaps',
 ]);
 

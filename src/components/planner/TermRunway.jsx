@@ -54,7 +54,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { GraduationCap, BookOpen, Sparkles, Plus, AlertTriangle, Check } from "lucide-react";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot, { useAceCue } from "@/components/ace/AceSpot";
 import { sacBand, fanCards } from "@/lib/sacRunway";
 import { sacMood } from "@/lib/aceVoice";
 import { fmtDate } from "@/lib/safeDate";
@@ -86,7 +86,7 @@ function CardFan({ count, urgency }) {
     );
 }
 
-function Header({ next, runway }) {
+function Header({ next, runway, cue }) {
     const reduce = useReducedMotion();
     const band = sacBand(next.daysOut);
     const feel = sacMood(next.daysOut);
@@ -105,7 +105,11 @@ function Header({ next, runway }) {
                 data-ace-sac={feel.pose}
                 animate={reduce ? {} : { y: [0, -4 - u * 4, 0] }}
                 transition={reduce ? {} : { duration: 4.4 - u * 2.6, repeat: Infinity, ease: "easeInOut" }}>
-                <AceBody className="w-full" pose={feel.pose} title="Ace"
+                {/* He walks in from the side he stands on and does what the
+                    countdown says (alert this close, thinking a few days
+                    out), then settles and idles. The planner tells him when a
+                    SAC is tracked or a session ticked off (`cue`). */}
+                <AceSpot className="w-full" pose={feel.pose} entrance="slide" cue={cue} title="Ace"
                     tone="fill-slate-900" card="fill-white" cardStroke="stroke-white" />
             </motion.div>
 
@@ -159,15 +163,17 @@ function Header({ next, runway }) {
 }
 
 function EmptyHeader({ onTrack }) {
+    // Local, so hovering the button re-renders this header and not the planner.
+    const ace = useAceCue();
     return (
         <div className="relative px-5 sm:px-7 pt-6 pb-6 bg-secondary/60 flex items-center gap-4">
-            <AceBody className="w-16 sm:w-20 flex-shrink-0" pose="point" title="Ace" />
+            <AceSpot className="w-16 sm:w-20 flex-shrink-0" pose="point" cue={ace.cue} title="Ace" />
             <div className="min-w-0">
                 <h2 className="font-display font-extrabold text-foreground text-xl">What&apos;s your next SAC?</h2>
                 <p className="text-sm text-muted-foreground mt-0.5 max-w-md">
                     Track it and it lands on this runway, with every session you plan for it in the run-up.
                 </p>
-                <button type="button" onClick={onTrack}
+                <button type="button" onClick={onTrack} {...ace.hover("point")}
                     className="mt-3 inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-extrabold bg-primary text-primary-foreground btn-3d">
                     <Plus className="w-4 h-4" /> Track a SAC
                 </button>
@@ -229,7 +235,7 @@ function Pin({ s, i, rail, onOpen, reduce }) {
     );
 }
 
-export default function TermRunway({ runway, railClassFor = () => "bg-chart-3", onOpen, onTrack, lead = null, aside = null }) {
+export default function TermRunway({ runway, railClassFor = () => "bg-chart-3", onOpen, onTrack, lead = null, aside = null, cue = null }) {
     const reduce = useReducedMotion();
     const next = runway?.next || null;
 
@@ -240,7 +246,7 @@ export default function TermRunway({ runway, railClassFor = () => "bg-chart-3", 
 
     return (
         <section data-term-runway className="relative overflow-hidden rounded-3xl border border-border bg-surface shadow-soft">
-            {next ? <Header next={next} runway={runway} /> : <EmptyHeader onTrack={onTrack} />}
+            {next ? <Header next={next} runway={runway} cue={cue} /> : <EmptyHeader onTrack={onTrack} />}
 
             <div className="px-5 sm:px-7 pt-5 pb-6">
                 <div className="flex items-start justify-between gap-4 mb-3">

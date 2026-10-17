@@ -55,6 +55,7 @@ const PAGE_TITLES = {
     "Review":         "Progress",
     "Ranked":         "Ranked",
     "Friends":        "Friends",
+    "StudyGroups":    "Study groups",
     "Competitions":   "Compete",
     "Subjects":       "Subjects",
     "Subscription":   "Subscription",

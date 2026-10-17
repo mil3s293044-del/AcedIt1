@@ -29,7 +29,7 @@
  * about it says "tap me".
  */
 import React, { useEffect } from "react";
-import AceBody from "@/components/ace/AceBody";
+import AceSpot from "@/components/ace/AceSpot";
 import { AceSay, AceLine } from "@/components/ace/AceWalker";
 import { claimAce, useAceClaimed } from "@/components/ace/useAceYield";
 
@@ -52,7 +52,7 @@ export default function AceVerdict({ line, tone = "flat", headline = null }) {
         return (
             <div className="flex items-end gap-3 sm:gap-4">
                 {!outranked && (
-                    <AceBody className="w-12 sm:w-14 flex-shrink-0 -mb-1" pose={pose} title="Ace" />
+                    <AceSpot className="w-12 sm:w-14 flex-shrink-0 -mb-1" pose={pose} title="Ace" />
                 )}
                 <div className="min-w-0 flex-1">{headline}</div>
             </div>
@@ -68,7 +68,9 @@ export default function AceVerdict({ line, tone = "flat", headline = null }) {
 
     return (
         <div className="flex items-end gap-2.5" data-ace-verdict={tone}>
-            <AceBody className="w-11 sm:w-12 flex-shrink-0 -mb-0.5" pose={pose} title="Ace" />
+            {/* He reacts to the movement as the figure lands — a cheer, a
+                think — then settles beside the line he is reading out. */}
+            <AceSpot className="w-11 sm:w-12 flex-shrink-0 -mb-0.5" pose={pose} title="Ace" />
             <div className="relative min-w-0 rounded-2xl rounded-bl-md bg-secondary px-3.5 py-2.5">
                 <AceSay beat={line}>
                     <AceLine className={`text-sm leading-snug font-semibold text-balance ${ink}`}>
