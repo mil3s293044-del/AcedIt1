@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
+import { getGroups, deleteGroup, leaveGroup } from "@/api/groupsApi";
 import { deleteResult } from "@/lib/saveResult";
 import { useAuth } from "@/lib/AuthContext";
 import { motion } from "framer-motion";
@@ -78,6 +79,11 @@ const accountTables = (email) => [
     { label: "Past paper attempts",read: () => base44.entities.PastPaperAttempt.filter({ created_by: email }),      remove: (r) => base44.entities.PastPaperAttempt.delete(r.id) },
     { label: "Timetables",         read: () => base44.entities.DailyTimetable.filter({ created_by: email }),        remove: (r) => base44.entities.DailyTimetable.delete(r.id) },
     { label: "Leaderboard entries",read: () => base44.entities.Leaderboard.filter({ user_email: email }),           remove: (r) => base44.entities.Leaderboard.delete(r.id) },
+    // Study groups are the server's to read and write (migration 0043). A
+    // group you started goes with you; one you joined is LEFT with `purge`,
+    // which takes your calls and what you shared off it too — leaving your
+    // name on a group after your account is gone would be keeping you there.
+    { label: "Study groups",       read: async () => (await getGroups())?.groups || [],                             remove: (g) => (g.owner ? deleteGroup(g.id) : leaveGroup(g.id, true)) },
 ];
 
 export default function Settings() {

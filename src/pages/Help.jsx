@@ -38,6 +38,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Search, X, ArrowRight, Lock, Compass, Check } from "lucide-react";
 import { base44 } from "@/api/base44Client";
+import { getGroups } from "@/api/groupsApi";
 import { isPremium } from "@/components/shared/subscriptionHelpers";
 import {
     FEATURES, SECTIONS, BY_ID, searchFeatures, readiness, blockedBy,
@@ -187,7 +188,8 @@ export default function Help() {
                 q("ActiveRecallSession", {}, "-created_date", 20),
                 q("BlurtingSession", {}, "-created_date", 20),
                 q("GoalCompetition", {}, "-created_date", 20),
-                q("StudyGroup", {}),
+                // A group is the server's to read (migration 0043).
+                getGroups().then((r) => r?.groups || []).catch(() => []),
                 q("UserProfile", {}),
             ]);
             setData({ subjects, flashcards, assessments, techniques, maps, plans, friends,

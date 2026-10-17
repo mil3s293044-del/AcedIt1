@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BrandSpade } from "@/components/shared/BrandMark";
 import {
     Brain, FileQuestion, Sparkles, Map, Trophy, ListChecks,
-    Users, Swords,
+    Users, UsersRound, Swords,
     BookOpen, CreditCard, Settings as SettingsIcon, HelpCircle, LifeBuoy,
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
@@ -25,6 +25,7 @@ const NAV_SECTIONS = [
         items: [
             { label: "Ranked",  path: "Ranked",       icon: Trophy },
             { label: "Friends", path: "Friends",      icon: Users },
+            { label: "Study groups", path: "StudyGroups", icon: UsersRound },
             { label: "Compete", path: "Competitions", icon: Swords },
         ],
     },

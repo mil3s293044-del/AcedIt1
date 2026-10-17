@@ -73,7 +73,13 @@ import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/
 // Premium from a code (the Year 10 program) — the rules, shared with the client.
 import { codePremiumActive, normaliseCode, cleanName, nameProblem, redeemVerdict } from "./src/lib/premiumCodes.js";
 import { makeFriendCode, normaliseFriendCode, REQUESTS_PER_DAY, PENDING_MAX, LOOKUPS_PER_HOUR, noteText, SHARE_TABLES, DECK_SHARE_MAX, splitFriendships, friendName } from "./src/lib/friends.js";
-import { outgoingCard } from "./src/lib/sharedDeck.js";
+import { outgoingCard, importedDeck, importDeckId } from "./src/lib/sharedDeck.js";
+import {
+  makeGroupCode, normaliseGroupCode, cleanGroupName, isMember, isOwner, joinRefusal, withMember, withoutMember,
+  GROUP_PHRASES, phraseText, feedItem, shapeFeed, GROUP_REACTIONS, toggleReaction, reactionSummary,
+  shelfItem, SHELF_KINDS, SHELF_TYPES, GROUP_MAX_MEMBERS, GROUPS_PER_STUDENT, GROUPS_CREATED_PER_DAY,
+  GROUP_LOOKUPS_PER_HOUR, PHRASES_PER_HOUR, FEED_MAX,
+} from "./src/lib/groups.js";
 // A textbook is stored whole and read a CHAPTER at a time — the caps, the
 // range maths and the chip price all live in one module because the number
 // under the range picker has to be the number that gets charged.
@@ -11869,6 +11875,53 @@ app.post("/local-ai/fn/removeFriend", async (req, res) => {
 });
 
 /**
+ * What a student may share, read off THEIR OWN ROWS — never taken from the
+ * request, so a share carries what they actually own, in the shape
+ * `sharedDeck.js` says may leave. One copy for both places a thing is shared
+ * (a friend, a study group): two copies of "what leaves" is how one of them
+ * starts leaking.
+ */
+async function ownShareContent(me, kind, src = {}) {
+  if (kind === "quiz") {
+    const { data: quiz } = await supabaseAdmin.from("quizzes")
+      .select("id, title, subject, questions, difficulty, category").eq("id", src?.quiz_id).eq("created_by", me).maybeSingle();
+    if (!quiz) return { status: 404, error: "That quiz isn't yours to share." };
+    return { quiz };
+  }
+  if (kind === "deck") {
+    const subject = String(src?.subject_name || "").trim();
+    const topic = String(src?.topic || "").trim();
+    if (!topic) return { status: 400, error: "Pick a deck to share." };
+    let q = supabaseAdmin.from("flashcards").select("subject_name, unit, topic, question, answer")
+      .eq("created_by", me).eq("is_active", true).eq("topic", topic).limit(DECK_SHARE_MAX);
+    q = subject && subject !== "Other" ? q.eq("subject_name", subject) : q.is("subject_name", null);
+    const { data: cards } = await q;
+    // The mistake bank is a flashcards row and is NOT a flashcard — it never
+    // leaves as one (`deckCards`' rule, restated here because the server
+    // cannot import a module that resolves `@/`).
+    const out = (cards || []).filter((c) => c.topic !== "Mistake bank")
+      .map((c) => outgoingCard(c)).filter((c) => c.question && c.answer);
+    if (!out.length) return { status: 404, error: "That deck has no cards to share." };
+    return {
+      deck: {
+        deck_id: String(src?.deck_id || "").slice(0, 120) || null,
+        name: `${subject || "Other"} - ${topic}`.slice(0, 160),
+        subject: subject && subject !== "Other" ? subject : null,
+        topic,
+        cards: out,
+      },
+    };
+  }
+  if (kind === "result") {
+    const { data: result } = await supabaseAdmin.from("ai_saved_results")
+      .select("id, tool_type, title, topic, subject_name, content").eq("id", src?.result_id).eq("created_by", me).maybeSingle();
+    if (!result) return { status: 404, error: "That result isn't yours to share." };
+    return { result };
+  }
+  return { status: 400, error: "That can't be shared." };
+}
+
+/**
  * Share a quiz, a deck or a saved AI result with friends. FRIENDS ONLY — the
  * browser could insert a share addressed to any email at all — and the
  * content is read off the SENDER'S OWN ROWS here rather than taken from the
@@ -11895,38 +11948,23 @@ app.post("/local-ai/fn/shareWithFriends", async (req, res) => {
       .map((r) => (String(r.requester_email).toLowerCase() === meLower ? r.recipient_email : r.requester_email)))];
     if (!others.length) return res.status(400).json({ error: "You can only share with friends." });
 
+    const own = await ownShareContent(me, kind, req.body);
+    if (own.error) return res.status(own.status).json({ error: own.error });
     let body;
-    if (kind === "quiz") {
-      const { data: quiz } = await supabaseAdmin.from("quizzes")
-        .select("id, title, subject, questions, difficulty, category").eq("id", req.body?.quiz_id).eq("created_by", me).maybeSingle();
-      if (!quiz) return res.status(404).json({ error: "That quiz isn't yours to share." });
+    if (own.quiz) {
+      const quiz = own.quiz;
       body = {
         quiz_id: quiz.id, quiz_title: quiz.title,
         quiz_data: { title: quiz.title, subject: quiz.subject, questions: quiz.questions, difficulty: quiz.difficulty, category: quiz.category },
       };
-    } else if (kind === "deck") {
-      const subject = String(req.body?.subject_name || "").trim();
-      const topic = String(req.body?.topic || "").trim();
-      if (!topic) return res.status(400).json({ error: "Pick a deck to share." });
-      let q = supabaseAdmin.from("flashcards").select("subject_name, unit, topic, question, answer")
-        .eq("created_by", me).eq("is_active", true).eq("topic", topic).limit(DECK_SHARE_MAX);
-      q = subject && subject !== "Other" ? q.eq("subject_name", subject) : q.is("subject_name", null);
-      const { data: cards } = await q;
-      // The mistake bank is a flashcards row and is NOT a flashcard — it never
-      // leaves as one (`deckCards`' rule, restated here because the server
-      // cannot import a module that resolves `@/`).
-      const flashcard_data = (cards || []).filter((c) => c.topic !== "Mistake bank")
-        .map((c) => outgoingCard(c)).filter((c) => c.question && c.answer);
-      if (!flashcard_data.length) return res.status(404).json({ error: "That deck has no cards to share." });
+    } else if (own.deck) {
       body = {
-        deck_id: String(req.body?.deck_id || "").slice(0, 120) || null,
-        deck_name: `${subject || "Other"} - ${topic}`.slice(0, 160),
-        flashcard_data,
+        deck_id: own.deck.deck_id,
+        deck_name: own.deck.name,
+        flashcard_data: own.deck.cards,
       };
     } else {
-      const { data: result } = await supabaseAdmin.from("ai_saved_results")
-        .select("id, tool_type, title, topic, subject_name, content").eq("id", req.body?.result_id).eq("created_by", me).maybeSingle();
-      if (!result) return res.status(404).json({ error: "That result isn't yours to share." });
+      const result = own.result;
       body = {
         ai_result_id: result.id, tool_type: result.tool_type, title: result.title || result.topic || "Saved result",
         content: result.content, extra: { topic: result.topic || null, subject_name: result.subject_name || null },
@@ -11953,6 +11991,679 @@ app.post("/local-ai/fn/shareWithFriends", async (req, res) => {
   } catch (e) {
     console.error("[shareWithFriends]", e);
     return res.status(500).json({ error: "Couldn't share that." });
+  }
+});
+
+// ─── Study groups ────────────────────────────────────────────────────────────
+//
+// EVERY GROUP WRITE IS HERE, and so is every read. The page wrote
+// `study_groups` from the browser under a policy that let any member rewrite
+// the whole row — the member list, the owner, the name — and a message policy
+// that let any member post as "system". Joining by code could never work,
+// because a group is invisible to anybody not already in it. And the chat was
+// free text between minors, checked in the browser and nowhere else. See
+// src/lib/groups.js for the rules and migration 0043 for the policies.
+//
+// Reads come through here too, because the rows carry every member's email:
+// a member is a name and a profile id on this page, never an address.
+
+const GROUP_COLS = "id, created_date, updated_date, name, subject, join_code, owner_email, owner_name, member_emails, member_names, extra";
+
+async function loadGroup(id) {
+  if (!id) return null;
+  const { data } = await supabaseAdmin.from("study_groups").select(GROUP_COLS).eq("id", id).maybeSingle();
+  return data || null;
+}
+
+async function groupByCode(code) {
+  if (!code) return null;
+  const { data } = await supabaseAdmin.from("study_groups").select(GROUP_COLS).eq("join_code", code).limit(1).maybeSingle();
+  return data || null;
+}
+
+/** Every group a student owns or is in. */
+async function groupsOf(me) {
+  const [{ data: owned }, { data: joined }] = await Promise.all([
+    supabaseAdmin.from("study_groups").select(GROUP_COLS).eq("owner_email", me),
+    supabaseAdmin.from("study_groups").select(GROUP_COLS).contains("member_emails", [me]),
+  ]);
+  const byId = new Map();
+  for (const g of [...(owned || []), ...(joined || [])]) byId.set(g.id, g);
+  return [...byId.values()];
+}
+
+/** Everybody in a group, owner included even on a row that lost them. */
+const groupEmails = (g) => {
+  const seen = new Set();
+  return [g?.owner_email, ...(g?.member_emails || [])].filter((e) => {
+    const k = String(e || "").toLowerCase();
+    if (!k || seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+};
+
+/**
+ * A read-modify-write that cannot lose somebody else's write. PostgREST has
+ * no transaction across calls, so two students joining in the same second
+ * would each append to the list they read and the second write would drop
+ * the first. The update matches on the row's `updated_date` (touched by a
+ * trigger on every write) and tries again when somebody got there first.
+ */
+async function casUpdate(table, cols, id, change, tries = 4) {
+  for (let i = 0; i < tries; i += 1) {
+    const { data: row } = await supabaseAdmin.from(table).select(cols).eq("id", id).maybeSingle();
+    if (!row) return { error: "gone" };
+    const patch = change(row);
+    if (!patch || patch.error) return patch || { error: "refused" };
+    const { data, error } = await supabaseAdmin.from(table).update(patch)
+      .eq("id", id).eq("updated_date", row.updated_date).select("id");
+    if (error) return { error: error.message };
+    if (data?.length) return { row: { ...row, ...patch } };
+  }
+  return { error: "busy" };
+}
+
+/** The server's own line in the feed. A nicety: a failure is logged, never thrown. */
+async function groupEvent(groupId, actorEmail, actorName, event, title = null) {
+  const item = feedItem({ message_type: "event", sender_name: actorName, extra: { event, title } });
+  if (!item) return;
+  const { error } = await supabaseAdmin.from("group_messages").insert({
+    created_by: actorEmail,
+    group_id: groupId,
+    sender_email: actorEmail,
+    sender_name: actorName,
+    message: item.text,
+    message_type: "event",
+    timestamp: new Date().toISOString(),
+    extra: { event, title: title ? String(title).slice(0, 80) : null },
+  });
+  if (error) console.warn("[groups] event write failed:", error.message);
+}
+
+/**
+ * Each member's COUNTED minutes and active days since Monday — the same rows,
+ * the same caps and the same Monday the league ranks on, so a group never
+ * tells somebody a different week from the board one tab away. Paged and
+ * ordered, because thirty students' week of both tables can pass PostgREST's
+ * thousand-row page, and an unordered page can repeat or drop rows.
+ */
+async function groupWeek(emails, weekStart, now = new Date()) {
+  const out = new Map();
+  const list = [...new Set(emails.filter(Boolean))];
+  for (const e of list) out.set(String(e).toLowerCase(), { rows: [], days: new Set() });
+  for (let i = 0; i < list.length; i += 80) {
+    const chunk = list.slice(i, i + 80);
+    const [sess, tech] = await Promise.all([
+      fetchAllRows(() => supabaseAdmin.from("study_sessions")
+        .select("id, created_by, duration_minutes, date, created_date, extra")
+        .in("created_by", chunk).gte("date", weekStart).order("id"), 10000),
+      fetchAllRows(() => supabaseAdmin.from("study_techniques")
+        .select("id, created_by, session_duration, date, created_date, extra")
+        .in("created_by", chunk).gte("date", weekStart).order("id"), 10000),
+    ]);
+    const put = (r, col) => {
+      const b = out.get(String(r.created_by).toLowerCase());
+      if (!b) return;
+      b.rows.push(studyRowFor(r, col));
+      if (r.date) b.days.add(String(r.date).slice(0, 10));
+    };
+    sess.forEach((r) => put(r, "duration_minutes"));
+    tech.forEach((r) => put(r, "session_duration"));
+  }
+  const week = new Map();
+  out.forEach((b, e) => week.set(e, { minutes: countableStudyMinutes(b.rows, now), days: b.days.size }));
+  return week;
+}
+
+/** The members of a group as the page may draw them: a name and an id. */
+async function groupMembers(g, me) {
+  const emails = groupEmails(g);
+  const { data } = emails.length
+    ? await supabaseAdmin.from("user_profiles").select("id, created_by, username, full_name").in("created_by", emails)
+    : { data: [] };
+  const profiles = new Map((data || []).map((p) => [String(p.created_by).toLowerCase(), p]));
+  const meLower = String(me || "").toLowerCase();
+  return emails.map((email, i) => {
+    const p = profiles.get(String(email).toLowerCase());
+    return {
+      email,
+      id: p?.id || `m${i}`,
+      name: friendName(p, email),
+      owner: isOwner(g, email),
+      me: String(email).toLowerCase() === meLower,
+    };
+  });
+}
+
+const groupRefusal = {
+  not_found: [404, "No group has that code. Check it with whoever sent it."],
+  removed: [403, "You can't join this group."],
+  full: [400, `That group is full — ${GROUP_MAX_MEMBERS} is the most a group can hold.`],
+};
+
+app.post("/local-ai/fn/getGroups", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.json({ success: true, groups: [] });
+  try {
+    const me = user.email;
+    const groups = await groupsOf(me);
+    const week = groups.length
+      ? await groupWeek(groups.flatMap(groupEmails), currentWeekStartUTC())
+      : new Map();
+    return res.json({
+      success: true,
+      groups: groups.map((g) => {
+        const emails = groupEmails(g);
+        const active = emails.map((e) => week.get(String(e).toLowerCase()) || { minutes: 0, days: 0 });
+        return {
+          id: g.id,
+          name: g.name,
+          subject: g.subject || null,
+          owner: isOwner(g, me),
+          members: emails.length,
+          studied: active.filter((w) => w.minutes > 0 || w.days > 0).length,
+          minutes: active.reduce((s, w) => s + w.minutes, 0),
+          code: g.join_code,
+          created: g.created_date,
+        };
+      }).sort((a, b) => (b.minutes - a.minutes) || String(a.name).localeCompare(String(b.name))),
+      limits: { per_student: GROUPS_PER_STUDENT, max_members: GROUP_MAX_MEMBERS },
+    });
+  } catch (e) {
+    console.error("[getGroups]", e);
+    return res.status(500).json({ error: "Couldn't load your groups." });
+  }
+});
+
+app.post("/local-ai/fn/getGroup", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const g = await loadGroup(req.body?.id);
+    if (!g || !isMember(g, me)) return res.status(404).json({ error: "You're not in that group." });
+
+    const weekStart = currentWeekStartUTC();
+    const members = await groupMembers(g, me);
+    const sharers = new Set((g.extra?.share_sacs || []).map((e) => String(e).toLowerCase()));
+    const sacEmails = members.filter((m) => sharers.has(String(m.email).toLowerCase())).map((m) => m.email);
+    // A window wider than the page's fortnight on both ends: the page counts
+    // the days off its OWN local today, and the server's today is UTC.
+    const from = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+    const to = new Date(Date.now() + 17 * 86400000).toISOString().slice(0, 10);
+
+    const [week, sacRes, feedRes, shelfRes] = await Promise.all([
+      groupWeek(members.map((m) => m.email), weekStart),
+      sacEmails.length
+        ? supabaseAdmin.from("subject_assessments").select("created_by, subject_name, assessment_type, due_date, is_completed")
+          .in("created_by", sacEmails).gte("due_date", from).lte("due_date", to).limit(200)
+        : Promise.resolve({ data: [] }),
+      supabaseAdmin.from("group_messages").select("id, sender_email, sender_name, message_type, timestamp, created_date, extra")
+        .eq("group_id", g.id).order("timestamp", { ascending: false }).limit(FEED_MAX * 3),
+      supabaseAdmin.from("group_shared_resources").select("id, resource_type, title, shared_by_email, shared_by_name, resource_data, subject_name, created_date, extra")
+        .eq("group_id", g.id).order("created_date", { ascending: false }).limit(60),
+    ]);
+
+    const nameOf = new Map(members.map((m) => [String(m.email).toLowerCase(), m]));
+    const out = members.map((m) => {
+      const w = week.get(String(m.email).toLowerCase()) || { minutes: 0, days: 0 };
+      return { id: m.id, name: m.name, owner: m.owner, me: m.me, minutes: w.minutes, days: w.days };
+    });
+    return res.json({
+      success: true,
+      group: {
+        id: g.id, name: g.name, subject: g.subject || null, code: g.join_code,
+        owner: isOwner(g, me), member_count: members.length, max_members: GROUP_MAX_MEMBERS,
+      },
+      week: { start: weekStart, members: out },
+      sharing_sacs: sharers.has(String(me).toLowerCase()),
+      // The SUBJECT and the date, never the title: a planner title is free
+      // text the student typed for themselves.
+      sacs: (sacRes.data || []).filter((a) => a.is_completed !== true && a.due_date).map((a) => {
+        const m = nameOf.get(String(a.created_by).toLowerCase());
+        return { name: m?.name || "Someone", me: !!m?.me, subject: a.subject_name || null, kind: a.assessment_type || "SAC", due: String(a.due_date).slice(0, 10) };
+      }),
+      feed: shapeFeed(feedRes.data || [], me),
+      shelf: (shelfRes.data || []).map((r) => shelfItem(r, me)).filter(Boolean),
+      phrases: GROUP_PHRASES,
+      reactions: GROUP_REACTIONS,
+    });
+  } catch (e) {
+    console.error("[getGroup]", e);
+    return res.status(500).json({ error: "Couldn't load that group." });
+  }
+});
+
+/** What a code is, and where you stand with it. Opening a link ASKS. */
+app.post("/local-ai/fn/lookupGroupCode", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const code = normaliseGroupCode(req.body?.code);
+    if (!code) return res.status(400).json({ error: "That isn't a group code. They look like GRP-7KQ2XM." });
+    if (friendLimitHit(`glookup:${user.email}`, GROUP_LOOKUPS_PER_HOUR, 3600_000)) {
+      return res.status(429).json({ error: "That's a lot of codes in an hour. Try again later." });
+    }
+    const g = await groupByCode(code);
+    if (!g) return res.json({ success: true, code, state: "not_found" });
+    const refusal = joinRefusal(g, user.email);
+    const owner = (await profilesByEmail([g.owner_email])).get(String(g.owner_email).toLowerCase());
+    return res.json({
+      success: true, code,
+      state: refusal || "available",
+      id: refusal === "member" ? g.id : null,
+      name: g.name, subject: g.subject || null,
+      members: groupEmails(g).length,
+      owner_name: friendName(owner, g.owner_email),
+    });
+  } catch (e) {
+    console.error("[lookupGroupCode]", e);
+    return res.status(500).json({ error: "Couldn't check that code." });
+  }
+});
+
+app.post("/local-ai/fn/createGroup", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const named = cleanGroupName(req.body?.name);
+    if (named.error) return res.status(400).json({ error: named.error });
+    // The subject is one the student takes, or none — never a free line.
+    let subject = String(req.body?.subject || "").trim().slice(0, 80) || null;
+    if (subject) {
+      const { data: mine } = await supabaseAdmin.from("user_subjects").select("subject_name")
+        .eq("created_by", me).eq("subject_name", subject).limit(1);
+      if (!mine?.length) subject = null;
+    }
+    const groups = await groupsOf(me);
+    if (groups.length >= GROUPS_PER_STUDENT) {
+      return res.status(400).json({ error: `You're in ${GROUPS_PER_STUDENT} groups already. Leave one first.` });
+    }
+    const since = Date.now() - 86400_000;
+    if (groups.filter((g) => isOwner(g, me) && new Date(g.created_date).getTime() > since).length >= GROUPS_CREATED_PER_DAY) {
+      return res.status(429).json({ error: `That's ${GROUPS_CREATED_PER_DAY} new groups today. Try again tomorrow.` });
+    }
+    let code = null;
+    for (let i = 0; i < 6 && !code; i += 1) {
+      const c = makeGroupCode();
+      if (!(await groupByCode(c))) code = c;
+    }
+    if (!code) return res.status(500).json({ error: "Couldn't make a code for the group. Try again." });
+    const profile = await loadUserProfile(me);
+    const myName = friendName(profile, me);
+    const { data, error } = await supabaseAdmin.from("study_groups").insert({
+      created_by: me, name: named.name, subject, is_private: true, join_code: code,
+      owner_email: me, owner_name: myName, member_emails: [me], member_names: [myName], extra: {},
+    }).select("id").single();
+    if (error) {
+      console.error("[createGroup] insert failed:", error.message);
+      return res.status(500).json({ error: "Couldn't make that group." });
+    }
+    await groupEvent(data.id, me, myName, "created");
+    return res.json({ success: true, id: data.id, code });
+  } catch (e) {
+    console.error("[createGroup]", e);
+    return res.status(500).json({ error: "Couldn't make that group." });
+  }
+});
+
+app.post("/local-ai/fn/joinGroup", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const code = normaliseGroupCode(req.body?.code);
+    if (!code) return res.status(400).json({ error: "That isn't a group code. They look like GRP-7KQ2XM." });
+    if (friendLimitHit(`glookup:${me}`, GROUP_LOOKUPS_PER_HOUR, 3600_000)) {
+      return res.status(429).json({ error: "That's a lot of codes in an hour. Try again later." });
+    }
+    const g = await groupByCode(code);
+    const before = joinRefusal(g, me);
+    if (before === "member") return res.json({ success: true, id: g.id, state: "member" });
+    if (before) return res.status(groupRefusal[before][0]).json({ error: groupRefusal[before][1] });
+    if ((await groupsOf(me)).length >= GROUPS_PER_STUDENT) {
+      return res.status(400).json({ error: `You're in ${GROUPS_PER_STUDENT} groups already. Leave one first.` });
+    }
+    const myName = friendName(await loadUserProfile(me), me);
+    const done = await casUpdate("study_groups", GROUP_COLS, g.id, (row) => {
+      const why = joinRefusal(row, me);
+      if (why === "member") return { error: "member" };
+      if (why) return { error: why };
+      return withMember(row, me, myName);
+    });
+    if (done.error === "member") return res.json({ success: true, id: g.id, state: "member" });
+    if (groupRefusal[done.error]) return res.status(groupRefusal[done.error][0]).json({ error: groupRefusal[done.error][1] });
+    if (done.error) return res.status(500).json({ error: "Couldn't join that group. Try again." });
+    await groupEvent(g.id, me, myName, "joined");
+    return res.json({ success: true, id: g.id, state: "joined", name: g.name });
+  } catch (e) {
+    console.error("[joinGroup]", e);
+    return res.status(500).json({ error: "Couldn't join that group." });
+  }
+});
+
+/**
+ * Leave a group you are in. `purge` is account deletion's: it takes your
+ * phrases and what you shared with you, and posts nothing on the way out.
+ */
+app.post("/local-ai/fn/leaveGroup", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const g = await loadGroup(req.body?.id);
+    if (!g || !isMember(g, me)) return res.status(404).json({ error: "You're not in that group." });
+    if (isOwner(g, me)) return res.status(400).json({ error: "You started this group, so it can only be deleted." });
+    const done = await casUpdate("study_groups", GROUP_COLS, g.id, (row) => ({
+      ...withoutMember(row, me),
+      extra: { ...(row.extra || {}), share_sacs: (row.extra?.share_sacs || []).filter((e) => String(e).toLowerCase() !== String(me).toLowerCase()) },
+    }));
+    if (done.error) return res.status(500).json({ error: "Couldn't leave that group. Try again." });
+    if (req.body?.purge) {
+      await Promise.all([
+        supabaseAdmin.from("group_messages").delete().eq("group_id", g.id).eq("sender_email", me),
+        supabaseAdmin.from("group_shared_resources").delete().eq("group_id", g.id).eq("shared_by_email", me),
+      ]);
+    } else {
+      await groupEvent(g.id, me, friendName(await loadUserProfile(me), me), "left");
+    }
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("[leaveGroup]", e);
+    return res.status(500).json({ error: "Couldn't leave that group." });
+  }
+});
+
+/** The owner takes somebody out. They cannot come back in on the same code. */
+app.post("/local-ai/fn/removeGroupMember", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const g = await loadGroup(req.body?.id);
+    if (!g || !isOwner(g, me)) return res.status(403).json({ error: "Only the person who started the group can do that." });
+    const target = (await groupMembers(g, me)).find((m) => m.id === req.body?.member_id);
+    if (!target) return res.status(404).json({ error: "They're not in the group any more." });
+    if (target.owner) return res.status(400).json({ error: "That's you." });
+    const them = String(target.email).toLowerCase();
+    const done = await casUpdate("study_groups", GROUP_COLS, g.id, (row) => ({
+      ...withoutMember(row, target.email),
+      extra: {
+        ...(row.extra || {}),
+        removed: [...new Set([...(row.extra?.removed || []).map((e) => String(e).toLowerCase()), them])],
+        share_sacs: (row.extra?.share_sacs || []).filter((e) => String(e).toLowerCase() !== them),
+      },
+    }));
+    if (done.error) return res.status(500).json({ error: "Couldn't remove them. Try again." });
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("[removeGroupMember]", e);
+    return res.status(500).json({ error: "Couldn't remove them." });
+  }
+});
+
+/** A new code, for when the old one ended up somewhere it should not be. */
+app.post("/local-ai/fn/resetGroupCode", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const g = await loadGroup(req.body?.id);
+    if (!g || !isOwner(g, user.email)) return res.status(403).json({ error: "Only the person who started the group can do that." });
+    let code = null;
+    for (let i = 0; i < 6 && !code; i += 1) {
+      const c = makeGroupCode();
+      if (!(await groupByCode(c))) code = c;
+    }
+    if (!code) return res.status(500).json({ error: "Couldn't make a new code. Try again." });
+    const { error } = await supabaseAdmin.from("study_groups").update({ join_code: code }).eq("id", g.id);
+    if (error) return res.status(500).json({ error: "Couldn't make a new code. Try again." });
+    return res.json({ success: true, code });
+  } catch (e) {
+    console.error("[resetGroupCode]", e);
+    return res.status(500).json({ error: "Couldn't make a new code." });
+  }
+});
+
+app.post("/local-ai/fn/deleteGroup", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const g = await loadGroup(req.body?.id);
+    if (!g || !isOwner(g, user.email)) return res.status(403).json({ error: "Only the person who started the group can delete it." });
+    // Messages, shared items and decks are `on delete cascade` (0003).
+    const { error } = await supabaseAdmin.from("study_groups").delete().eq("id", g.id);
+    if (error) return res.status(500).json({ error: "Couldn't delete that group." });
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("[deleteGroup]", e);
+    return res.status(500).json({ error: "Couldn't delete that group." });
+  }
+});
+
+/** A phrase from the set, or nothing. There is no free text to send. */
+app.post("/local-ai/fn/postGroupPhrase", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const phrase = String(req.body?.phrase || "");
+    const text = phraseText(phrase);
+    if (!text) return res.status(400).json({ error: "That isn't one of the phrases." });
+    const g = await loadGroup(req.body?.id);
+    if (!g || !isMember(g, me)) return res.status(404).json({ error: "You're not in that group." });
+    if (friendLimitHit(`phrase:${me}:${g.id}`, PHRASES_PER_HOUR, 3600_000)) {
+      return res.status(429).json({ error: "That's a lot for one hour. Give it a minute." });
+    }
+    const { error } = await supabaseAdmin.from("group_messages").insert({
+      created_by: me, group_id: g.id, sender_email: me,
+      sender_name: friendName(await loadUserProfile(me), me),
+      message: text, message_type: "phrase", timestamp: new Date().toISOString(), extra: { phrase },
+    });
+    if (error) {
+      console.error("[postGroupPhrase] insert failed:", error.message);
+      return res.status(500).json({ error: "Couldn't send that." });
+    }
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("[postGroupPhrase]", e);
+    return res.status(500).json({ error: "Couldn't send that." });
+  }
+});
+
+/** Share something you own with a group — read off your own rows. */
+app.post("/local-ai/fn/shareToGroup", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const ids = [...new Set((Array.isArray(req.body?.group_ids) ? req.body.group_ids : [req.body?.id]).filter(Boolean))].slice(0, GROUPS_PER_STUDENT);
+    const groups = (await Promise.all(ids.map(loadGroup))).filter((g) => g && isMember(g, me));
+    if (!groups.length) return res.status(404).json({ error: "You can only share with a group you're in." });
+    const kind = String(req.body?.kind || "");
+    const own = await ownShareContent(me, kind, req.body);
+    if (own.error) return res.status(own.status).json({ error: own.error });
+
+    let row;
+    if (own.deck) {
+      row = { resource_type: SHELF_TYPES.deck, title: own.deck.name, description: `Flashcard deck with ${own.deck.cards.length} cards`,
+        resource_data: { flashcards: own.deck.cards }, subject_name: own.deck.subject, topic: own.deck.topic };
+    } else if (own.quiz) {
+      const q = own.quiz;
+      row = { resource_type: SHELF_TYPES.quiz, title: q.title, description: `Quiz with ${(q.questions || []).length} questions`,
+        resource_data: { title: q.title, subject: q.subject, questions: q.questions, difficulty: q.difficulty, category: q.category },
+        subject_name: q.subject || null, topic: "" };
+    } else {
+      const r = own.result;
+      row = { resource_type: SHELF_TYPES.result, title: r.title || r.topic || "Saved result", description: "Saved AI result",
+        resource_data: { tool_type: r.tool_type, content: r.content }, subject_name: r.subject_name || null, topic: r.topic || "" };
+    }
+    const myName = friendName(await loadUserProfile(me), me);
+    const { error } = await supabaseAdmin.from("group_shared_resources").insert(groups.map((g) => ({
+      ...row, created_by: me, group_id: g.id, shared_by_email: me, shared_by_name: myName,
+      extra: { imported_by_emails: [], reactions: {} },
+    })));
+    if (error) {
+      console.error("[shareToGroup] insert failed:", error.message);
+      return res.status(500).json({ error: "Couldn't share that." });
+    }
+    await Promise.all(groups.map((g) => groupEvent(g.id, me, myName, "shared", row.title)));
+    return res.json({ success: true, sent: groups.length });
+  } catch (e) {
+    console.error("[shareToGroup]", e);
+    return res.status(500).json({ error: "Couldn't share that." });
+  }
+});
+
+/**
+ * Add something from the shelf to your own library, in ONE call. It used to
+ * create the rows in the browser and then write the import count to a row
+ * only its sharer may update — so everybody the share was FOR read "Failed to
+ * import" over a deck that had landed, tapped again, and got it twice.
+ */
+app.post("/local-ai/fn/importGroupItem", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const meLower = String(me).toLowerCase();
+    const { data: item } = await supabaseAdmin.from("group_shared_resources")
+      .select("id, group_id, resource_type, title, subject_name, topic, resource_data, extra").eq("id", req.body?.id).maybeSingle();
+    const g = item && await loadGroup(item.group_id);
+    if (!g || !isMember(g, me)) return res.status(404).json({ error: "That's not on a shelf you're on." });
+    if ((item.extra?.imported_by_emails || []).some((e) => String(e).toLowerCase() === meLower)) {
+      return res.json({ success: true, state: "already" });
+    }
+    const data = item.resource_data || {};
+    const kind = SHELF_KINDS[item.resource_type];
+    let count = 0;
+    if (kind === "deck") {
+      const cards = Array.isArray(data.flashcards) ? data.flashcards : Array.isArray(data.cards) ? data.cards : [];
+      const rows = importedDeck(cards.slice(0, DECK_SHARE_MAX), importDeckId("group")).map((c) => ({ ...c, created_by: me }));
+      if (!rows.length) return res.status(400).json({ error: "That deck came through empty." });
+      const { error } = await supabaseAdmin.from("flashcards").insert(rows);
+      if (error) { console.error("[importGroupItem] cards:", error.message); return res.status(500).json({ error: "Couldn't add that deck." }); }
+      count = rows.length;
+    } else if (kind === "quiz") {
+      const questions = Array.isArray(data.questions) ? data.questions : [];
+      if (!questions.length) return res.status(400).json({ error: "That quiz came through empty." });
+      const { error } = await supabaseAdmin.from("quizzes").insert({
+        created_by: me, title: data.title || item.title || "Shared quiz", subject: data.subject || item.subject_name || null,
+        questions, difficulty: data.difficulty || null, category: data.category || null,
+      });
+      if (error) { console.error("[importGroupItem] quiz:", error.message); return res.status(500).json({ error: "Couldn't add that quiz." }); }
+      // A quiz in a subject you do not take would land with no chip to reach
+      // it, so the subject comes with it — Friends' accept does the same.
+      const subject = data.subject || item.subject_name;
+      if (subject) {
+        const { data: have } = await supabaseAdmin.from("user_subjects").select("id").eq("created_by", me).eq("subject_name", subject).limit(1);
+        if (!have?.length) {
+          await supabaseAdmin.from("user_subjects").insert({
+            created_by: me, subject_name: subject, subject_code: String(subject).substring(0, 6).toUpperCase(), color: "#6B7280", is_active: true,
+          });
+        }
+      }
+      count = questions.length;
+    } else if (kind === "result") {
+      const { error } = await supabaseAdmin.from("ai_saved_results").insert({
+        created_by: me, tool_type: data.tool_type || "shared", title: item.title || "Shared result",
+        content: data.content ?? null, subject_name: item.subject_name || null, topic: item.topic || null,
+      });
+      if (error) { console.error("[importGroupItem] result:", error.message); return res.status(500).json({ error: "Couldn't save that." }); }
+      count = 1;
+    } else {
+      return res.status(400).json({ error: "That can't be added." });
+    }
+    // The rows exist now, so a failure to RECORD the import is logged and the
+    // student is told it worked — because it did.
+    const marked = await casUpdate("group_shared_resources", "id, updated_date, extra", item.id, (row) => {
+      const prev = row.extra || {};
+      const list = [...new Set([...(prev.imported_by_emails || []).map((e) => String(e).toLowerCase()), meLower])];
+      return { extra: { ...prev, imported_by_emails: list, imports_count: list.length } };
+    });
+    if (marked.error) console.warn("[importGroupItem] count not recorded:", marked.error);
+    return res.json({ success: true, state: "imported", kind, count });
+  } catch (e) {
+    console.error("[importGroupItem]", e);
+    return res.status(500).json({ error: "Couldn't add that." });
+  }
+});
+
+app.post("/local-ai/fn/reactToGroupItem", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = user.email;
+    const glyph = String(req.body?.glyph || "");
+    if (!GROUP_REACTIONS.includes(glyph)) return res.status(400).json({ error: "That isn't one of the reactions." });
+    const { data: item } = await supabaseAdmin.from("group_shared_resources").select("id, group_id").eq("id", req.body?.id).maybeSingle();
+    const g = item && await loadGroup(item.group_id);
+    if (!g || !isMember(g, me)) return res.status(404).json({ error: "That's not on a shelf you're on." });
+    const done = await casUpdate("group_shared_resources", "id, updated_date, extra", item.id, (row) => {
+      const reactions = toggleReaction(row.extra?.reactions, glyph, me);
+      return reactions ? { extra: { ...(row.extra || {}), reactions } } : { error: "refused" };
+    });
+    if (done.error) return res.status(500).json({ error: "Couldn't react to that." });
+    return res.json({ success: true, reactions: reactionSummary(done.row.extra?.reactions, me) });
+  } catch (e) {
+    console.error("[reactToGroupItem]", e);
+    return res.status(500).json({ error: "Couldn't react to that." });
+  }
+});
+
+/** Off the shelf — by whoever shared it, or by the group's owner. */
+app.post("/local-ai/fn/removeGroupItem", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = String(user.email).toLowerCase();
+    const { data: item } = await supabaseAdmin.from("group_shared_resources").select("id, group_id, shared_by_email").eq("id", req.body?.id).maybeSingle();
+    const g = item && await loadGroup(item.group_id);
+    const allowed = g && (String(item.shared_by_email).toLowerCase() === me || isOwner(g, me));
+    if (!allowed) return res.status(403).json({ error: "Only whoever shared it, or the group's owner, can take it down." });
+    const { error } = await supabaseAdmin.from("group_shared_resources").delete().eq("id", item.id);
+    if (error) return res.status(500).json({ error: "Couldn't take that down." });
+    return res.json({ success: true });
+  } catch (e) {
+    console.error("[removeGroupItem]", e);
+    return res.status(500).json({ error: "Couldn't take that down." });
+  }
+});
+
+/** Whether this group sees your upcoming SAC dates. Off until you say so. */
+app.post("/local-ai/fn/setGroupSacSharing", async (req, res) => {
+  const user = await authenticateRequest(req);
+  if (!user) return res.status(401).json({ error: "Not signed in." });
+  if (!supabaseAdmin) return res.status(503).json({ error: "Unavailable." });
+  try {
+    const me = String(user.email).toLowerCase();
+    const g = await loadGroup(req.body?.id);
+    if (!g || !isMember(g, me)) return res.status(404).json({ error: "You're not in that group." });
+    const on = req.body?.share === true;
+    const done = await casUpdate("study_groups", GROUP_COLS, g.id, (row) => {
+      const rest = (row.extra?.share_sacs || []).map((e) => String(e).toLowerCase()).filter((e) => e !== me);
+      return { extra: { ...(row.extra || {}), share_sacs: on ? [...rest, me] : rest } };
+    });
+    if (done.error) return res.status(500).json({ error: "Couldn't change that. Try again." });
+    return res.json({ success: true, share: on });
+  } catch (e) {
+    console.error("[setGroupSacSharing]", e);
+    return res.status(500).json({ error: "Couldn't change that." });
   }
 });
 

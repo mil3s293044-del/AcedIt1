@@ -337,7 +337,7 @@ export const FEATURES = [
     {
         id: "study_groups", name: "Study Groups", section: "Social", suit: "club",
         to: "/StudyGroups",
-        what: "A shared space for a class or a group, with shared resources and a chat.",
+        what: "A group for your class: who has been studying this week, a shelf of shared decks and quizzes anyone can add in one tap, and quick calls like \"Phones down, 25 minutes?\". Join with a code or a link.",
         when: "You're revising the same subject as people you already know.",
         needs: null,
         aka: ["group", "class", "study group", "team"],
@@ -396,7 +396,7 @@ export const PAGES = {
     Subjects:     { route: "/Subjects",     title: "Subjects",     intro: "Your subjects and the SAC and exam dates inside them. Most of the app is organised by this." },
     Strategise:   { route: "/Strategise",   title: "Strategise",   intro: "A short check-in that turns how you're going into the next concrete move." },
     Guides:       { route: "/Guides",       title: "Guides",       intro: "Written guides on study technique and VCE specifics." },
-    StudyGroups:  { route: "/StudyGroups",  title: "Study Groups", intro: "A shared space for a class or a group, with shared resources and a chat." },
+    StudyGroups:  { route: "/StudyGroups",  title: "Study groups", intro: "Your class as a group: who has been studying this week, a shared shelf, and quick calls." },
 
     // Plumbing. Deliberately absent from FEATURES — a guide that offers to
     // walk you through the billing page has misunderstood the job — but these

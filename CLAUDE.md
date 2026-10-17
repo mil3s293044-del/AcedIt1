@@ -7712,6 +7712,104 @@ policies). 43 injections across both files, every one biting — two only after
 their fixtures grew the case (a flagged topic with a 0% miss rate, a repeat
 fixed every time).
 
+## Study groups: a class, not a chat room
+
+**Joining by code had never worked, and everything that did work was unsafe.**
+The page wrote `study_groups` from the browser under policies written for a
+feature that trusted its members:
+
+- **A code could not be looked up by the people it was for.** A group is
+  readable only by its members, so a non-member's lookup came back empty —
+  "Invalid code" for every code ever shared.
+- **Any member could rewrite the group** — rename it, empty the member list,
+  set `owner_email` to themselves — because the update policy asked only that
+  they still be in it afterwards.
+- **Anybody could post as "system"**, so "Sam was removed for cheating" was
+  one insert away, in the app's own voice.
+- **The chat was free text between minors**, checked for swear words in the
+  SENDER'S browser and nowhere else, blind to bullying that swears at nobody,
+  and impossible to delete. The exact thing 0034 refused for Compete.
+- **An import said "Failed" after it had worked.** The cards were created,
+  then the import count was written to a row only its SHARER may update — so
+  everybody the share was for was told it failed, tapped again, and got the
+  deck twice.
+- And every member could read every other member's email off the row.
+
+**Every group read and write is the server's now** (`getGroups`, `getGroup`,
+`lookupGroupCode`, `createGroup`, `joinGroup`, `leaveGroup`,
+`removeGroupMember`, `resetGroupCode`, `deleteGroup`, `postGroupPhrase`,
+`shareToGroup`, `importGroupItem`, `reactToGroupItem`, `removeGroupItem`,
+`setGroupSacSharing`), through `groupsApi`. `src/lib/groups.js` is the rules,
+imported by the server. **Migration 0043 takes away every browser policy on the
+four group tables, reads included** — the reads were what published the
+addresses. Apply it AFTER the deploy, like 0042. A member is a name and a
+profile id; nothing returns an email.
+
+**THREE DECISIONS, ALL THE STUDENT'S CALL AND ALL MADE:**
+
+- **Set phrases, not a chat.** `GROUP_PHRASES` is the whole vocabulary ("Who's
+  studying tonight?", "Phones down, 25 minutes?"), drawn by ID so a row whose
+  stored text was edited still prints the phrase, rate limited per student per
+  group, named off the profile. Reactions on shared items are four glyphs. The
+  one free line in a group is its NAME, which refuses links, handles, emails and
+  phone numbers — the ways a group of fifteen-year-olds gets moved somewhere
+  nobody can see. Old free-text messages and old client-written "system" lines
+  are not drawn at all, `shownNote`'s rule.
+- **Code or link, and the owner can remove.** Opening `?join=` ASKS — it never
+  joins on arrival, because links get forwarded; a code TYPED into the box is
+  that choice and joins. Removed is permanent for that code (`extra.removed`),
+  and the owner can mint a new code if one leaks. Nobody is ever added without
+  their own tap: the old "invite friends" wrote other students into a group
+  directly, which is how a group named after somebody gets them as a member.
+  Codes are `GRP-` plus six from the friend-code alphabet; the old
+  eight-character codes on existing groups still work. Thirty members, twelve
+  groups a student, three new groups a day.
+- **The group LEADS with this week.** Counted minutes on the league's own
+  Monday (`countableStudyMinutes`, paged and ordered), so it cannot tell a
+  student a different week from the board. **Somebody who has not started is
+  COUNTED, never NAMED** — "three haven't started" is a fact about the group; a
+  list of who is a list of who to have a go at. SAC dates appear only for
+  members who switched it on PER GROUP, and as the subject and the day, never
+  the planner title, which is free text the student wrote for themselves. The
+  page counts the days off its own local today, because the server's is UTC.
+
+**`ownShareContent` is the one reading of "what may be shared"**, used by both
+`shareWithFriends` and `shareToGroup`. Two copies of "what leaves" is how one
+of them starts leaking; `friends.test.mjs` was repointed at the helper.
+
+**`casUpdate` is a compare-and-set on `updated_date`.** PostgREST has no
+transaction across calls, so two students joining in the same second would
+each append to the list they read and the second write would drop the first.
+The join re-checks the refusal rules against the row it is writing.
+
+**An import creates the rows FIRST, as the importer, then records it** — and a
+failure to record is logged, never reported as a failed import, because the
+rows exist.
+
+`GroupDecks.jsx` was mounted nowhere and is deleted with `GroupChat` and
+`GroupResources`; `group_flashcard_decks` is closed by 0043 rather than left
+open. Study groups is in both navs now — its only entrance was a link inside
+the flashcard share dialog. Account deletion leaves every group with `purge`
+(your calls and shares go too) and deletes the ones you started.
+
+**`GROUPS` IS A BASH BUILTIN.** A fixture switch named `GROUPS=empty` silently
+does nothing, because bash owns that variable (the user's group ids) and the
+child never sees it. The harness uses `NO_GROUPS=1`.
+
+**Not fixed, recorded:** `compliance.js` says the 13–15 band gets "no social
+surfaces", and `maySeeSocial` gates only whether somebody can be a MARKET
+subject. Friends, groups, Compete and the boards are all open to that band.
+With no free text left on any of them the risk is much smaller than it was,
+but the policy line and the product still disagree, and it belongs in the
+security sweep before the trial.
+
+**What could not be verified here:** none of the group endpoints ran against
+the real database — the container has no service key. The server boots, every
+endpoint answers 401 without a token, every column it names passes
+`dbColumns.test.mjs`, and `groups.test.mjs` holds 44 checks, every one of the
+34 injections biting against a green baseline. Draw it with the network-level
+harness against `/StudyGroups` and `/StudyGroups?g=<id>`.
+
 ## Premium codes (the Year 10 program)
 
 A student taps "Have a code?" on /Subscription, types their name and a code,
@@ -8134,6 +8232,11 @@ student looking free in the nav, the planner and the companion.
   `supabase/migrations/0042_friendships_server_only.sql` — friends by code and
   link, every friendship and share write on the server, set notes instead of
   free text. Apply 0042 AFTER the deploy
+- `src/lib/groups.js` + `groups.test.mjs`, `src/api/groupsApi.js`,
+  `src/pages/StudyGroups.jsx`, `src/components/groups/`,
+  `supabase/migrations/0043_study_groups_server_only.sql` — study groups on the
+  server: codes and links that ask, set phrases instead of a chat, this week
+  first, a shelf you add from in one tap. Apply 0043 AFTER the deploy
 - `src/lib/premiumGrant.js` + `premiumGrant.test.mjs` — when a checkout grants
   premium (a $0 promotion code included, a trial deliberately not), that the
   session is the caller's, and the reveal owed on the profile until a screen

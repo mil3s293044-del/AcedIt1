@@ -1,694 +1,384 @@
-import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+/**
+ * Study groups — the people you sit with, as a group.
+ *
+ * ─── WHAT IT WAS ────────────────────────────────────────────────────────────
+ * A Base44 page that wrote `study_groups` from the browser, and it had never
+ * worked in the way that mattered: a code looked up by somebody not already
+ * in the group came back empty, so joining by code failed for every code ever
+ * shared. Meanwhile any member could rewrite the group, post as "system", and
+ * type free text at other students past a swear-word check that ran in their
+ * own browser. src/lib/groups.js has the whole list.
+ *
+ * ─── WHAT IT IS ─────────────────────────────────────────────────────────────
+ * Two screens on one route. The LIST (your groups, a box for a code, a button
+ * to start one) and the ROOM (`?g=<id>`), which leads with how everybody is
+ * going this week, then the shelf, then the calls. The group rides in the
+ * query string for the reason SubjectHub's subject does: `createPageUrl`
+ * builds `/PageName`, and a second URL scheme for one page is how routes start
+ * disagreeing with the router.
+ *
+ * `?join=GRP-XXXXXX` is the group link. Opening it looks the code up and
+ * ASKS — it never joins on arrival, because a link gets forwarded and joining
+ * a group should be something the student chose. A code TYPED into the box is
+ * that choice, so it joins straight away.
+ *
+ * Every read and write goes through `groupsApi`; nothing here holds another
+ * student's email.
+ */
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { Plus, ChevronRight, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-    Users,
-    Plus,
-    MessageCircle,
-    Share2,
-    UserPlus,
-    ArrowLeft,
-    Copy,
-    Check,
-    Trash2,
-    Crown,
-    LogOut
-} from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { useParams, useNavigate } from "react-router-dom";
+import {
+    getGroups, getGroup, lookupGroupCode, createGroup, joinGroup, leaveGroup, removeGroupMember,
+    resetGroupCode, deleteGroup, postGroupPhrase, shareToGroup, importGroupItem, reactToGroupItem,
+    removeGroupItem, setGroupSacSharing,
+} from "@/api/groupsApi";
+import { normaliseGroupCode, minutesLabel } from "@/lib/groups";
+import { takePendingGroup } from "@/lib/pendingGroup";
+import { SOON_DAYS } from "@/lib/studyQueue";
+import { dayKey } from "@/lib/studyLog";
+import { useLiveTick } from "@/lib/LiveContext";
 import { createPageUrl } from "@/utils";
 import { useToast } from "@/components/ui/use-toast";
-
-import GroupChat from "../components/groups/GroupChat";
-import GroupResources from "../components/groups/GroupResources";
+import { colorFor } from "@/components/cards/cardIdentity";
+import Band from "@/components/shared/Band";
+import HelpButton from "@/components/shared/HelpButton";
 import AceShuffle from "@/components/ace/AceShuffle";
+import GroupRoom from "@/components/groups/GroupRoom";
+import { InviteDialog, MembersDialog, ShareDialog, CreateDialog } from "@/components/groups/GroupDialogs";
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** The list's one line: the busiest group's week, or what a group is for. */
+function listHeadline(groups) {
+    if (!groups.length) return "Study with your class";
+    const top = [...groups].sort((a, b) => b.minutes - a.minutes)[0];
+    if (top?.minutes > 0) return `${top.name}: ${minutesLabel(top.minutes)} together this week`;
+    return groups.length === 1 ? "Your study group" : `${groups.length} study groups`;
+}
+
+const INVITE_LINE = {
+    available: (i) => `Join ${i.name}?`,
+    member: (i) => `You're already in ${i.name}`,
+    full: (i) => `${i.name} is full`,
+    removed: () => "You can't join this group",
+    not_found: () => "No group has that code",
+    bad: () => "That link isn't quite right",
+};
 
 export default function StudyGroups() {
-    const [user, setUser] = useState(null);
-    const [groups, setGroups] = useState([]);
-    const [selectedGroup, setSelectedGroup] = useState(null);
-    const [isCreatingGroup, setIsCreatingGroup] = useState(false);
-    const [isJoiningGroup, setIsJoiningGroup] = useState(false);
-    const [joinCode, setJoinCode] = useState("");
-    const [copiedCode, setCopiedCode] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
-    const [showInviteFriends, setShowInviteFriends] = useState(false);
-    const [friends, setFriends] = useState([]);
-    const [selectedFriends, setSelectedFriends] = useState([]);
     const { toast } = useToast();
-    const params = useParams();
+    const location = useLocation();
     const navigate = useNavigate();
+    const tick = useLiveTick();
+    const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
+    const openId = query.get("g");
+    const joinParam = query.get("join");
 
-    const [newGroup, setNewGroup] = useState({
-        name: "",
-        description: "",
-        subject: "",
-        is_private: false,
-    });
+    const [me, setMe] = useState(null);
+    const [groups, setGroups] = useState(null);
+    const [room, setRoom] = useState(null);           // getGroup payload
+    const [roomError, setRoomError] = useState(null);
+    const [subjects, setSubjects] = useState([]);
+    const [working, setWorking] = useState(null);
+    const [codeInput, setCodeInput] = useState("");
+    const [invite, setInvite] = useState(null);       // a link someone sent
+    const [sheet, setSheet] = useState(null);         // invite | members | share | create
+
+    const loadList = useCallback(async () => {
+        try {
+            const res = await getGroups();
+            setGroups(res?.groups || []);
+        } catch (e) {
+            console.error("[StudyGroups] list:", e);
+            setGroups([]);
+        }
+    }, []);
+
+    const loadRoom = useCallback(async (id, quiet = false) => {
+        if (!id) return;
+        if (!quiet) { setRoom(null); setRoomError(null); }
+        try {
+            const res = await getGroup(id);
+            setRoom(res);
+            setRoomError(null);
+        } catch (e) {
+            if (!quiet) setRoomError(e.message || "Couldn't load that group.");
+        }
+    }, []);
 
     useEffect(() => {
-        const init = async () => {
+        (async () => {
             try {
-                const currentUser = await base44.auth.me();
-                setUser(currentUser);
-                await loadGroups(currentUser.email);
-                await loadFriends(currentUser.email);
-
-                if (params.groupId) {
-                    const group = await base44.entities.StudyGroup.filter({ id: params.groupId });
-                    if (group && group.length > 0) {
-                        setSelectedGroup(group[0]);
-                    }
-                }
-            } catch (error) {
-                console.error("Error initializing:", error);
-            } finally {
-                setIsLoading(false);
+                const user = await base44.auth.me();
+                setMe(user);
+                const subs = await base44.entities.UserSubject.filter({ created_by: user.email, is_active: true }).catch(() => []);
+                setSubjects([...new Set((subs || []).map((s) => s.subject_name).filter(Boolean))].sort());
+            } catch (e) {
+                console.error("[StudyGroups] me:", e);
             }
-        };
-        init();
-    }, [params.groupId]);
+        })();
+        loadList();
+    }, [loadList]);
 
-    const loadGroups = async (userEmail) => {
+    useEffect(() => { if (openId) loadRoom(openId); else setRoom(null); }, [openId, loadRoom]);
+
+    // The room is live off the poll the app already runs for Compete — calls
+    // and shares land without a refresh, and a timer of its own would be a
+    // query per student per interval for the same answer.
+    useEffect(() => {
+        if (!openId || !tick || sheet) return;
+        loadRoom(openId, true);
+    }, [tick]);
+
+    // ─── The group link ──────────────────────────────────────────────────
+    useEffect(() => {
+        if (!joinParam) return;
+        // Answered HERE, so a copy kept across a sign-in must not bring the
+        // student back to it a second time.
+        takePendingGroup();
+        let cancelled = false;
+        const code = normaliseGroupCode(joinParam);
+        if (!code) { setInvite({ code: joinParam, state: "bad" }); return; }
+        setInvite({ code, state: "checking" });
+        lookupGroupCode(code)
+            .then((r) => { if (!cancelled) setInvite({ code, ...r }); })
+            .catch((e) => { if (!cancelled) setInvite({ code, state: "error", error: e.message }); });
+        return () => { cancelled = true; };
+    }, [joinParam]);
+    const closeInvite = () => {
+        setInvite(null);
+        navigate(createPageUrl("StudyGroups"), { replace: true });
+    };
+
+    // ─── Actions ─────────────────────────────────────────────────────────
+    const run = async (key, fn, ok) => {
+        setWorking(key);
         try {
-            // NO `is_active` ON `study_groups`. There never has been — the
-            // column is imagined, so PostgREST rejected the filter and this
-            // page loaded NOTHING for anybody, on every visit. Membership is
-            // what decides which groups are yours and it is applied just below.
-            const allGroups = await base44.entities.StudyGroup.filter({});
-            
-            const userGroups = allGroups.filter(g => 
-                g.owner_email === userEmail || g.member_emails?.includes(userEmail)
-            );
-            
-            setGroups(userGroups);
-        } catch (error) {
-            console.error("Error loading groups:", error);
+            const out = await fn();
+            if (ok) toast({ title: typeof ok === "function" ? ok(out) : ok });
+            return out ?? true;
+        } catch (e) {
+            toast({ title: e.message || "That didn't go through.", variant: "destructive" });
+            return null;
+        } finally {
+            setWorking(null);
         }
     };
+    const openRoom = (id) => navigate(`${createPageUrl("StudyGroups")}?g=${encodeURIComponent(id)}`);
+    const refreshRoom = () => loadRoom(openId, true);
 
-    const loadFriends = async (userEmail) => {
-        try {
-            const friendships = await base44.entities.Friendship.filter({
-                status: "accepted"
-            });
-            
-            const friendsList = friendships
-                .filter(f => f.requester_email === userEmail || f.recipient_email === userEmail)
-                .map(f => ({
-                    email: f.requester_email === userEmail ? f.recipient_email : f.requester_email,
-                    name: f.requester_email === userEmail ? f.recipient_name : f.requester_name,
-                    username: f.requester_email === userEmail ? f.recipient_username : f.requester_username
-                }));
-            
-            setFriends(friendsList);
-        } catch (error) {
-            console.error("Error loading friends:", error);
-        }
+    const join = async (code) => {
+        const out = await run("join", () => joinGroup(code),
+            (r) => (r?.state === "member" ? "You're already in that group" : `You're in ${r?.name || "the group"}`));
+        if (out?.id) { await loadList(); openRoom(out.id); }
+        return out;
+    };
+    const joinFromInput = async (e) => {
+        e?.preventDefault();
+        const code = normaliseGroupCode(codeInput);
+        if (!code) { toast({ title: "That isn't a group code", description: "They look like GRP-7KQ2XM.", variant: "destructive" }); return; }
+        if (await join(code)) setCodeInput("");
     };
 
-    const handleCreateGroup = async () => {
-        if (!newGroup.name || !newGroup.subject) {
-            toast({ title: "Missing fields", description: "Name and subject are required.", variant: "destructive" });
-            return;
-        }
-
-        const joinCode = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-        try {
-            const group = await base44.entities.StudyGroup.create({
-                ...newGroup,
-                owner_email: user.email,
-                owner_name: user.full_name,
-                join_code: joinCode,
-                member_emails: [user.email],
-                member_names: [user.full_name]
-            });
-
-            await base44.entities.GroupMessage.create({
-                group_id: group.id,
-                sender_email: "system",
-                sender_name: "System",
-                message: `${user.full_name} created the group`,
-                message_type: "system",
-                timestamp: new Date().toISOString()
-            });
-
-            toast({ title: "Study group created!", description: `Share code: ${joinCode}` });
-            setIsCreatingGroup(false);
-            setNewGroup({ name: "", description: "", subject: "", is_private: false });
-            await loadGroups(user.email);
-        } catch (error) {
-            console.error("Error creating group:", error);
-            toast({ title: "Failed to create group", variant: "destructive" });
-        }
+    const create = async (name, subject) => {
+        const out = await run("create", () => createGroup(name, subject), "Group started. Send the code to your class.");
+        if (out?.id) { setSheet(null); await loadList(); openRoom(out.id); }
     };
 
-    const handleJoinGroup = async () => {
-        if (!joinCode) {
-            toast({ title: "Enter a code", variant: "destructive" });
-            return;
-        }
-
-        try {
-            const queriedGroups = await base44.entities.StudyGroup.filter({ join_code: joinCode.toUpperCase() });
-            if (queriedGroups.length === 0) {
-                toast({ title: "Invalid code", description: "No group found with this code.", variant: "destructive" });
-                return;
-            }
-
-            const group = queriedGroups[0];
-
-            if (group.member_emails?.includes(user.email)) {
-                toast({ title: "Already a member", description: `You are already a member of ${group.name}.` });
-                setIsJoiningGroup(false);
-                setJoinCode("");
-                return;
-            }
-
-            const updatedMembers = [...(group.member_emails || []), user.email];
-            const updatedNames = [...(group.member_names || []), user.full_name];
-
-            await base44.entities.StudyGroup.update(group.id, {
-                member_emails: updatedMembers,
-                member_names: updatedNames
-            });
-
-            await base44.entities.GroupMessage.create({
-                group_id: group.id,
-                sender_email: "system",
-                sender_name: "System",
-                message: `${user.full_name} joined the group`,
-                message_type: "system",
-                timestamp: new Date().toISOString()
-            });
-
-            toast({ title: "Joined group!", description: `You're now a member of ${group.name}` });
-            setIsJoiningGroup(false);
-            setJoinCode("");
-            await loadGroups(user.email);
-        } catch (error) {
-            console.error("Error joining by code:", error);
-            toast({ title: "Failed to join", variant: "destructive" });
-        }
+    const g = room?.group;
+    const roomActions = {
+        onInvite: () => setSheet("invite"),
+        onMembers: () => setSheet("members"),
+        onShare: () => setSheet("share"),
+        onPhrase: async (phrase) => { if (await run("phrase", () => postGroupPhrase(g.id, phrase))) refreshRoom(); },
+        onImport: async (item) => {
+            const out = await run(item.id, () => importGroupItem(item.id), (r) =>
+                r?.state === "already" ? "Already in your library"
+                    : r?.kind === "deck" ? `${plural(r.count, "card")} added to your shelf`
+                        : r?.kind === "quiz" ? "Added to your quizzes" : "Added to your AI history");
+            if (out) refreshRoom();
+        },
+        onReact: async (item, glyph) => {
+            const out = await run(item.id, () => reactToGroupItem(item.id, glyph));
+            if (out?.reactions) setRoom((r) => ({ ...r, shelf: r.shelf.map((x) => (x.id === item.id ? { ...x, reactions: out.reactions } : x)) }));
+        },
+        onRemoveItem: async (item) => { if (await run(item.id, () => removeGroupItem(item.id), "Taken off the shelf")) refreshRoom(); },
+        onToggleSacs: async (share) => {
+            const out = await run("sacs", () => setGroupSacSharing(g.id, share), share ? "The group can see your SAC dates" : "Your SAC dates are hidden from the group");
+            if (out) refreshRoom();
+        },
     };
 
-    const handleInviteFriends = async () => {
-        if (!selectedGroup || selectedFriends.length === 0) {
-            toast({ title: "No friends selected", description: "Please select at least one friend.", variant: "destructive" });
-            return;
-        }
-
-        try {
-            const existingMemberEmails = new Set(selectedGroup.member_emails || []);
-            const newFriendsToAdd = selectedFriends.filter(email => !existingMemberEmails.has(email));
-
-            if (newFriendsToAdd.length === 0) {
-                toast({ title: "No new friends to invite", description: "All selected friends are already in the group." });
-                return;
-            }
-
-            const updatedMembers = [...(selectedGroup.member_emails || []), ...newFriendsToAdd];
-            const friendNames = newFriendsToAdd.map(email => 
-                friends.find(f => f.email === email)?.name || email
-            );
-            const updatedNames = [...(selectedGroup.member_names || []), ...friendNames];
-
-            await base44.entities.StudyGroup.update(selectedGroup.id, {
-                member_emails: updatedMembers,
-                member_names: updatedNames
-            });
-
-            const messagePromises = friendNames.map(name => 
-                base44.entities.GroupMessage.create({
-                    group_id: selectedGroup.id,
-                    sender_email: "system",
-                    sender_name: "System",
-                    message: `${name} was invited and added to the group`,
-                    message_type: "system",
-                    timestamp: new Date().toISOString()
-                })
-            );
-
-            await Promise.all(messagePromises);
-
-            toast({ 
-                title: "Friends invited!", 
-                description: `Added ${newFriendsToAdd.length} friend${newFriendsToAdd.length > 1 ? 's' : ''} to the group.` 
-            });
-
-            setShowInviteFriends(false);
-            setSelectedFriends([]);
-            await loadGroups(user.email);
-            
-            const updatedGroupData = await base44.entities.StudyGroup.filter({ id: selectedGroup.id });
-            if (updatedGroupData && updatedGroupData.length > 0) {
-                setSelectedGroup(updatedGroupData[0]);
-            }
-        } catch (error) {
-            console.error("Error inviting friends:", error);
-            toast({ title: "Error", description: "Could not invite friends.", variant: "destructive" });
-        }
-    };
-
-    const handleLeaveGroup = async (groupId) => {
-        if (!confirm(`Are you sure you want to leave this group?`)) return;
-
-        try {
-            const group = groups.find(g => g.id === groupId);
-            if (!group) {
-                console.error("Group not found to leave:", groupId);
-                return;
-            }
-
-            const updatedMembers = (group.member_emails || []).filter(e => e !== user.email);
-            const memberIndex = (group.member_emails || []).indexOf(user.email);
-            const updatedNames = (group.member_names || []).filter((_, i) => i !== memberIndex);
-
-            await base44.entities.StudyGroup.update(group.id, {
-                member_emails: updatedMembers,
-                member_names: updatedNames
-            });
-
-            await base44.entities.GroupMessage.create({
-                group_id: group.id,
-                sender_email: "system",
-                sender_name: "System",
-                message: `${user.full_name} left the group`,
-                message_type: "system",
-                timestamp: new Date().toISOString()
-            });
-
-            toast({ title: "Left group" });
-            setSelectedGroup(null);
-            await loadGroups(user.email);
-        } catch (error) {
-            console.error("Error leaving group:", error);
-            toast({ title: "Failed to leave group", variant: "destructive" });
-        }
-    };
-
-    const handleDeleteGroup = async (groupId) => {
-        if (!confirm("Are you sure you want to delete this group? This action cannot be undone.")) return;
-
-        try {
-            // A REAL delete, because the soft one was written against a column
-            // that does not exist. Every child table — messages, shared
-            // resources, decks — is `on delete cascade` (migration 0003), so
-            // nothing is orphaned, and the confirm above already promises this
-            // cannot be undone.
-            await base44.entities.StudyGroup.delete(groupId);
-            toast({ title: "Group deleted", description: "The study group has been removed." });
-            setSelectedGroup(null);
-            await loadGroups(user.email);
-        } catch (error) {
-            console.error("Error deleting group:", error);
-            toast({ title: "Error", description: "Could not delete group.", variant: "destructive" });
-        }
-    };
-
-    const copyJoinCode = (code) => {
-        navigator.clipboard.writeText(code);
-        setCopiedCode(true);
-        toast({ title: "Code copied!" });
-        setTimeout(() => setCopiedCode(false), 2000);
-    };
-
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
-                <Card className="max-w-md w-full">
-                    <CardContent className="p-8 text-center">
-                        <AceShuffle size="lg" className="mb-4 mx-auto" />
-                        <p className="text-muted-foreground">Loading study groups...</p>
-                    </CardContent>
-                </Card>
-            </div>
-        );
-    }
-
-    // Group Detail View
-    if (selectedGroup) {
-        const isOwner = selectedGroup.owner_email === user.email;
-
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-50 p-4 lg:p-8">
-                <div className="max-w-7xl mx-auto space-y-6">
-                    <div className="flex items-center justify-between">
-                        <Button
-                            variant="outline"
-                            onClick={() => {
-                                setSelectedGroup(null);
-                                navigate(createPageUrl("StudyGroups"));
-                            }}
-                            className="hover:bg-indigo-50"
-                        >
-                            <ArrowLeft className="w-4 h-4 mr-2" />
-                            Back to Groups
-                        </Button>
-                        <div className="flex gap-2">
-                            {isOwner && (
-                                <Button
-                                    onClick={() => {
-                                        setSelectedFriends([]);
-                                        setShowInviteFriends(true);
-                                    }}
-                                    className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
-                                >
-                                    <UserPlus className="w-4 h-4 mr-2" />
-                                    Invite Friends
-                                </Button>
-                            )}
-                            {isOwner ? (
-                                <Button
-                                    onClick={() => handleDeleteGroup(selectedGroup.id)}
-                                    variant="outline"
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                >
-                                    <Trash2 className="w-4 h-4 mr-2" />
-                                    Delete Group
-                                </Button>
-                            ) : (
-                                <Button
-                                    onClick={() => handleLeaveGroup(selectedGroup.id)}
-                                    variant="outline"
-                                    className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                                >
-                                    <LogOut className="w-4 h-4 mr-2" />
-                                    Leave Group
-                                </Button>
-                            )}
-                        </div>
+    // ─── The room ────────────────────────────────────────────────────────
+    if (openId) {
+        if (roomError) {
+            return (
+                <div className="min-h-screen bg-background">
+                    <div className="max-w-md mx-auto px-4 py-16 text-center space-y-4">
+                        <p className="font-display text-xl font-extrabold text-foreground">{roomError}</p>
+                        <Button variant="outline" onClick={() => navigate(createPageUrl("StudyGroups"))}>All groups</Button>
                     </div>
-
-                    <Card className="shadow-xl border-2 border-indigo-200">
-                        <CardHeader className="bg-gradient-to-r from-indigo-500 to-cyan-500 text-white">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <CardTitle className="text-2xl mb-2">{selectedGroup.name}</CardTitle>
-                                    <p className="text-indigo-100">{selectedGroup.description}</p>
-                                    <div className="flex gap-2 mt-3 flex-wrap">
-                                        <Badge className="bg-surface/20 text-white border-white/30">
-                                            {selectedGroup.subject}
-                                        </Badge>
-                                        <Badge className="bg-surface/20 text-white border-white/30">
-                                            <Users className="w-3 h-3 mr-1" />
-                                            {selectedGroup.member_emails?.length || 0} members
-                                        </Badge>
-                                        {isOwner && (
-                                            <Badge className="bg-yellow-500 text-white">
-                                                <Crown className="w-3 h-3 mr-1" />
-                                                Owner
-                                            </Badge>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="flex flex-col items-end gap-2">
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => copyJoinCode(selectedGroup.join_code)}
-                                        className="bg-surface/20 border-white/30 text-white hover:bg-surface/30"
-                                    >
-                                        {copiedCode ? (
-                                            <>
-                                                <Check className="w-4 h-4 mr-2" />
-                                                Copied!
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Copy className="w-4 h-4 mr-2" />
-                                                {selectedGroup.join_code}
-                                            </>
-                                        )}
-                                    </Button>
-                                    <p className="text-xs text-white/80">Share code to invite others</p>
-                                </div>
-                            </div>
-                        </CardHeader>
-                    </Card>
-
-                    <Tabs defaultValue="chat" className="space-y-6">
-                        <TabsList className="grid w-full grid-cols-2 bg-surface border-2 border-indigo-200">
-                            <TabsTrigger value="chat" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-                                <MessageCircle className="w-4 h-4 mr-2" />
-                                Chat
-                            </TabsTrigger>
-                            <TabsTrigger value="resources" className="data-[state=active]:bg-indigo-600 data-[state=active]:text-white">
-                                <Share2 className="w-4 h-4 mr-2" />
-                                Resources
-                            </TabsTrigger>
-                        </TabsList>
-
-                        <TabsContent value="chat">
-                            <GroupChat group={selectedGroup} user={user} />
-                        </TabsContent>
-
-                        <TabsContent value="resources">
-                            <GroupResources group={selectedGroup} user={user} />
-                        </TabsContent>
-                    </Tabs>
                 </div>
-
-                {/* Invite Friends Dialog */}
-                <Dialog open={showInviteFriends} onOpenChange={setShowInviteFriends}>
-                    <DialogContent className="max-w-md">
-                        <DialogHeader>
-                            <DialogTitle className="flex items-center gap-2">
-                                <UserPlus className="w-5 h-5" />
-                                Invite Friends to {selectedGroup.name}
-                            </DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            {friends.length === 0 ? (
-                                <div className="text-center py-8 text-muted-foreground">
-                                    <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                                    <p>No friends yet.</p>
-                                    <p className="text-sm mt-2">Add friends in the Friends tab!</p>
-                                </div>
-                            ) : (
-                                <div>
-                                    <Label className="mb-2 block text-sm font-medium">Select friends to invite:</Label>
-                                    <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-3">
-                                        {friends
-                                            .filter(friend => !(selectedGroup.member_emails || []).includes(friend.email))
-                                            .map(friend => (
-                                                <div key={friend.email} className="flex items-center gap-2">
-                                                    <Checkbox
-                                                        id={`friend-${friend.email}`}
-                                                        checked={selectedFriends.includes(friend.email)}
-                                                        onCheckedChange={(checked) => {
-                                                            if (checked) {
-                                                                setSelectedFriends([...selectedFriends, friend.email]);
-                                                            } else {
-                                                                setSelectedFriends(selectedFriends.filter(e => e !== friend.email));
-                                                            }
-                                                        }}
-                                                    />
-                                                    <Label htmlFor={`friend-${friend.email}`} className="flex-1 cursor-pointer">
-                                                        <p className="font-medium text-sm">{friend.name}</p>
-                                                        <p className="text-xs text-muted-foreground">@{friend.username}</p>
-                                                    </Label>
-                                                </div>
-                                            ))}
-                                    </div>
-                                    {friends.filter(f => !(selectedGroup.member_emails || []).includes(f.email)).length === 0 && (
-                                        <p className="text-sm text-muted-foreground text-center py-4">All your friends are already in this group!</p>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => {
-                                setShowInviteFriends(false);
-                                setSelectedFriends([]);
-                            }}>
-                                Cancel
-                            </Button>
-                            <Button 
-                                onClick={handleInviteFriends}
-                                disabled={selectedFriends.length === 0}
-                            >
-                                <UserPlus className="w-4 h-4 mr-2" />
-                                Invite {selectedFriends.length} friend{selectedFriends.length !== 1 ? 's' : ''}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+            );
+        }
+        if (!room) {
+            return <div className="min-h-screen bg-background flex items-center justify-center"><AceShuffle size="lg" /></div>;
+        }
+        return (
+            <div className="min-h-screen bg-background">
+                <GroupRoom data={room} todayIso={dayKey(new Date())} soonDays={SOON_DAYS} working={working} {...roomActions} />
+                <InviteDialog open={sheet === "invite"} onOpenChange={(v) => setSheet(v ? "invite" : null)} group={g} working={working === "code"}
+                    onReset={async () => {
+                        const out = await run("code", () => resetGroupCode(g.id), "New code made. The old one no longer works.");
+                        if (out?.code) setRoom((r) => ({ ...r, group: { ...r.group, code: out.code } }));
+                    }} />
+                <MembersDialog open={sheet === "members"} onOpenChange={(v) => setSheet(v ? "members" : null)} group={g}
+                    members={room.week?.members || []} working={!!working}
+                    onRemove={async (m) => { if (await run("member", () => removeGroupMember(g.id, m.id), `${m.name} is out of the group`)) refreshRoom(); }}
+                    onLeave={async () => {
+                        if (await run("leave", () => leaveGroup(g.id), `You left ${g.name}`)) { setSheet(null); await loadList(); navigate(createPageUrl("StudyGroups")); }
+                    }}
+                    onDelete={async () => {
+                        if (await run("delete", () => deleteGroup(g.id), `${g.name} is deleted`)) { setSheet(null); await loadList(); navigate(createPageUrl("StudyGroups")); }
+                    }} />
+                <ShareDialog open={sheet === "share"} onOpenChange={(v) => setSheet(v ? "share" : null)} groupName={g.name}
+                    me={me?.email} working={working === "share"}
+                    onShare={async (payload) => {
+                        if (await run("share", () => shareToGroup([g.id], payload), "On the shelf")) { setSheet(null); refreshRoom(); }
+                    }} />
             </div>
         );
     }
 
-    // Main Groups List View
+    // ─── The list ────────────────────────────────────────────────────────
+    if (!groups) {
+        return <div className="min-h-screen bg-background flex items-center justify-center"><AceShuffle size="lg" /></div>;
+    }
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-cyan-50 via-blue-50 to-indigo-50 p-4 lg:p-8">
-            <div className="max-w-7xl mx-auto">
-                <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-center mb-8"
-                >
-                    <h1 className="text-3xl lg:text-4xl font-bold text-foreground mb-2">
-                        Study Groups 
-                    </h1>
-                    <p className="text-muted-foreground text-lg">
-                        Collaborate with peers, share resources, and study together
-                    </p>
-                </motion.div>
-
-                <div className="flex gap-4 mb-8">
-                    <Button
-                        onClick={() => setIsCreatingGroup(true)}
-                        className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700"
-                    >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Create Group
-                    </Button>
-                    <Button
-                        onClick={() => setIsJoiningGroup(true)}
-                        variant="outline"
-                        className="border-indigo-300"
-                    >
-                        <UserPlus className="w-4 h-4 mr-2" />
-                        Join by Code
-                    </Button>
-                </div>
-
-                {groups.length === 0 ? (
-                    <Card className="shadow-lg">
-                        <CardContent className="p-12 text-center">
-                            <Users className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
-                            <h3 className="text-xl font-semibold text-foreground mb-2">No groups yet</h3>
-                            <p className="text-muted-foreground mb-6">Create or join a study group to get started</p>
-                            <Button onClick={() => setIsCreatingGroup(true)} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                                <Plus className="w-4 h-4 mr-2" />
-                                Create First Group
-                            </Button>
-                        </CardContent>
-                    </Card>
-                ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {groups.map((group, index) => (
-                            <motion.div
-                                key={group.id}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: index * 0.05 }}
-                            >
-                                <Card
-                                    className="cursor-pointer hover:shadow-xl transition-all duration-300 border-2 hover:border-indigo-300"
-                                    onClick={() => setSelectedGroup(group)}
-                                >
-                                    <CardHeader>
-                                        <CardTitle className="flex items-center gap-2">
-                                            {group.name}
-                                            {group.owner_email === user.email && (
-                                                <Crown className="w-4 h-4 text-yellow-500" />
-                                            )}
-                                        </CardTitle>
-                                        <p className="text-sm text-muted-foreground line-clamp-2">{group.description}</p>
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="space-y-2">
-                                            <Badge className="bg-indigo-100 text-indigo-800">
-                                                {group.subject}
-                                            </Badge>
-                                            <div className="flex items-center justify-between text-sm">
-                                                <span className="text-muted-foreground">Members</span>
-                                                <Badge variant="outline">
-                                                    {group.member_emails?.length || 0}
-                                                </Badge>
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            </motion.div>
-                        ))}
+        <div className="min-h-screen bg-background">
+            <div className="max-w-4xl mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-6 lg:space-y-8">
+                <header className="flex items-start justify-between gap-4" data-group-block="list-head">
+                    <div className="min-w-0">
+                        <p className="stat-label text-chart-3 mb-1.5">Study groups</p>
+                        <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1] text-balance">
+                            {listHeadline(groups)}
+                        </h1>
                     </div>
+                    <HelpButton page="StudyGroups" />
+                </header>
+
+                {/* ── A group link someone sent you ──────────────────────── */}
+                <AnimatePresence>
+                    {invite && (
+                        <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                            data-group-block="invite"
+                            className="card-soft on-table p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4 border-2 border-chart-3/40">
+                            <span className="w-11 h-11 rounded-2xl bg-chart-3/15 text-chart-3 flex items-center justify-center flex-shrink-0" aria-hidden>
+                                <Users className="w-5 h-5" />
+                            </span>
+                            <div className="flex-1 min-w-0">
+                                <p className="font-display font-extrabold text-foreground break-words">
+                                    {(INVITE_LINE[invite.state] || (() => invite.error || "Checking the link…"))(invite)}
+                                </p>
+                                <p className="text-sm text-muted-foreground mt-0.5">
+                                    {invite.state === "available" || invite.state === "member"
+                                        ? [invite.subject, plural(invite.members || 0, "member"), invite.owner_name && `started by ${invite.owner_name}`].filter(Boolean).join(" · ")
+                                        : invite.state === "not_found" || invite.state === "bad" ? "Check the code with whoever sent it."
+                                            : invite.state === "full" ? "Ask whoever started it to make room."
+                                                : `Code ${invite.code}`}
+                                </p>
+                            </div>
+                            <div className="flex gap-2 flex-shrink-0">
+                                {invite.state === "available" && (
+                                    <Button disabled={working === "join"} className="flex-1 sm:flex-none"
+                                        onClick={async () => { if (await join(invite.code)) setInvite(null); }}>
+                                        {working === "join" ? "Joining…" : "Join"}
+                                    </Button>
+                                )}
+                                {invite.state === "member" && invite.id && (
+                                    <Button className="flex-1 sm:flex-none" onClick={() => { setInvite(null); openRoom(invite.id); }}>Open it</Button>
+                                )}
+                                <Button variant="outline" className="flex-1 sm:flex-none" onClick={closeInvite}>
+                                    {invite.state === "available" ? "Not now" : "Close"}
+                                </Button>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* ── Join or start ───────────────────────────────────────── */}
+                <Band title="Join or start one">
+                    <div className="card-soft on-table p-4 sm:p-5 grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end" data-group-block="join">
+                        <form onSubmit={joinFromInput} className="min-w-0">
+                            <label htmlFor="group-code" className="text-sm font-bold text-foreground block mb-1.5">Got a code?</label>
+                            <div className="flex gap-2">
+                                <Input id="group-code" value={codeInput} onChange={(e) => setCodeInput(e.target.value)}
+                                    placeholder="GRP-7KQ2XM" autoCapitalize="characters" autoComplete="off" spellCheck={false}
+                                    className="font-display tracking-wider uppercase" />
+                                <Button type="submit" disabled={!codeInput.trim() || working === "join"} className="flex-shrink-0">
+                                    {working === "join" ? "Joining…" : "Join"}
+                                </Button>
+                            </div>
+                        </form>
+                        <div className="flex items-center gap-3 sm:border-l sm:border-border sm:pl-4">
+                            <span className="text-sm text-muted-foreground sm:hidden flex-1">Or make one for your class</span>
+                            <Button variant="outline" className="gap-1.5 flex-shrink-0" onClick={() => setSheet("create")}>
+                                <Plus className="w-4 h-4" /> Start a group
+                            </Button>
+                        </div>
+                    </div>
+                    {groups.length === 0 && (
+                        <p className="text-sm text-muted-foreground max-w-prose">
+                            A group shows who's been studying this week, keeps a shelf of decks and quizzes anyone can add in one tap,
+                            and has quick calls like “Phones down, 25 minutes?” instead of a chat.
+                        </p>
+                    )}
+                </Band>
+
+                {/* ── Your groups ─────────────────────────────────────────── */}
+                {groups.length > 0 && (
+                    <Band title="Your groups" count={groups.length}>
+                        <ul className="space-y-2.5" data-group-block="list">
+                            {groups.map((gr) => (
+                                <li key={gr.id}>
+                                    <button type="button" onClick={() => openRoom(gr.id)}
+                                        className="card-soft on-table w-full text-left flex items-stretch overflow-hidden hover:border-primary/40 transition-colors">
+                                        <span className="w-1.5 flex-shrink-0" style={{ background: gr.subject ? colorFor(gr.subject) : "hsl(var(--border))" }} aria-hidden />
+                                        <span className="flex-1 min-w-0 flex items-center gap-3 p-4">
+                                            <span className="min-w-0 flex-1">
+                                                <span className="block font-display font-extrabold text-foreground break-words">{gr.name}</span>
+                                                <span className="block text-xs text-muted-foreground mt-0.5">
+                                                    {[gr.subject, plural(gr.members, "member"), gr.owner && "yours"].filter(Boolean).join(" · ")}
+                                                </span>
+                                            </span>
+                                            <span className="text-right flex-shrink-0">
+                                                {gr.minutes > 0 ? (
+                                                    <>
+                                                        <span className="block font-display font-extrabold text-foreground tabular-nums">{minutesLabel(gr.minutes)}</span>
+                                                        <span className="block text-xs text-muted-foreground">{gr.studied} of {gr.members} this week</span>
+                                                    </>
+                                                ) : (
+                                                    <span className="block text-xs text-muted-foreground">Quiet this week</span>
+                                                )}
+                                            </span>
+                                            <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" aria-hidden />
+                                        </span>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    </Band>
                 )}
-
-                {/* Create Group Dialog */}
-                <Dialog open={isCreatingGroup} onOpenChange={setIsCreatingGroup}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Create Study Group</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            <div>
-                                <Label className="text-sm font-medium block mb-2">Group Name</Label>
-                                <Input
-                                    value={newGroup.name}
-                                    onChange={(e) => setNewGroup({ ...newGroup, name: e.target.value })}
-                                    placeholder="e.g., VCE Math Methods Study Group"
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-sm font-medium block mb-2">Description</Label>
-                                <Textarea
-                                    value={newGroup.description}
-                                    onChange={(e) => setNewGroup({ ...newGroup, description: e.target.value })}
-                                    placeholder="What will you study together?"
-                                    rows={3}
-                                />
-                            </div>
-                            <div>
-                                <Label className="text-sm font-medium block mb-2">Subject</Label>
-                                <Input
-                                    value={newGroup.subject}
-                                    onChange={(e) => setNewGroup({ ...newGroup, subject: e.target.value })}
-                                    placeholder="e.g., Mathematics, History, Physics"
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsCreatingGroup(false)}>
-                                Cancel
-                            </Button>
-                            <Button onClick={handleCreateGroup} className="bg-gradient-to-r from-indigo-600 to-purple-600">
-                                <Plus className="w-4 h-4 mr-2" />
-                                Create Group
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-
-                {/* Join by Code Dialog */}
-                <Dialog open={isJoiningGroup} onOpenChange={setIsJoiningGroup}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Join Study Group</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            <div>
-                                <Label className="text-sm font-medium block mb-2">Enter Group Code</Label>
-                                <Input
-                                    value={joinCode}
-                                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                                    placeholder="e.g., ABC123"
-                                    className="uppercase"
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsJoiningGroup(false)}>
-                                Cancel
-                            </Button>
-                            <Button onClick={handleJoinGroup}>
-                                <UserPlus className="w-4 h-4 mr-2" />
-                                Join Group
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
             </div>
+
+            <CreateDialog open={sheet === "create"} onOpenChange={(v) => setSheet(v ? "create" : null)}
+                subjects={subjects} working={working === "create"} onCreate={create} />
         </div>
     );
 }

@@ -62,36 +62,8 @@ import { useToast } from "@/components/ui/use-toast";
 import HelpButton from "@/components/shared/HelpButton";
 import AceBody from "@/components/ace/AceBody";
 import AceShuffle from "@/components/ace/AceShuffle";
-
-// Static class strings — the JIT cannot see an assembled class name.
-const AVATAR_INK = ["bg-chart-3", "bg-chart-4", "bg-primary", "bg-xp", "bg-streak"];
-
-function Avatar({ name, size = "md" }) {
-    const initials = String(name || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase();
-    const ink = AVATAR_INK[(String(name || "").charCodeAt(0) || 0) % AVATAR_INK.length];
-    const sz = size === "sm" ? "w-9 h-9 text-sm" : "w-11 h-11 text-base";
-    return (
-        <span className={`${sz} rounded-2xl ${ink} text-white flex items-center justify-center font-display font-extrabold flex-shrink-0`} aria-hidden>
-            {initials}
-        </span>
-    );
-}
-
-/** A section heading with a rule to the end of the row. */
-function Band({ title, count = null, aside = null, children }) {
-    return (
-        <section className="space-y-3">
-            <div className="flex items-center gap-3 min-h-9">
-                <h2 className="font-display font-extrabold text-foreground text-lg lg:text-xl whitespace-nowrap">
-                    {title}{count != null && <span className="text-muted-foreground font-bold"> · {count}</span>}
-                </h2>
-                <span className="flex-1 h-px bg-border" aria-hidden />
-                {aside}
-            </div>
-            {children}
-        </section>
-    );
-}
+import Band from "@/components/shared/Band";
+import Avatar from "@/components/shared/InitialAvatar";
 
 const count = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const SHARE_ENTITY = { quiz: "SharedQuiz", deck: "SharedFlashcard", result: "SharedAIResult" };
