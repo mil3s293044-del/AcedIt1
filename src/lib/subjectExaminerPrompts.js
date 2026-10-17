@@ -89,7 +89,7 @@ const PROFILES = {
 
     "Specialist Mathematics": {
         mathHeavy: true,
-        examFormat: "Two written exams. Exam 1 (1 hour tech-free, 40 marks). Exam 2 (2 hours CAS-allowed, 80 marks). Both more rigorous than Methods. Includes proof-based questions. SACs Unit 3 + Unit 4 (~17% each). Total: SACs 34% / Exam 1 22% / Exam 2 44%.",
+        examFormat: "Two written exams. Exam 1 (1 hour tech-free, 40 marks). Exam 2 (2 hours CAS-allowed, 80 marks). Both more rigorous than Methods. Includes proof-based questions. SACs Unit 3 (20%) + Unit 4 (14%). Total: SACs 34% / Exam 1 22% / Exam 2 44%.",
         markConventions: "Same M/A/C marking as Methods, but Specialist questions chain more concepts and proofs are expected to be rigorous and complete. Algebraic proofs require justification at each step. Vector calculations need all working visible. Specialist often deducts heavily for unjustified leaps in proof.",
         keyTerms: ["argument", "modulus", "Argand diagram", "polar form", "Cartesian form", "scalar product", "vector resolute", "linear dependence", "differential equation", "slope field", "implicit differentiation", "kinematics", "uniform motion", "non-uniform motion", "statistical inference", "mean of sample means", "central limit theorem"],
         examplePromptStyle: "Use VCAA Specialist phrasing: 'Show that for all real $x$...', 'Use mathematical induction to prove...', 'Sketch and label the locus of points satisfying $|z - 2 + i| = 3$...', 'Hence solve the differential equation...', 'Express the position vector of $P$ relative to $O$ in terms of $\\vec{i}$ and $\\vec{j}$...'",
@@ -103,7 +103,7 @@ const PROFILES = {
         markConventions: "Most questions worth 1-3 marks. CAS expected throughout — include calculator outputs in written response. Show enough setup so the marker can follow your method. Final answers usually rounded to specified decimal places.",
         keyTerms: ["recurrence relation", "first-order linear recurrence", "geometric recurrence", "common ratio", "least-squares regression", "Pearson correlation coefficient", "residual plot", "transition matrix", "steady state", "Eulerian trail", "Hamiltonian path", "minimum spanning tree", "critical path"],
         examplePromptStyle: "Real-world contexts: finance, networks, statistics, recurrence/matrices. Use: 'Write the recurrence relation that models...', 'Use the least-squares regression line to predict...', 'State the Pearson correlation coefficient correct to 2 decimal places...', 'Identify the critical path and state its duration...'",
-        commonMistakes: "(1) Using $r = 1.05$ instead of $r = 1.05$ as a multiplier (interest rate vs growth factor); (2) Misreading scatterplot axes; (3) Forgetting that residuals should sum to zero; (4) Confusing correlation and causation; (5) Not labelling activity-on-node networks correctly.",
+        commonMistakes: "(1) Multiplying by the interest rate ($0.05$) instead of the growth factor ($R = 1.05$); (2) Misreading scatterplot axes; (3) Forgetting that residuals should sum to zero; (4) Confusing correlation and causation; (5) Not labelling activity-on-node networks correctly.",
         topicCoverage: "Unit 3 Data Analysis (univariate/bivariate, time series, smoothing); Recursion and Financial Modelling (loans, annuities, depreciation). Unit 4 Matrices (transition matrices, Markov chains) AND Networks and Decision Mathematics (Eulerian/Hamiltonian, MST, project planning, critical path).",
     },
 
@@ -125,7 +125,7 @@ const PROFILES = {
         markConventions: "Essays scored holistically against four published criteria: knowledge and understanding of texts/arguments; analysis of language, persuasive technique and authorial choices; sustained, coherent argument; sophistication of expression and metalanguage. Top-band essays demonstrate conceptual sophistication, original interpretation, sustained voice, and consistent use of subject-specific terminology.",
         keyTerms: ["contention", "metalanguage", "rhetorical device", "tone", "register", "authorial intent", "views and values", "characterisation", "narrative voice", "structural shifts", "TEEL/PETAL", "implied audience", "appeal to authority", "appeal to fear", "inclusive language", "loaded language", "anaphora", "hyperbole", "juxtaposition", "symbolism", "subtext"],
         examplePromptStyle: "Section A prompts always centre on a key idea or quote: 'How does Miller use Proctor's transformation to explore the dangers of ideological extremism in The Crucible?'. Section B requires Frameworks of Ideas integration. Section C: 'Analyse the ways in which the author of [X article] uses written and visual language to position the reader.'",
-        commonMistakes: "(1) Plot summary instead of analysis — examiners' #1 complaint; (2) Generic terms like 'shows' or 'makes the reader feel'; (3) Quoting without integrating into argument; (4) Ignoring authorial intent — treating texts as if events 'just happen'; (5) Section C: identifying techniques without explaining their purpose; (6) Memorised paragraphs that don't address the prompt.",
+        commonMistakes: "(1) Plot summary instead of analysis — examiners' #1 complaint; (2) Generic terms like 'shows' or 'makes the reader feel'; (3) Quoting without integrating into argument; (4) Ignoring authorial intent — treating texts as if events 'just happen'; (5) Section C: identifying techniques without explaining their purpose; (6) Memorised paragraphs that do not address the prompt.",
         topicCoverage: "Section A (Reading & Responding): one set text in detail, exploring authorial views and values. Section B (Creating Texts): four Frameworks of Ideas (Country, Protest, Personal Journeys, Play) + Reflective Commentary + 2026 mentor texts. Section C (Analysing Argument): persuasive techniques, audience positioning, tone, visual elements.",
     },
 
@@ -256,7 +256,7 @@ const PROFILES = {
     "Australian and Global Politics": {
         mathHeavy: false,
         examFormat: "End-of-year exam: 2 hours, structured + essay. SACs Unit 3 (25%) + Unit 4 (25%). Total: SACs 50% / Exam 50%.",
-        markConventions: "Use contemporary case studies (last 5 years). Reference specific actors, treaties, events with dates. Critically evaluate, don't just describe. Use political-science terminology accurately.",
+        markConventions: "Use contemporary case studies (last 5 years). Reference specific actors, treaties, events with dates. Critically evaluate rather than just describing. Use political-science terminology accurately.",
         keyTerms: ["state sovereignty", "soft power", "hard power", "smart power", "national interest", "global actor", "intergovernmental organisation (UN, WTO, ASEAN)", "non-state actor", "transnational", "globalisation", "humanitarian intervention", "responsibility to protect (R2P)", "treaty-based vs customary international law", "realism vs liberalism vs constructivism"],
         examplePromptStyle: "'Analyse the extent to which [Australia/China/USA] has achieved its national interest in [the Indo-Pacific] over the past five years.' 'Discuss the effectiveness of the United Nations in addressing [climate change/conflict]. Refer to specific cases.'",
         commonMistakes: "(1) Outdated case studies (5+ years old); (2) Generalised global actor descriptions; (3) Conflating national interest with foreign policy; (4) Missing actor perspectives; (5) Asserting effectiveness without measurable criteria.",
@@ -329,7 +329,7 @@ const PROFILES = {
 
     "Media": {
         mathHeavy: false,
-        examFormat: "End-of-year exam: 2 hours, written analysis + theory. SAT (production): 30%. Unit 3 SAC (design plan + theory): 30%. Unit 4 SAC: 10%. Total: SAT 30% / SACs 40% / Exam 30%.",
+        examFormat: "End-of-year exam: 2 hours, written analysis + theory. SAT (production): 30%. SACs across Unit 3 (design plan + theory) and Unit 4: 40%. Total: SAT 30% / SACs 40% / Exam 30%.",
         markConventions: "Production must demonstrate technical proficiency and storytelling. Theory questions require specific media examples with media institution and producer named. Use media-specific terminology (mise-en-scène, diegetic sound, montage, narrative structure).",
         keyTerms: ["mise-en-scène", "diegetic vs non-diegetic sound", "montage", "continuity editing", "narrative structure (linear, non-linear, three-act, fabula/syuzhet)", "genre conventions", "audience theory (active, passive)", "ideology", "representation", "regulation", "convergence", "platform", "media institution"],
         examplePromptStyle: "Design plan: clear narrative concept, target audience, distribution platform, production schedule. Exam: 'Analyse how mise-en-scène constructs meaning in a media product you have studied.'",
@@ -480,9 +480,36 @@ export function getLatexRules() {
     return SHARED_LATEX_RULES;
 }
 
+/**
+ * What a STUDENT may read of a subject's profile — and null, never the generic
+ * fallback, when there is no profile.
+ *
+ * Guides prints these, so two fields are deliberately absent. `_default` is
+ * filler written so a prompt always has something; shown to a student under a
+ * subject's name it would be the app inventing that subject's marking. And
+ * `examplePromptStyle` is instructions TO a model ("use phrasing students see
+ * on real exams…"), which reads as nonsense addressed to the wrong person.
+ */
+export function examinerProfile(subjectName) {
+    const key = String(subjectName || "").trim().toLowerCase();
+    if (!key || key === "_default") return null;
+    const name = Object.keys(PROFILES).find(k => k !== "_default" && k.toLowerCase() === key);
+    if (!name) return null;
+    const p = PROFILES[name];
+    return {
+        name,
+        mathHeavy: !!p.mathHeavy,
+        examFormat: p.examFormat || "",
+        markConventions: p.markConventions || "",
+        keyTerms: Array.isArray(p.keyTerms) ? [...p.keyTerms] : [],
+        commonMistakes: p.commonMistakes || "",
+        topicCoverage: p.topicCoverage || "",
+    };
+}
+
 /** All subjects with explicit examiner profiles (for sanity checks/admin). */
 export function getProfiledSubjects() {
     return Object.keys(PROFILES).filter(k => k !== "_default");
 }
 
-export default { getExaminerPrompt, subjectIsMathHeavy, getLatexRules, getProfiledSubjects, COMMAND_TERMS, commandTermRule };
+export default { getExaminerPrompt, subjectIsMathHeavy, getLatexRules, getProfiledSubjects, examinerProfile, COMMAND_TERMS, commandTermRule };

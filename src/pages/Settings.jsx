@@ -64,6 +64,10 @@ const accountTables = (email) => [
     { label: "Assessments",        read: () => base44.entities.SubjectAssessment.filter({ created_by: email }),     remove: (r) => base44.entities.SubjectAssessment.delete(r.id) },
     { label: "Subjects",           read: () => base44.entities.UserSubject.filter({ created_by: email }),           remove: (r) => base44.entities.UserSubject.delete(r.id) },
     { label: "Study plans",        read: () => base44.entities.StudyPlan.filter({ created_by: email }),             remove: (r) => base44.entities.StudyPlan.delete(r.id) },
+    // Posts from when /Guides was student-written. Nothing reads them any
+    // more, and migration 0044 leaves the author able to read and delete
+    // their own, which is exactly what this needs.
+    { label: "Study guides",       read: () => base44.entities.StudyGuide.filter({ created_by: email }),            remove: (r) => base44.entities.StudyGuide.delete(r.id) },
     { label: "Saved AI results",   read: () => base44.entities.AISavedResult.filter({ created_by: email }),         remove: (r) => deleteResult("ai_saved_results", r.id) },
     { label: "Friends",            read: () => base44.entities.Friendship.filter({ requester_email: email }),       remove: (r) => base44.entities.Friendship.delete(r.id) },
     { label: "Friends",            read: () => base44.entities.Friendship.filter({ recipient_email: email }),       remove: (r) => base44.entities.Friendship.delete(r.id) },

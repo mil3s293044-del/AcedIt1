@@ -1,508 +1,264 @@
-import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+/**
+ * Guides — how every subject is marked, and why each technique works.
+ *
+ * This page used to be posts. Any student could write one, any student could
+ * read all of them, and the author ticked their own "featured" box — free
+ * text between students on a product sold to schools, with nothing checking a
+ * word of it. Every guide here is BUILT from what the app already knows
+ * (`src/lib/guides.js`): the examiner notes the marker works from, VCAA's mark
+ * split, and the cited science behind each technique. Nothing on it was
+ * written by a student, and the old posts are no longer read at all.
+ *
+ * Two screens on one route, chosen by the query string the way SubjectHub's
+ * is: the LIBRARY, and one guide (`?subject=`, `?technique=`, `?ref=`). The
+ * subject guide is the same component the subject's hub draws, so the two
+ * cannot word a convention differently.
+ */
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Search, X } from "lucide-react";
 import { base44 } from "@/api/base44Client";
-import { BookOpen, Search, Filter, X, Star, Sparkles, GraduationCap, Brain, Target, Heart, Plus, Save } from "lucide-react";
-import { useToast } from "@/components/ui/use-toast";
-import GuideReader from "../components/guides/GuideReader";
-import GuideCard from "../components/guides/GuideCard";
-import AceShuffle from "@/components/ace/AceShuffle";
+import { createPageUrl } from "@/utils";
+import { colorFor } from "@/components/cards/cardIdentity";
+import Band from "@/components/shared/Band";
+import SubjectGuide, { GuideDoors } from "@/components/guides/SubjectGuide";
+import NeuroPanel from "@/components/study/NeuroPanel";
+import { guideLibrary, guideFromQuery, searchAreas, subjectLine, subjectLead } from "@/lib/guides";
+import { areaLabel } from "@/lib/subjectBrowse";
+
+/* The colour each technique already wears on the Study page, so a technique
+   is one colour across the app. Static classes: JIT cannot see a built one. */
+const TECHNIQUE_TONE = {
+    pomodoro: { spine: "bg-primary", text: "text-primary" },
+    spaced_repetition: { spine: "bg-chart-3", text: "text-chart-3" },
+    active_recall: { spine: "bg-chart-4", text: "text-chart-4" },
+    blurting: { spine: "bg-xp", text: "text-xp" },
+    exam: { spine: "bg-streak", text: "text-streak" },
+    mind_map: { spine: "bg-map", text: "text-map" },
+};
+const UTILITY_PILL = {
+    high: "bg-primary/15 text-primary",
+    moderate: "bg-xp/15 text-xp",
+    low: "bg-streak/15 text-streak",
+};
+
+const enter = (reduce, i = 0) => (reduce ? {} : {
+    initial: { opacity: 0, y: 8 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.3, delay: Math.min(0.3, i * 0.03) },
+});
+
+/** A guide on the shelf. The whole row is the link, so it is a card. */
+function GuideRow({ to, spine, spineStyle, title, line, aside, i = 0 }) {
+    const reduce = useReducedMotion();
+    return (
+        <motion.li {...enter(reduce, i)}>
+            <Link to={to}
+                className="group relative flex items-center gap-3 rounded-2xl bg-surface border border-border on-table
+                    pl-5 pr-3 py-3 min-h-[3.75rem] overflow-hidden hover:border-foreground/20 transition-colors">
+                <span aria-hidden className={`absolute inset-y-0 left-0 w-1.5 ${spine || ""}`} style={spineStyle} />
+                <span className="min-w-0 flex-1">
+                    <span className="block font-bold text-foreground leading-snug">{title}</span>
+                    {line && <span className="block text-xs text-muted-foreground mt-0.5 leading-snug">{line}</span>}
+                </span>
+                {aside}
+                <ArrowRight className="w-4 h-4 text-muted-foreground flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
+        </motion.li>
+    );
+}
+
+function Library({ library }) {
+    const [query, setQuery] = useState("");
+    const areas = useMemo(() => searchAreas(library.areas, query), [library.areas, query]);
+    return (
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-8 lg:space-y-10">
+            <header className="max-w-2xl">
+                <p className="stat-label text-chart-3 mb-1.5">Guides</p>
+                <h1 className="font-display text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+                    How it&apos;s marked, and why it works
+                </h1>
+                <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                    Every subject&apos;s marking, from the same notes the app&apos;s marker works from, and the
+                    research behind each technique with its sources named. None of it is written by other students.
+                </p>
+            </header>
+
+            {library.mine.length > 0 && (
+                <Band title="Your subjects" count={library.mine.length}>
+                    <ul className="grid gap-2 sm:grid-cols-2" data-guides="mine">
+                        {library.mine.map((g, i) => (
+                            <GuideRow key={g.key} i={i} to={g.href} title={g.name} line={subjectLine(g)}
+                                spineStyle={{ background: colorFor(g.name) }} />
+                        ))}
+                    </ul>
+                </Band>
+            )}
+
+            <Band title="Techniques">
+                <ul className="grid gap-2 sm:grid-cols-2" data-guides="techniques">
+                    {library.techniques.map((t, i) => (
+                        <GuideRow key={t.key} i={i} to={t.href} title={t.name} line={t.headline}
+                            spine={TECHNIQUE_TONE[t.id]?.spine || "bg-border"}
+                            aside={t.utility && (
+                                <span className={`pill text-[10px] flex-shrink-0 hidden sm:inline-flex ${UTILITY_PILL[t.utility.id] || UTILITY_PILL.high}`}>
+                                    {t.utility.label}
+                                </span>
+                            )} />
+                    ))}
+                </ul>
+            </Band>
+
+            <Band title="Reading a question">
+                <ul className="grid gap-2 sm:grid-cols-2" data-guides="reference">
+                    {library.reference.map((r) => (
+                        <GuideRow key={r.key} to={r.href} title={r.name} line={r.headline} spine="bg-chart-3" />
+                    ))}
+                </ul>
+            </Band>
+
+            <Band title="Every subject" count={library.count}
+                aside={(
+                    <label className="relative w-40 sm:w-56 flex-shrink-0">
+                        <Search className="w-4 h-4 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2" aria-hidden />
+                        <input value={query} onChange={(e) => setQuery(e.target.value)}
+                            placeholder="Find a subject" aria-label="Find a subject"
+                            className="w-full h-9 rounded-full border border-border bg-surface pl-8 pr-8 text-sm text-foreground
+                                placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40" />
+                        {query && (
+                            <button type="button" onClick={() => setQuery("")} aria-label="Clear"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                                <X className="w-4 h-4" />
+                            </button>
+                        )}
+                    </label>
+                )}>
+                {areas.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No subject matches &ldquo;{query}&rdquo;.</p>
+                ) : (
+                    <div className="space-y-6" data-guides="all">
+                        {areas.map((a) => (
+                            <div key={a.key}>
+                                <p className="text-[11px] font-extrabold uppercase tracking-wider text-muted-foreground mb-2">{a.label}</p>
+                                <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                    {a.guides.map((g) => (
+                                        <GuideRow key={g.key} to={g.href} title={g.name} line={subjectLine(g)}
+                                            spineStyle={{ background: colorFor(g.name) }} />
+                                    ))}
+                                </ul>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </Band>
+        </div>
+    );
+}
+
+/** The top of every guide: the way back, what kind of guide, its name. */
+function GuideHead({ eyebrow, title, lead, spineStyle, spine, aside }) {
+    return (
+        <header className="space-y-4">
+            <Link to={createPageUrl("Guides")}
+                className="inline-flex items-center gap-1.5 text-sm font-bold text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="w-4 h-4" /> All guides
+            </Link>
+            <div className="flex items-start gap-4">
+                <span aria-hidden className={`w-1.5 self-stretch rounded-full flex-shrink-0 ${spine || ""}`} style={spineStyle} />
+                <div className="min-w-0 flex-1">
+                    <p className="stat-label text-muted-foreground mb-1.5">{eyebrow}</p>
+                    <h1 className="font-display text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1] break-words">
+                        {title}
+                    </h1>
+                    {lead && <p className="text-base text-muted-foreground mt-2 leading-relaxed max-w-2xl">{lead}</p>}
+                    {aside && <div className="mt-3">{aside}</div>}
+                </div>
+            </div>
+        </header>
+    );
+}
+
+function SubjectPage({ guide }) {
+    const hex = colorFor(guide.name);
+    return (
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-8 lg:space-y-10">
+            <GuideHead eyebrow={`${areaLabel(guide.area)} · how it's marked`} title={guide.name}
+                lead={subjectLead(guide) || null} spineStyle={{ background: hex }} />
+            <SubjectGuide guide={guide} place="page" hex={hex} />
+        </div>
+    );
+}
+
+function TechniquePage({ guide }) {
+    const tone = TECHNIQUE_TONE[guide.id] || {};
+    return (
+        <div className="max-w-5xl mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-8">
+            <GuideHead eyebrow="Technique" title={guide.name} lead={guide.headline} spine={tone.spine || "bg-border"}
+                aside={<GuideDoors doors={guide.doors} />} />
+            {/* The same panel Study draws beside the technique, as the body of
+                the page: the science is written down once. */}
+            <NeuroPanel techniqueId={guide.id} techniqueName={guide.name} layout="page" />
+        </div>
+    );
+}
+
+function TermsPage({ guide }) {
+    return (
+        <div className="max-w-3xl mx-auto px-4 lg:px-8 py-6 lg:py-8 space-y-8">
+            <GuideHead eyebrow="Reading a question" title={guide.name} lead={guide.headline} spine="bg-chart-3" />
+            <Band title="What each one asks for" count={guide.terms.length}>
+                <dl className="divide-y divide-border border-y border-border" data-guide-terms>
+                    {guide.terms.map((t) => (
+                        <div key={t.id} className="grid grid-cols-[7rem_minmax(0,1fr)] sm:grid-cols-[9rem_minmax(0,1fr)] gap-3 py-2.5">
+                            <dt className="font-display font-extrabold text-foreground">{t.term}</dt>
+                            <dd className="text-[14px] text-foreground leading-relaxed">
+                                {t.behaviour.charAt(0).toUpperCase() + t.behaviour.slice(1)}
+                            </dd>
+                        </div>
+                    ))}
+                </dl>
+            </Band>
+            <div className="space-y-3">
+                <p className="font-display font-extrabold text-foreground text-lg lg:text-xl">Try it</p>
+                <GuideDoors doors={guide.doors} />
+            </div>
+        </div>
+    );
+}
 
 export default function Guides() {
-    const [guides, setGuides] = useState([]);
-    const [filteredGuides, setFilteredGuides] = useState([]);
-    const [selectedGuide, setSelectedGuide] = useState(null);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("all");
-    const [difficultyFilter, setDifficultyFilter] = useState("all");
-    const [isLoading, setIsLoading] = useState(true);
-    const [isCreatingGuide, setIsCreatingGuide] = useState(false);
-    const [newGuide, setNewGuide] = useState({
-        title: "",
-        category: "study_techniques",
-        subject: "",
-        content: "",
-        difficulty_level: "beginner",
-        estimated_read_time: 5,
-        tags: [],
-        is_featured: false,
-        key_points: []
-    });
-    const [tagInput, setTagInput] = useState("");
-    const [keyPointInput, setKeyPointInput] = useState("");
-    const { toast } = useToast();
+    const location = useLocation();
+    const [mySubjects, setMySubjects] = useState([]);
 
     useEffect(() => {
-        loadGuides();
+        let cancelled = false;
+        (async () => {
+            try {
+                const user = await base44.auth.me();
+                const rows = await base44.entities.UserSubject.filter({ created_by: user.email, is_active: true });
+                if (!cancelled) setMySubjects((rows || []).map((r) => r.subject_name).filter(Boolean));
+            } catch (e) {
+                // The library still works without them: it is every subject.
+                console.error("[Guides] subjects:", e);
+            }
+        })();
+        return () => { cancelled = true; };
     }, []);
 
-    useEffect(() => {
-        filterGuides();
-    }, [guides, searchQuery, categoryFilter, difficultyFilter]);
+    const guide = useMemo(() => guideFromQuery(location.search), [location.search]);
+    const library = useMemo(() => guideLibrary({ mySubjects }), [mySubjects]);
 
-    const loadGuides = async () => {
-        setIsLoading(true);
-        try {
-            const allGuides = await base44.entities.StudyGuide.list();
-            setGuides(allGuides || []);
-        } catch (error) {
-            console.error("Error loading guides:", error);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const filterGuides = () => {
-        let filtered = [...guides];
-
-        if (searchQuery) {
-            filtered = filtered.filter(guide =>
-                guide.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                guide.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-            );
-        }
-
-        if (categoryFilter !== "all") {
-            filtered = filtered.filter(guide => guide.category === categoryFilter);
-        }
-
-        if (difficultyFilter !== "all") {
-            filtered = filtered.filter(guide => guide.difficulty_level === difficultyFilter);
-        }
-
-        setFilteredGuides(filtered);
-    };
-
-    const handleCreateGuide = async () => {
-        if (!newGuide.title || !newGuide.content) {
-            toast({ title: "Missing fields", description: "Title and content are required.", variant: "destructive" });
-            return;
-        }
-
-        try {
-            await base44.entities.StudyGuide.create(newGuide);
-            toast({ title: "Guide created!", description: "Your study guide has been published." });
-            setIsCreatingGuide(false);
-            setNewGuide({
-                title: "",
-                category: "study_techniques",
-                subject: "",
-                content: "",
-                difficulty_level: "beginner",
-                estimated_read_time: 5,
-                tags: [],
-                is_featured: false,
-                key_points: []
-            });
-            setTagInput("");
-            setKeyPointInput("");
-            loadGuides();
-        } catch (error) {
-            console.error("Error creating guide:", error);
-            toast({ title: "Creation failed", description: "Could not create the guide.", variant: "destructive" });
-        }
-    };
-
-    const handleAddTag = () => {
-        if (tagInput.trim() && !newGuide.tags.includes(tagInput.trim())) {
-            setNewGuide({ ...newGuide, tags: [...newGuide.tags, tagInput.trim()] });
-            setTagInput("");
-        }
-    };
-
-    const handleRemoveTag = (tag) => {
-        setNewGuide({ ...newGuide, tags: newGuide.tags.filter(t => t !== tag) });
-    };
-
-    const handleAddKeyPoint = () => {
-        if (keyPointInput.trim() && !newGuide.key_points.includes(keyPointInput.trim())) {
-            setNewGuide({ ...newGuide, key_points: [...newGuide.key_points, keyPointInput.trim()] });
-            setKeyPointInput("");
-        }
-    };
-
-    const handleRemoveKeyPoint = (point) => {
-        setNewGuide({ ...newGuide, key_points: newGuide.key_points.filter(p => p !== point) });
-    };
-
-    const categories = [
-        { value: "all", label: "All Categories", icon: BookOpen, color: "text-purple-600" },
-        { value: "vce_system", label: "VCE System", icon: GraduationCap, color: "text-blue-600" },
-        { value: "study_techniques", label: "Study Techniques", icon: Brain, color: "text-green-600" },
-        { value: "subject_specific", label: "Subject Specific", icon: BookOpen, color: "text-orange-600" },
-        { value: "exam_prep", label: "Exam Preparation", icon: Target, color: "text-red-600" },
-        { value: "wellbeing", label: "Wellbeing", icon: Heart, color: "text-pink-600" }
-    ];
-
-    const featuredGuides = filteredGuides.filter(g => g.is_featured);
-    const regularGuides = filteredGuides.filter(g => !g.is_featured);
-
-    if (selectedGuide) {
-        return (
-            <div className="p-4 lg:p-8">
-                <GuideReader
-                    guide={selectedGuide}
-                    onClose={() => {
-                        setSelectedGuide(null);
-                        loadGuides();
-                    }}
-                />
-            </div>
-        );
-    }
+    // A guide opened from a link lands at its top, not wherever the library
+    // had been scrolled to.
+    useEffect(() => { window.scrollTo({ top: 0 }); }, [location.search]);
 
     return (
-        <div className="p-4 lg:p-8 min-h-screen">
-            <div className="max-w-7xl mx-auto">
-                <motion.div
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-center mb-12"
-                >
-                    <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-3xl shadow-2xl mb-6">
-                        <BookOpen className="w-10 h-10 text-white" />
-                    </div>
-                    <h1 className="text-4xl lg:text-5xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-4">
-                        Study Guides
-                    </h1>
-                    <p className="text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
-                        Comprehensive guides to help you master your VCE journey, from study techniques to exam strategies.
-                    </p>
-                </motion.div>
-
-                {/* Filters and Create Button */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="mb-8"
-                >
-                    <Card className="shadow-xl border-2 border-purple-100">
-                        <CardContent className="p-6">
-                            <div className="flex flex-col lg:flex-row gap-4 mb-4">
-                                <div className="flex-1 relative">
-                                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground/60 w-5 h-5" />
-                                    <Input
-                                        placeholder="Search guides by title or tags..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="pl-10 border-2 h-11"
-                                    />
-                                    {searchQuery && (
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            onClick={() => setSearchQuery("")}
-                                            className="absolute right-1 top-1/2 transform -translate-y-1/2"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </Button>
-                                    )}
-                                </div>
-                                <Button
-                                    onClick={() => setIsCreatingGuide(true)}
-                                    className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
-                                >
-                                    <Plus className="w-4 h-4 mr-2" />
-                                    Create Guide
-                                </Button>
-                            </div>
-                            <div className="flex gap-3">
-                                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                                    <SelectTrigger className="w-48 border-2">
-                                        <Filter className="w-4 h-4 mr-2" />
-                                        <SelectValue placeholder="Category" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {categories.map(cat => {
-                                            const Icon = cat.icon;
-                                            return (
-                                                <SelectItem key={cat.value} value={cat.value}>
-                                                    <div className="flex items-center gap-2">
-                                                        <Icon className={`w-4 h-4 ${cat.color}`} />
-                                                        {cat.label}
-                                                    </div>
-                                                </SelectItem>
-                                            );
-                                        })}
-                                    </SelectContent>
-                                </Select>
-                                <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
-                                    <SelectTrigger className="w-40 border-2">
-                                        <SelectValue placeholder="Difficulty" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Levels</SelectItem>
-                                        <SelectItem value="beginner">Beginner</SelectItem>
-                                        <SelectItem value="intermediate">Intermediate</SelectItem>
-                                        <SelectItem value="advanced">Advanced</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            {(searchQuery || categoryFilter !== "all" || difficultyFilter !== "all") && (
-                                <div className="mt-4 flex items-center gap-2">
-                                    <span className="text-sm text-muted-foreground">Active filters:</span>
-                                    {searchQuery && (
-                                        <Badge variant="secondary" className="bg-purple-100 text-purple-800">
-                                            Search: "{searchQuery}"
-                                        </Badge>
-                                    )}
-                                    {categoryFilter !== "all" && (
-                                        <Badge variant="secondary" className="bg-purple-100 text-purple-800">
-                                            {categories.find(c => c.value === categoryFilter)?.label}
-                                        </Badge>
-                                    )}
-                                    {difficultyFilter !== "all" && (
-                                        <Badge variant="secondary" className="bg-purple-100 text-purple-800">
-                                            {difficultyFilter}
-                                        </Badge>
-                                    )}
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                            setSearchQuery("");
-                                            setCategoryFilter("all");
-                                            setDifficultyFilter("all");
-                                        }}
-                                        className="ml-auto text-purple-600 hover:text-purple-700"
-                                    >
-                                        Clear all
-                                    </Button>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                </motion.div>
-
-                {/* Featured Guides */}
-                {featuredGuides.length > 0 && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                        className="mb-12"
-                    >
-                        <div className="flex items-center gap-3 mb-6">
-                            <div className="w-10 h-10 bg-gradient-to-br from-yellow-400 to-orange-500 rounded-xl flex items-center justify-center shadow-lg">
-                                <Star className="w-5 h-5 text-white" />
-                            </div>
-                            <h2 className="text-2xl font-bold text-foreground">Featured Guides</h2>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {featuredGuides.map((guide, index) => (
-                                <motion.div
-                                    key={guide.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: 0.3 + index * 0.1 }}
-                                >
-                                    <GuideCard
-                                        guide={guide}
-                                        onSelect={setSelectedGuide}
-                                        isFeatured={true}
-                                    />
-                                </motion.div>
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
-
-                {/* All Guides */}
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.3 }}
-                >
-                    <div className="flex items-center gap-3 mb-6">
-                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                            <Sparkles className="w-5 h-5 text-white" />
-                        </div>
-                        <h2 className="text-2xl font-bold text-foreground">All Guides</h2>
-                        <Badge variant="secondary" className="ml-auto bg-purple-100 text-purple-800">
-                            {filteredGuides.length} guide{filteredGuides.length !== 1 ? 's' : ''}
-                        </Badge>
-                    </div>
-
-                    {isLoading ? (
-                        <div className="text-center py-12">
-                            <AceShuffle size="lg" className="mb-4 mx-auto" />
-                            <p className="text-muted-foreground">Loading guides...</p>
-                        </div>
-                    ) : filteredGuides.length === 0 ? (
-                        <Card className="shadow-xl">
-                            <CardContent className="p-12 text-center">
-                                <BookOpen className="w-16 h-16 text-muted-foreground/40 mx-auto mb-4" />
-                                <h3 className="text-xl font-semibold text-foreground mb-2">No guides found</h3>
-                                <p className="text-muted-foreground">Try adjusting your filters or search query.</p>
-                            </CardContent>
-                        </Card>
-                    ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {regularGuides.map((guide, index) => (
-                                <motion.div
-                                    key={guide.id}
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    transition={{ delay: 0.4 + index * 0.05 }}
-                                >
-                                    <GuideCard
-                                        guide={guide}
-                                        onSelect={setSelectedGuide}
-                                    />
-                                </motion.div>
-                            ))}
-                        </div>
-                    )}
-                </motion.div>
-
-                {/* Create Guide Dialog */}
-                <Dialog open={isCreatingGuide} onOpenChange={setIsCreatingGuide}>
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle>Create New Study Guide</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            <div>
-                                <label className="text-sm font-medium block mb-2">Title</label>
-                                <Input
-                                    value={newGuide.title}
-                                    onChange={(e) => setNewGuide({ ...newGuide, title: e.target.value })}
-                                    placeholder="e.g., Mastering Pomodoro Technique"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-sm font-medium block mb-2">Category</label>
-                                    <Select
-                                        value={newGuide.category}
-                                        onValueChange={(value) => setNewGuide({ ...newGuide, category: value })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="vce_system">VCE System</SelectItem>
-                                            <SelectItem value="study_techniques">Study Techniques</SelectItem>
-                                            <SelectItem value="subject_specific">Subject Specific</SelectItem>
-                                            <SelectItem value="exam_prep">Exam Preparation</SelectItem>
-                                            <SelectItem value="wellbeing">Wellbeing</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div>
-                                    <label className="text-sm font-medium block mb-2">Difficulty</label>
-                                    <Select
-                                        value={newGuide.difficulty_level}
-                                        onValueChange={(value) => setNewGuide({ ...newGuide, difficulty_level: value })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="beginner">Beginner</SelectItem>
-                                            <SelectItem value="intermediate">Intermediate</SelectItem>
-                                            <SelectItem value="advanced">Advanced</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-sm font-medium block mb-2">Subject (optional)</label>
-                                <Input
-                                    value={newGuide.subject}
-                                    onChange={(e) => setNewGuide({ ...newGuide, subject: e.target.value })}
-                                    placeholder="e.g., Biology, Chemistry"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-sm font-medium block mb-2">Content (Markdown supported)</label>
-                                <Textarea
-                                    value={newGuide.content}
-                                    onChange={(e) => setNewGuide({ ...newGuide, content: e.target.value })}
-                                    rows={10}
-                                    placeholder="Write your guide content here..."
-                                    className="font-mono text-sm"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="text-sm font-medium block mb-2">Key Points</label>
-                                <div className="flex gap-2 mb-2">
-                                    <Input
-                                        value={keyPointInput}
-                                        onChange={(e) => setKeyPointInput(e.target.value)}
-                                        placeholder="Add a key takeaway..."
-                                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddKeyPoint())}
-                                    />
-                                    <Button onClick={handleAddKeyPoint} type="button">
-                                        <Plus className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    {newGuide.key_points.map((point, idx) => (
-                                        <Badge key={idx} variant="secondary" className="gap-1">
-                                            {point}
-                                            <X className="w-3 h-3 cursor-pointer" onClick={() => handleRemoveKeyPoint(point)} />
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-sm font-medium block mb-2">Tags</label>
-                                <div className="flex gap-2 mb-2">
-                                    <Input
-                                        value={tagInput}
-                                        onChange={(e) => setTagInput(e.target.value)}
-                                        placeholder="Add a tag..."
-                                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
-                                    />
-                                    <Button onClick={handleAddTag} type="button">
-                                        <Plus className="w-4 h-4" />
-                                    </Button>
-                                </div>
-                                <div className="flex flex-wrap gap-2">
-                                    {newGuide.tags.map((tag, idx) => (
-                                        <Badge key={idx} variant="secondary" className="gap-1">
-                                            {tag}
-                                            <X className="w-3 h-3 cursor-pointer" onClick={() => handleRemoveTag(tag)} />
-                                        </Badge>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-sm font-medium block mb-2">Read Time (minutes)</label>
-                                <Input
-                                    type="number"
-                                    value={newGuide.estimated_read_time}
-                                    onChange={(e) => setNewGuide({ ...newGuide, estimated_read_time: parseInt(e.target.value) })}
-                                    min="1"
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setIsCreatingGuide(false)}>
-                                Cancel
-                            </Button>
-                            <Button onClick={handleCreateGuide} className="bg-gradient-to-r from-green-600 to-emerald-600">
-                                <Save className="w-4 h-4 mr-2" />
-                                Create Guide
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
-            </div>
+        <div className="min-h-screen bg-background">
+            {!guide ? <Library library={library} />
+                : guide.kind === "subject" ? <SubjectPage guide={guide} />
+                    : guide.kind === "technique" ? <TechniquePage guide={guide} />
+                        : <TermsPage guide={guide} />}
         </div>
     );
 }

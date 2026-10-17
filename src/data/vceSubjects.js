@@ -48,7 +48,7 @@ export const VCE_SUBJECTS = [
         study_tips: [
             "Master the basics before SACs — gaps compound fast in this subject.",
             "Do every exam past paper from the last 5 years before exams.",
-            "Tech-free practice is what wins Exam 1 — don't lean on the CAS.",
+            "Tech-free practice is what wins Exam 1, so practise it without the CAS.",
         ],
     }),
     make({
@@ -73,7 +73,7 @@ export const VCE_SUBJECTS = [
         career_pathways: ["Engineering", "Mathematics", "Theoretical Physics", "Quantitative Finance"],
         study_tips: [
             "You can't bluff this one — consistent practice is the only way.",
-            "Treat it as 60% Methods + 40% new content. Don't fall behind in Methods.",
+            "Treat it as 60% Methods + 40% new content, and keep your Methods up to date.",
         ],
     }),
     make({
@@ -296,7 +296,7 @@ export const VCE_SUBJECTS = [
         career_pathways: ["Psychology", "Counselling", "Speech Pathology", "Marketing", "HR"],
         study_tips: [
             "Build dot-point summaries by area of study. The exam tests precise recall.",
-            "Don't memorise studies blindly — understand what they show and reference precisely.",
+            "Understand what each study shows rather than memorising it, and reference it precisely.",
         ],
     }),
     make({
