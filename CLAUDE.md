@@ -7928,6 +7928,127 @@ that no unmount could remove. To check motion, sample `data-ace-pose` over
 time rather than judging one frame. The harness's TIMELINE probe does that,
 and found nothing a screenshot could have.
 
+## Every leaderboard is one card tournament
+
+**"Rework all the leaderboards. They need to feel calm, aesthetic, with cool
+animations, utterly premium."** There were three boards and they disagreed
+about nearly everything that is not a number. Ranked's podium was three tinted
+cards; the League's was three coloured blocks; the study-group week had none.
+Ranked measured gaps against the upper median of every gap, ties included; the
+League used the true median of the real gaps, floored at one. That is three
+answers to "how far apart are these people" on three screens a student moves
+between in one sitting.
+
+There is one kit now. `src/components/boards/` is the drawing and
+`src/lib/boardKit.js` is the arithmetic. Ranked (Board and All time, every
+scope), the League and the group week all deal the same table.
+
+### The top three are dealt, and the Ace lands last
+
+`CardPodium` is the signup deal's felt, held still (`felt-still`). First holds
+the Ace of spades, second the King, third the Queen. They are real
+`PlayingCard`s with real faces, on white stock in both themes, because an Ace
+is always earned and this is the one place a student sees somebody else
+holding it.
+
+On arrival the plinths come up out of the table and each card is dealt face
+down. The back is the student's own if they bought one. The cards turn over
+third, second, first, then the medallion and the figure arrive and the figure
+counts up. After that the table holds still, except for one pass of light
+across the Ace every nine seconds. `DEAL` holds the timings and the test holds
+their order.
+
+**A CHANGE IS NOT A RE-DEAL.** If a scope switch puts somebody new in second,
+their medallion flies up from the row it was on (a shared `layoutId`). That
+flight is the change.
+
+**THE MEDALLION SITS ACROSS THE CARD'S EDGE, NOT ON ITS FACE.** There are two
+reasons and both are about the flight. A card face is `overflow-hidden`, so it
+would clip the medallion landing on it. A face is also hidden while it turns,
+so a medallion on it would fly invisibly. For the same reason nothing on the
+path clips: not the felt, and not the ledger. The plinths stand on a rail
+inside the felt's padding, so its rounded corners cannot cut a step off.
+
+### Rows race, keyed by the person
+
+`LedgerRow` is the shared row. It has fixed lanes for the place, the movement,
+the avatar, the name and the figure, and it carries `layout="position"`. It is
+keyed by the PERSON, never the place. So when the board under it changes, a
+student who was 6th and is now 3rd SLIDES there rather than a different name
+appearing in the slot.
+
+Leaving rows use `AnimatePresence mode="popLayout"`, so the rows that stay start
+racing at once. In default mode a leaving row held its place through its own
+exit and the race started a beat late.
+
+**AND popLayout REPLACES A CHILD'S `ref`.** It clones every child with a ref of
+its own. The ref the dock observed your row through was silently swapped out,
+so nothing would have followed you. Boards pass `rowRef` instead and
+`LedgerRow` merges the two. The test refuses a `ref=` on a `LedgerRow`.
+
+### Gaps, on one scale
+
+The scale is twice the median of the REAL gaps (`gapScale`). Ties are left out,
+because the ATAR steps in 0.05s. On a board with a lot of ties, counting them
+dragged the median toward nothing and drew every real gap as full. That is the
+League's old answer, now Ranked's too.
+
+`gapsOf` and `countFrame` each tripped on `Number(null) === 0` on their first
+test run. A missing figure drew as a whole score behind, and a null target
+counted to zero. This is the trap's twelfth module.
+
+### Live numbers: count on change, print on a new quantity
+
+`LiveFigure` counts from the old value to the new one when a live refresh
+moves somebody's figure. An increase flashes the brand green for a moment. A
+decrease is printed and left alone: a board that turns a number red because
+somebody else studied is editorialising.
+
+Switching XP to study time is a new QUANTITY, not a change in anybody's figure,
+so it is printed rather than counted across. Only the podium counts in on
+arrival. Thirty rows all counting from zero is a slot machine.
+
+### Your row follows you
+
+`MyRowDock` covers the case where your row leaves the screen. It holds on at
+the edge the row left by: the TOP if you scrolled past it, the BOTTOM if you
+opened a long board from the podium. The arrow points at the real row, and a
+tap scrolls back and pulses the row.
+
+**THE OBSERVER ONLY REPORTS A CROSSING.** A jump or a fling can carry the row
+from below the screen to above it with no frame in which it was visible, so the
+dock stayed at the bottom pointing down at a row that was now above. While the
+row is off screen, the dock reads its edge on scroll.
+
+**THE BOTTOM DOCK STOPS SHORT OF ACE'S CORNER.** His launcher is
+`fixed right-4 bottom-24` on a phone. A full-width dock drew straight over him,
+and the old pinned bar had always done so. The test measures the launcher's
+footprint against the dock's offsets at each breakpoint. Hiding him while
+somebody is scrolled past their own row would switch the mascot off for
+reading a leaderboard. On a phone the dock drops its movement chip, which is on
+the row anyway, so its label is not truncated.
+
+### Where each board puts it
+
+- **The League** podium carries the payout on each step (crest, credits, XP,
+  all from `grantForLeague`). The ledger now starts at fourth
+  (`WeeklyBoard from=`), so the top three are no longer drawn twice. The
+  payline is the ledger's top edge. One `LayoutGroup` wraps the table and the
+  ledger in League.jsx, or the two never share an id.
+- **The group week** deals a small table once four people have started. With
+  three, three places is everybody. It drops the movement lane, because a
+  group has no snapshot.
+
+### What was verified
+
+34 injections were run against a green baseline, checking both the exit code
+and the FAIL output, and every one bit. The real /Ranked and /League were drawn
+against network fixtures in both themes and at 390. The reveal, the race, the
+dock at both edges and the live count were sampled over time.
+`scripts/_floorProbe.jsx` has `?v=board` (with a "Simulate a live refresh"
+button and a Friends scope that really filters), `?v=league` and
+`?v=groupweek`.
+
 ## Premium codes (the Year 10 program)
 
 A student taps "Have a code?" on /Subscription, types their name and a code,
@@ -8184,6 +8305,12 @@ student looking free in the nav, the planner and the companion.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
+- `src/lib/boardKit.js` + `boardKit.test.mjs`, `src/components/boards/`
+  (`CardPodium`, `LedgerRow`, `MyRowDock`, `LiveFigure`, `MoveChip`,
+  `BoardAvatar`, `useArrival`): every leaderboard's one table. The top three
+  are dealt as Ace, King and Queen; rows race keyed by person; gaps share one
+  scale; your row docks at the edge it left by. Ranked, the League and the
+  group week all draw through it
 - `src/lib/aceSpot.js` + `aceSpot.test.mjs`, `src/components/ace/AceSpot.jsx`:
   every PLACED Ace (not the floating one). He arrives, does the pose asked
   for, settles where his fidgets can reach him, and reacts to events the page

@@ -7,19 +7,23 @@
  * ONE scale across the board — the same call RankedBoard made, and for the
  * same reason: before it, the only gap anybody could see was their own.
  *
- * The scale is the MEDIAN gap doubled, not the largest. One student sitting
- * 400 points clear would otherwise set the scale for everybody and every gap
- * people could actually close would draw as two invisible pixels. Past twice
- * the median the bar simply fills and the row is "far"; the number is printed
- * beside it either way.
+ * The scale is the MEDIAN gap doubled, not the largest (`gapScale`, the one
+ * Ranked draws by too). One student sitting 400 points clear would otherwise
+ * set the scale for everybody and every gap people could actually close would
+ * draw as two invisible pixels. Past twice the median the bar simply fills
+ * and the row is "far"; the number is printed beside it either way.
  *
  * ─── THE PAYLINE IS DRAWN, because it is the only edge on the board ────────
- * Three places pay and the other twenty-seven do not, and in a plain ranked
- * list that boundary is invisible — 3rd and 4th are two adjacent rows. A rule
- * across the board with what is on the other side of it named is what turns
+ * Three places pay and the other twenty-seven do not. The top three are on the
+ * table above (`Podium`), so this ledger starts at fourth, and the rule across
+ * its top edge names what is on the other side of it — which is what turns
  * "I'm 4th" into something worth one more session on a Thursday. It is drawn
- * only when there is somebody below it: a line under the last row claims a
- * cut-off that does not exist.
+ * only when there is somebody below it: a line over an empty ledger claims a
+ * cut-off that does not exist. On a board too small for a podium the ledger
+ * holds everybody and there is no line at all.
+ *
+ * Rows, the race to new places and your row following you are the shared kit
+ * (`src/components/boards/`), the same three things Ranked draws with.
  *
  * ─── Your row and its neighbours carry a rail ───────────────────────────────
  * Those three rows are the race you are in. Side-specific border utilities and
@@ -28,37 +32,28 @@
  * the child — which is how the first rail on Ranked came out the same grey as
  * the dividers.
  */
-import React, { useMemo } from "react";
-import { motion } from "framer-motion";
-import { Flame, Minus } from "lucide-react";
+import React, { useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Flame } from "lucide-react";
 import Crest from "@/components/shared/Crest";
-import { SLICES, SLICE_MAX, PODIUM } from "@/lib/league";
+import LedgerRow from "@/components/boards/LedgerRow";
+import BoardAvatar from "@/components/boards/BoardAvatar";
+import LiveFigure from "@/components/boards/LiveFigure";
+import MyRowDock, { useDockSide } from "@/components/boards/MyRowDock";
+import useArrival from "@/components/boards/useArrival";
+import { SLICES, SLICE_MAX, PODIUM, ordinal } from "@/lib/league";
+import { gapsOf, gapScale, gapPct, REVEAL_MS } from "@/lib/boardKit";
 
-const median = (xs) => {
-    if (!xs.length) return 0;
-    const s = [...xs].sort((a, b) => a - b);
-    const mid = Math.floor(s.length / 2);
-    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
-};
-
-// ── Only FIRST gets a colour ────────────────────────────────────────────────
-// The first draft gave third place `streak` — which is the app's red, and red
-// here means a lead slipping, a mark dropped, a bet lost. So a podium finish
-// rendered as a warning, in a ring drawn directly beside the word "you". The
-// glyph and the colour have to agree, the same rule ScalingMark exists for.
-// There is no bronze token and inventing one for a single ring is not worth a
-// new colour in the palette, so second and third simply read as top-three.
-const MEDAL = {
-    1: "bg-xp/15 text-xp border-xp/40",
-    2: "bg-secondary text-foreground border-border",
-    3: "bg-secondary text-foreground border-border",
-};
+const plain = (v) => Math.round(Number(v) || 0).toLocaleString();
 
 /** The three slices, so a score is a thing you can act on rather than a total. */
 function Breakdown({ breakdown }) {
     if (!breakdown) return null;
     return (
-        <div className="flex items-center gap-2 mt-2">
+        /* Indented to the name, so the split reads as part of this row rather
+           than as a strip across the board. On a phone it takes the full
+           width, because three labelled slices need it more than the indent. */
+        <div className="flex items-center gap-2 mt-2 sm:pl-[5.875rem]">
             {SLICES.map((s) => {
                 const v = Number(breakdown[s.key]) || 0;
                 const pct = Math.min(100, (v / SLICE_MAX[s.key]) * 100);
@@ -81,18 +76,27 @@ function Breakdown({ breakdown }) {
     );
 }
 
-export default function WeeklyBoard({ rows = [] }) {
+/**
+ * `from` is where the ledger starts: PODIUM when the table above is holding
+ * the top three, 0 when the board is too small to have one.
+ */
+export default function WeeklyBoard({ rows = [], from = 0 }) {
+    const arriving = useArrival(REVEAL_MS);
+    const [flash, setFlash] = useState(0);
     const myPos = rows.find((r) => r.is_me)?.position ?? -1;
 
-    // Gaps to the place above, and the scale they are drawn to.
+    // Gaps to the place above, and the scale they are drawn to — computed over
+    // the WHOLE board, so fourth's bar is its gap to third on the table.
     const { gaps, scale } = useMemo(() => {
-        const g = rows.map((r, i) =>
-            i === 0 ? 0 : Math.max(0, rows[i - 1].compete_score - r.compete_score));
-        const real = g.slice(1).filter((n) => n > 0);
-        // A board where everybody is level has no scale to speak of; 1 keeps
-        // the arithmetic safe and every bar reads as zero, which is true.
-        return { gaps: g, scale: Math.max(1, median(real) * 2) };
+        const g = gapsOf(rows.map((r) => r.compete_score));
+        return { gaps: g, scale: gapScale(g) };
     }, [rows]);
+
+    const shown = rows.slice(from);
+    const meIndex = rows.findIndex((r) => r.is_me);
+    const meRow = meIndex >= from ? rows[meIndex] : null;
+    const myRowRef = useRef(null);
+    const side = useDockSide(myRowRef, `${from}|${rows.length}|${meIndex}`);
 
     if (!rows.length) {
         return (
@@ -103,96 +107,93 @@ export default function WeeklyBoard({ rows = [] }) {
             </div>
         );
     }
+    if (!shown.length) return null;
+
+    const payline = from >= PODIUM;
 
     return (
-        <div className="card-soft overflow-hidden">
-            {rows.map((r, i) => {
-                const near = Math.abs(r.position - myPos) <= 1;
-                const gap = gaps[i];
-                const payline = r.position === PODIUM && rows.length > PODIUM;
-                return (
-                    <React.Fragment key={`${r.position}-${r.display_name}`}>
-                    <div
-                        className={`relative px-4 py-3 ${i > 0 ? "border-t border-border" : ""}
-                            ${r.is_me ? "bg-primary/5" : ""}
-                            ${near ? "border-l-4 border-l-primary" : "border-l-4 border-l-transparent"}`}
-                    >
-                        <div className="flex items-center gap-3">
-                            <span className={`w-8 h-8 flex-shrink-0 rounded-xl border-2 flex items-center justify-center
-                                font-display font-black text-xs tabular-nums
-                                ${MEDAL[r.position] || "bg-secondary text-muted-foreground border-transparent"}`}>
-                                {r.position}
-                            </span>
-
-                            <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                    <span className={`font-bold text-sm truncate
-                                        ${r.is_me ? "text-primary" : "text-foreground"}`}>
-                                        {r.display_name}
-                                    </span>
-                                    {r.is_me && (
-                                        <span className="stat-label text-primary flex-shrink-0">you</span>
-                                    )}
-                                    {/* Last week's finish, worn for one week,
-                                        and otherwise whatever they bought. The
-                                        EARNED mark outranks the bought one: it
-                                        is the one with information in it, and
-                                        the only reward on this board other
-                                        students can see. */}
-                                    {(r.crest || r.crest_skin) && (
-                                        <Crest podium={r.crest} skin={r.crest ? null : r.crest_skin} />
-                                    )}
-                                    {r.streak_days > 0 && (
-                                        <span className="inline-flex items-center gap-0.5 text-[11px] font-bold
-                                            text-streak flex-shrink-0">
-                                            <Flame className="w-3 h-3" />{r.streak_days}
-                                        </span>
-                                    )}
-                                </div>
-
-                                {/* The gap, on the one scale. Row 1 has nothing
-                                    above it, so it gets a dash rather than a
-                                    zero — "0 behind" reads as a tie. */}
-                                <div className="flex items-center gap-2 mt-1">
-                                    <div className="h-1 flex-1 bg-secondary rounded-full overflow-hidden max-w-[140px]">
-                                        {i > 0 && (
-                                            <motion.div
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${Math.min(100, (gap / scale) * 100)}%` }}
-                                                transition={{ duration: 0.6, ease: "easeOut" }}
-                                                className="h-full rounded-full bg-muted-foreground/40" />
+        <>
+        <div className="card-soft">
+            {payline && (
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-xp/5 border-b border-xp/30 rounded-t-2xl">
+                    <span className="stat-label text-xp">Podium</span>
+                    <div className="flex-1 h-px bg-xp/30" />
+                    <span className="text-[11px] font-bold text-muted-foreground">
+                        Top 3 on Monday
+                    </span>
+                </div>
+            )}
+            <div className="relative [&>*:first-child]:border-t-0">
+                <AnimatePresence mode="popLayout">
+                    {shown.map((r, i) => {
+                        const idx = i + from;
+                        const gap = gaps[idx];
+                        const pct = gapPct(gap, scale);
+                        return (
+                            <LedgerRow key={r.display_name} rowRef={r.is_me ? myRowRef : undefined}
+                                person={r.display_name} layoutScope="league" moveLane={false}
+                                edges={payline ? "bottom" : "both"}
+                                place={r.position} name={r.display_name}
+                                isMe={!!r.is_me} near={!r.is_me && Math.abs(r.position - myPos) <= 1}
+                                index={i} arriving={arriving} flash={r.is_me ? flash : 0}
+                                figure={{ value: r.compete_score, format: plain, quantity: "compete" }}
+                                gap={pct == null ? null : { pct, label: plain(gap) }}
+                                badges={
+                                    <>
+                                        {r.is_me && <span className="stat-label text-primary flex-shrink-0">you</span>}
+                                        {/* Last week's finish, worn for one week,
+                                            and otherwise whatever they bought. The
+                                            EARNED mark outranks the bought one: it
+                                            is the one with information in it, and
+                                            the only reward on this board other
+                                            students can see. */}
+                                        {(r.crest || r.crest_skin) && (
+                                            <Crest podium={r.crest} skin={r.crest ? null : r.crest_skin} />
                                         )}
-                                    </div>
-                                    <span className="text-[11px] font-bold text-muted-foreground tabular-nums flex-shrink-0">
-                                        {i === 0
-                                            ? <Minus className="w-3 h-3 inline" />
-                                            : `${gap} behind`}
-                                    </span>
-                                </div>
-                            </div>
-
-                            <span className="font-display font-black text-lg text-foreground tabular-nums flex-shrink-0">
-                                {r.compete_score}
-                            </span>
-                        </div>
-
-                        {/* Only your own row opens up. Thirty expanded rows is a
-                            wall, and nobody needs another student's effort
-                            split — what they need is the gap, which is above. */}
-                        {r.is_me && <Breakdown breakdown={r.score_breakdown} />}
-                    </div>
-                    {payline && (
-                        <div className="flex items-center gap-2 px-4 py-1.5 bg-xp/5 border-t border-xp/30">
-                            <span className="stat-label text-xp">Podium</span>
-                            <div className="flex-1 h-px bg-xp/30" />
-                            <span className="text-[11px] font-bold text-muted-foreground">
-                                Top 3 on Monday
-                            </span>
-                        </div>
-                    )}
-                    </React.Fragment>
-                );
-            })}
+                                        {r.streak_days > 0 && (
+                                            <span className="inline-flex items-center gap-0.5 text-[11px] font-bold
+                                                text-streak flex-shrink-0">
+                                                <Flame className="w-3 h-3" />{r.streak_days}
+                                            </span>
+                                        )}
+                                    </>
+                                }
+                                /* Only your own row opens up. Thirty expanded rows
+                                   is a wall, and nobody needs another student's
+                                   effort split — what they need is the gap. */
+                                extra={r.is_me ? <Breakdown breakdown={r.score_breakdown} /> : null} />
+                        );
+                    })}
+                </AnimatePresence>
+            </div>
         </div>
+
+        {/* Your row, holding on at the edge it left by. */}
+        <MyRowDock side={meRow ? side : null} label="Back to your place this week"
+            onReturn={() => {
+                myRowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                setFlash((n) => n + 1);
+            }}>
+            {meRow && (
+                <>
+                    <span className="font-display font-black tabular-nums text-lg leading-none text-primary flex-shrink-0 w-7 text-center">
+                        {meRow.position}
+                    </span>
+                    <BoardAvatar name={meRow.display_name} size={32} ring="ring-2 ring-primary/40" />
+                    <span className="flex-1 min-w-0">
+                        <span className="block text-xs font-black text-primary truncate">
+                            {ordinal(meRow.position)} this week
+                        </span>
+                        <span className="block text-[11px] text-muted-foreground truncate">
+                            {gaps[meIndex] != null ? `${plain(gaps[meIndex])} behind ${ordinal(meRow.position - 1)}` : "Top of the league"}
+                        </span>
+                    </span>
+                    <span className="font-display font-extrabold flex-shrink-0">
+                        <LiveFigure value={meRow.compete_score} format={plain} quantity="compete" />
+                    </span>
+                </>
+            )}
+        </MyRowDock>
+        </>
     );
 }

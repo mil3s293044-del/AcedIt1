@@ -879,3 +879,60 @@
 @media (prefers-reduced-motion: reduce) {
   .onb-felt::after, .onb-sheen::before { animation: none; }
 }
+
+/* ─── The leaderboard table ─────────────────────────────────────────────────
+   The podium is the same felt the signup deal is played on, held STILL: the
+   drifting light under `.onb-felt::after` is a table that is alive while
+   nothing is being dealt, and a leaderboard is read rather than waited on.
+   "Premium but calm" — the one thing on a board that keeps moving is the
+   sheen across the Ace, and it is a single pass every nine seconds.
+
+   Literal ink, like the felt it sits on: the table is an object and does not
+   follow the theme. The plinths are lit from above (the top edge is the
+   brightest line on them) and first place is edged in the XP amber, the same
+   two-tones-three-readings call the crest makes — there is no bronze token,
+   so third is the amber at a whisper. */
+.felt-still::after { content: none; }
+
+.felt-plinth {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+.felt-plinth-1 {
+  background: linear-gradient(180deg, rgba(240, 180, 41, 0.30), rgba(240, 180, 41, 0.07));
+  box-shadow: inset 0 1px 0 rgba(255, 220, 140, 0.55), inset 0 0 0 1px rgba(240, 180, 41, 0.28);
+}
+.felt-plinth-3 {
+  background: linear-gradient(180deg, rgba(240, 180, 41, 0.13), rgba(240, 180, 41, 0.03));
+  box-shadow: inset 0 1px 0 rgba(255, 220, 140, 0.22), inset 0 0 0 1px rgba(240, 180, 41, 0.10);
+}
+
+/* One pass of light across the Ace, then nothing for the rest of the cycle.
+   The first pass starts once the card is face up (the delay is set inline,
+   from `SHEEN_AT`), so the reveal and the loop are the same animation. */
+@keyframes board-sheen {
+  0%   { transform: translateX(-140%) skewX(-18deg); }
+  14%  { transform: translateX(260%) skewX(-18deg); }
+  100% { transform: translateX(260%) skewX(-18deg); }
+}
+.board-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 20;
+}
+.board-sheen::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 42%;
+  background: linear-gradient(90deg, transparent, rgba(255, 236, 170, 0.7), transparent);
+  transform: translateX(-140%) skewX(-18deg);
+  animation: board-sheen 9s cubic-bezier(0.4, 0, 0.2, 1) var(--sheen-delay, 1.7s) infinite both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .board-sheen::before { animation: none; display: none; }
+}

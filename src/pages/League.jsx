@@ -20,6 +20,7 @@
  * mid-quiz is the thing it was built to avoid.
  */
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { LayoutGroup } from "framer-motion";
 import { Link } from "react-router-dom";
 import {
     Trophy, Eye, EyeOff, ChevronLeft, TrendingUp, TrendingDown, Info,
@@ -311,6 +312,11 @@ export default function League({ embedded = false }) {
                         in a ranked list the three paid places are the first
                         three of thirty rows. It renders nothing on a board too
                         small to have a podium. */}
+                    {/* ONE LAYOUT GROUP for the table and the ledger, so a
+                        student who leaves the podium flies down into their
+                        row rather than vanishing from one and appearing in
+                        the other. */}
+                    <LayoutGroup id="league">
                     <Podium rows={rows} groupSize={rows.length || 30}
                         tiered={data?.mode === "tiered"} />
 
@@ -329,8 +335,9 @@ export default function League({ embedded = false }) {
                                 {me.is_anonymous ? "Hidden" : "Visible"}
                             </button>
                         </div>
-                        <WeeklyBoard rows={rows} />
+                        <WeeklyBoard rows={rows} from={rows.length > PODIUM ? PODIUM : 0} />
                     </section>
+                    </LayoutGroup>
 
                     {/* ── Finished weeks ──────────────────────────────── */}
                     {/* Only weeks the server has actually settled. Before this
