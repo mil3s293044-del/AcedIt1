@@ -61,7 +61,7 @@ const bandFor = (awarded, outOf) => {
     return r >= 1 ? "full" : r >= 0.7 ? "most" : r >= 0.4 ? "some" : "none";
 };
 
-export default function MarkPanel({ mark, score, title, answer, onBank, banked = new Set(), saving = new Set(), questionIndex = 0 }) {
+export default function MarkPanel({ mark, score, title, answer, onBank, onBankMany, banked = new Set(), saving = new Set(), questionIndex = 0 }) {
     const ledger = useMemo(() => markLedger(mark), [mark]);
     // Which module a phrase belongs to, so pointing at one finds the other in
     // either direction.
@@ -135,7 +135,8 @@ export default function MarkPanel({ mark, score, title, answer, onBank, banked =
                             </p>
                             {onBank && unsaved.length > 1 && (
                                 <button type="button"
-                                    onClick={() => unsaved.forEach((m) => onBank(m))}
+                                    // One batch, so one toast — it fired a toast per card.
+                                    onClick={() => (onBankMany ? onBankMany(unsaved) : unsaved.forEach((m) => onBank(m)))}
                                     className="inline-flex items-center gap-1.5 rounded-xl border-2 border-border px-2.5 py-1
                                         text-xs font-bold text-foreground hover:border-primary/50 cursor-pointer transition-colors">
                                     <Bookmark className="w-3.5 h-3.5" /> Save all {unsaved.length}

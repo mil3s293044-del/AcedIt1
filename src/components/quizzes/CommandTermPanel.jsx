@@ -19,7 +19,7 @@
  * ever became the right call, and so this file owns its own empty state.
  */
 import React, { useMemo } from "react";
-import { Sparkles, Info } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { commandTermStats, hasQuestionData } from "@/lib/quizInsight";
 
 const TONE_BAR = {
@@ -35,26 +35,10 @@ export default function CommandTermPanel({ attempts = [], className = "" }) {
     const haveDetail = useMemo(() => hasQuestionData(attempts), [attempts]);
     const terms = useMemo(() => commandTermStats(attempts), [attempts]);
 
-    // Nothing to say and nothing to apologise for. On a page that is already
-    // about mistakes, an empty panel explaining why it is empty is one more
-    // thing to read past.
-    if (!haveDetail || terms.rows.length === 0) {
-        return (
-            <div className={`card-soft border-2 border-border p-4 ${className}`}>
-                <p className="stat-label flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-chart-4" /> What the verb is costing you
-                </p>
-                <div className="flex items-start gap-2 rounded-xl bg-secondary/50 p-3 mt-2.5">
-                    <Info className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0 mt-0.5" />
-                    <p className="text-xs text-muted-foreground leading-snug">
-                        Sit a couple of marked quizzes and this breaks your marks down by command
-                        term &mdash; identify, explain, evaluate &mdash; so you can see whether
-                        it&rsquo;s the content or the question style costing you.
-                    </p>
-                </div>
-            </div>
-        );
-    }
+    // Nothing to say and nothing to apologise for. This comment said so for
+    // months above a block that drew a card EXPLAINING why it was empty — on
+    // a page that is already about mistakes, one more thing to read past.
+    if (!haveDetail || terms.rows.length === 0) return null;
 
     return (
         <div className={`card-soft border-2 border-border p-4 ${className}`}>

@@ -88,6 +88,7 @@ export default function PreSit({ quiz, attempts = [], tone, open, onCancel, onSt
     useEffect(() => { setMode("standard"); setMinutes(facts.sacMinutes); }, [quiz?.id, facts.sacMinutes]);
 
     if (!quiz) return null;
+    const retry = quiz._isRetry === true;
     const best = history.best == null ? null : Math.round(history.best);
     const nudge = (d) => setMinutes((m) => Math.min(MINUTE_MAX, Math.max(MINUTE_MIN, m + d)));
 
@@ -114,7 +115,14 @@ export default function PreSit({ quiz, attempts = [], tone, open, onCancel, onSt
                             {quiz.title}
                         </DialogTitle>
                         <DialogDescription className="text-sm text-muted-foreground mt-1.5 leading-snug">
-                            {history.last
+                            {/* A RE-SIT IS NOT THE QUIZ. It is the questions you
+                                missed, so its score never counts toward your
+                                average or this quiz's card — the sheet says so
+                                rather than printing the quiz's best above a
+                                paper that is not the quiz. */}
+                            {retry
+                                ? `${plural(facts.questions, "question")} from ${quiz._parentTitle || "this quiz"}, sat again. It counts as practice: it moves no average and no card.`
+                                : history.last
                                 ? <>Best <span className="font-bold text-foreground">{best}%</span>
                                     {/* The last sit only when it says something the
                                         best does not — "best 75% · last 75%" is one

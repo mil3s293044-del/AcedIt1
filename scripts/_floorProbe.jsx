@@ -70,7 +70,6 @@ import GroupWeek from "@/components/groups/GroupWeek";
 import { LayoutGroup } from "framer-motion";
 import ScoreGuide from "@/components/league/ScoreGuide";
 import ScoredHand from "@/components/quizzes/ScoredHand";
-import ShelfHead from "@/components/quizzes/ShelfHead";
 import { handTotal } from "@/lib/quizSit";
 import Crest from "@/components/shared/Crest";
 import { podiumGap, ordinal } from "@/lib/league";
@@ -2133,24 +2132,6 @@ views.hand = () => (
             <ScoredHand hand={HAND_LONG} total={handTotal(HAND_LONG)} suit="diamond" elapsed="41:05" />
         </div>
     </div>
-);
-
-/* ── ?v=shelfhead — the top of /Quizzes, in its three shapes ─────────────── */
-const SH_QUIZ = (id, title, subject) => ({ id, title, subject, questions: [{ type: "mcq" }], created_date: "2026-10-01T00:00:00Z" });
-const SH_SUMMARY = { avgScore: 72, avgOver: 5, trend: 6, trendOver: 5, trendNeeds: 0 };
-views.shelfhead = () => (
-    <MemoryRouter>
-        <div className="min-h-screen bg-background p-4 sm:p-6">
-            <div className="max-w-5xl mx-auto space-y-6">
-                <ShelfHead next={{ quiz: SH_QUIZ("a", "Redox and galvanic cells", "Chemistry"), reason: "low", score: 48, days: 3 }}
-                    summary={SH_SUMMARY} bank={{ total: 9, outstanding: 4, fixed: 5, ready: 2 }}
-                    attempts={[{ quiz_id: "a", score: 48, created_date: "2026-10-15T09:00:00Z" }]} tone="#F59E0B" sharedWaiting={2} />
-                <ShelfHead next={{ quiz: SH_QUIZ("b", "Language analysis — persuasive techniques in opinion pieces", "English"), reason: "new" }}
-                    summary={{ avgScore: null, trend: null, trendNeeds: 4 }} bank={{ total: 0 }} attempts={[]} tone="#8B5CF6" />
-                <ShelfHead next={null} />
-            </div>
-        </div>
-    </MemoryRouter>
 );
 
 ReactDOM.createRoot(document.getElementById("root")).render(

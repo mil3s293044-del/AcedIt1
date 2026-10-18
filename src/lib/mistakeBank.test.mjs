@@ -585,9 +585,14 @@ check("THE BANK RENDERS THE QUESTION AS MATHS", () => {
     // version did, and it failed the moment the four printers were unified
     // behind `QuestionPanel`. A window scan asserts where a thing is written;
     // this asserts what it does.
+    // The drill run moved out of the page into its own screen, so the scan
+    // reads the bank's surfaces rather than one file.
     const page = fs.readFileSync("src/pages/MistakeBank.jsx", "utf8");
-    assert.ok(/<QuestionPanel[\s>]/.test(page), "the bank no longer prints the question through one panel");
-    assert.ok(/\{meta\.question\}/.test(page), "the drill screen does not print the question");
+    const run = fs.readFileSync("src/components/mistakes/DrillRun.jsx", "utf8");
+    const rows = fs.readFileSync("src/components/mistakes/BankBand.jsx", "utf8");
+    assert.ok(/<QuestionPanel[\s>]/.test(page) && /<QuestionPanel[\s>]/.test(rows), "the bank no longer prints the question through one panel");
+    assert.ok(/<QuestionPanel[^>]*>\s*\{meta\.question\}/.test(run), "the drill screen does not print the question");
+    assert.ok(/\{meta\.question\}/.test(rows), "an opened mistake does not show its question");
     const panel = fs.readFileSync("src/components/mistakes/QuestionPanel.jsx", "utf8");
     assert.ok(/<MarkdownMath/.test(panel),
         "the question is printed outside MarkdownMath, so a maths question renders as its source");
@@ -598,7 +603,11 @@ check("A QUESTION IS NEVER CLIPPED, ANYWHERE IN THE BANK", () => {
     // and is simply the question stopping mid-sentence, which on a four-mark
     // stem is the half that carries the command term — and the student has no
     // way to tell there was more.
-    const page = fs.readFileSync("src/pages/MistakeBank.jsx", "utf8")
+    // The page and every surface it now draws through — the rows and the
+    // drill run moved out of it, and a scan of the page alone would wave a
+    // clamp in either straight through.
+    const page = ["src/pages/MistakeBank.jsx", "src/components/mistakes/BankBand.jsx", "src/components/mistakes/DrillRun.jsx"]
+        .map((f) => fs.readFileSync(f, "utf8")).join("\n")
         .replace(/\/\*[\s\S]*?\*\//g, "")
         .replace(/^\s*\/\/.*$/gm, "");
 

@@ -31,7 +31,9 @@ import { normaliseQuestion, stimulusText } from "@/lib/quizSchema";
 // live MCQ verdict, which would shadow the import and turn every call into
 // "isCorrect is not a function" at runtime.
 import { questionMark, attemptScore, needsDrill, isCorrect as gradeOf } from "@/lib/quizScore";
-import { cardFromModule, bankKey } from "@/lib/mistakeBank";
+import { cardFromModule, bankKey, BANK_TOPIC } from "@/lib/mistakeBank";
+import { trayGroups, trayOpen, savedLine, alreadyBanked } from "@/lib/bankTray";
+import BankTray from "@/components/quizzes/marking/BankTray";
 import ScoredHand from "@/components/quizzes/ScoredHand";
 import { handOf, handTotal, rankTurn, sitHistory } from "@/lib/quizSit";
 import MarkdownMath from "@/components/shared/MarkdownMath";
@@ -344,6 +346,10 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     // save the mistake" produced. A ref is updated synchronously and closes
     // that window; the state is what the button renders from.
     const bankingRef = useRef(new Set());
+    // The bank as it stood when this sit began, so a mistake saved on an
+    // earlier sit reads as saved here rather than being offered again — see
+    // `alreadyBanked`.
+    const [bankCards, setBankCards] = useState([]);
     const [, forceUpdate] = useState(0);
     const mathInputRefs = useState({})[0];
     const [currentFeedbackIndex, setCurrentFeedbackIndex] = useState(0);
@@ -451,64 +457,83 @@ In two or three sentences, explain what makes that the right answer and what the
         }
     };
 
+    const toldWhere = useRef(false);
     /**
-     * Bank one annotated phrase as a flashcard.
+     * Bank dropped marks as flashcards — one from a module, or a batch from
+     * the verdict's tray, through the same path.
      *
      * A mistake is worth keeping only if it comes back, so it goes into the
      * deck the spaced-repetition engine already reviews rather than into a
      * list of its own — see mistakeBank's header.
      */
-    const bankMistake = async (mod) => {
-        const key = bankKey(mod, currentFeedbackIndex);
-        if (!key || bankingRef.current.has(key)) return;
-        const q = shuffledQuiz.questions[currentFeedbackIndex];
-        const card = cardFromModule(mod, {
-            subject: shuffledQuiz.subject,
-            questionTitle: q?.question,
-            // Where it came from, so the ladder can end where the mistake
-            // happened. `_sourceIndex` is the parent index on a "wrong only"
-            // retry; on a normal sit the two are the same.
-            source: { quizId: quiz.id, qIndex: q?._sourceIndex ?? currentFeedbackIndex },
-            // The grouping label for the bank's shelf. The quiz is the topic a
-            // student thinks in — "Remedies", "Polymers" — and its category is
-            // the subject, so the title is the right half.
-            topic: quiz.title,
-        });
-        if (!card) return;
+    const bankMarks = async (entries) => {
         // Claimed synchronously so a double-click cannot get past it, then
         // shown as saving. The old code marked it banked before the write and
         // rolled back on failure, which told the student it was safe while it
         // was still in flight.
-        bankingRef.current.add(key);
-        setBankSaving(prev => new Set(prev).add(key));
-        try {
-            await base44.entities.Flashcard.create(card);
-            setBanked(prev => new Set(prev).add(key));
-            // Where it went, not just that it went. The bank is a real deck —
-            // cards tagged "Mistake bank" group into one per subject on the
-            // Spaced Repetition shelf — and a student who is not told that has
-            // saved something into a place they cannot find.
-            // The toast used to name a place with nothing to click. It said
-            // "it joins your Mistake bank deck" and left the student to go and
-            // find it, which is the shape of a feature nobody uses.
-            toast({
-                title: "Saved to your mistake bank",
-                description: `It comes back on its own schedule until you have it.`,
-                action: (
-                    <ToastAction altText="Open your mistake bank"
-                        onClick={() => navigate(createPageUrl("MistakeBank"))}>
-                        Open bank
-                    </ToastAction>
-                ),
+        const todo = [];
+        for (const { mod, qIndex } of entries) {
+            const key = bankKey(mod, qIndex);
+            if (!key || bankingRef.current.has(key)) continue;
+            const q = shuffledQuiz.questions[qIndex];
+            const card = cardFromModule(mod, {
+                subject: shuffledQuiz.subject,
+                questionTitle: q?.question,
+                // Where it came from, so the ladder can end where the mistake
+                // happened. `_sourceIndex` is the parent index on a "wrong only"
+                // retry; on a normal sit the two are the same.
+                source: { quizId: quiz.id, qIndex: q?._sourceIndex ?? qIndex },
+                // The grouping label for the bank's shelf. The quiz is the topic a
+                // student thinks in — "Remedies", "Polymers" — and its category is
+                // the subject, so the title is the right half.
+                topic: quiz.title,
             });
-        } catch (e) {
-            // Released so they can try again — the card does not exist.
-            bankingRef.current.delete(key);
-            toast({ title: "Couldn't save that one", description: e?.message || "Try again in a moment.", variant: "destructive" });
-        } finally {
-            setBankSaving(prev => { const next = new Set(prev); next.delete(key); return next; });
+            if (!card) continue;
+            bankingRef.current.add(key);
+            todo.push({ key, card });
         }
+        if (!todo.length) return;
+        const keys = todo.map((t) => t.key);
+        setBankSaving(prev => { const next = new Set(prev); keys.forEach((k) => next.add(k)); return next; });
+        // ONE REQUEST PER CARD, SETTLED TOGETHER. `Promise.all` would throw
+        // away every card that landed because one did not; this keeps what
+        // saved and releases only what failed, so it can be tried again.
+        const results = await Promise.allSettled(todo.map(({ card }) => base44.entities.Flashcard.create(card)));
+        const ok = todo.filter((_, i) => results[i].status === "fulfilled").map((t) => t.key);
+        const failed = todo.filter((_, i) => results[i].status === "rejected");
+        failed.forEach((t) => bankingRef.current.delete(t.key));
+        if (ok.length) setBanked(prev => { const next = new Set(prev); ok.forEach((k) => next.add(k)); return next; });
+        setBankSaving(prev => { const next = new Set(prev); keys.forEach((k) => next.delete(k)); return next; });
+
+        const line = savedLine(ok.length, failed.length);
+        if (line.tone === "error" || line.tone === "partial") {
+            toast({
+                title: line.tone === "error" ? line.title : `${line.title} — ${failed.length} didn't save`,
+                description: failed[0] && results[todo.indexOf(failed[0])]?.reason?.message || "Try those again in a moment.",
+                variant: "destructive",
+            });
+            return;
+        }
+        // WHERE IT WENT, ONCE A SIT. The first save names the place and links
+        // to it — the bank is a real deck and a student who is not told that
+        // has saved something into a place they cannot find. Every save after
+        // that is said by the row itself ("in your bank"), because a toast for
+        // each of six marks is six interruptions for one decision.
+        if (toldWhere.current) return;
+        toldWhere.current = true;
+        toast({
+            title: line.title,
+            description: "It comes back on its own schedule until you have it.",
+            action: (
+                <ToastAction altText="Open your mistake bank"
+                    onClick={() => navigate(createPageUrl("MistakeBank"))}>
+                    Open bank
+                </ToastAction>
+            ),
+        });
     };
+    /** One mark, from the question it is on. */
+    const bankMistake = (mod, qIndex = currentFeedbackIndex) => bankMarks([{ mod, qIndex }]);
 
     /** Anything that points at a question also switches to the question view. */
     const openQuestion = (i) => { setCurrentFeedbackIndex(i); setResultsView("questions"); };
@@ -597,6 +622,11 @@ In two or three sentences, explain what makes that the right answer and what the
                 setPastAttempts(attempts || []);
                 if (attempts?.length > 0 && attempts[0].user_answers) setPreviousAnswers(attempts[0].user_answers);
                 const user = await base44.auth.me();
+                // The same read Quizzes and /MistakeBank make, so it is
+                // usually answered from the cache. Best-effort: without it the
+                // tray simply cannot tell what an earlier sit saved.
+                base44.entities.Flashcard.filter({ created_by: user.email, topic: BANK_TOPIC, is_active: true })
+                    .then((rows) => setBankCards(rows || [])).catch(() => {});
                 const prog = await base44.entities.QuizProgress.filter({ quiz_id: quiz.id, created_by: user.email }, '-last_updated');
                 if (prog?.length > 0) {
                     setCurrentQuestionIndex(prog[0].current_question_index || 0);
@@ -1171,6 +1201,17 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
             },
             (i) => !!aiFeedback[i] || shuffledQuiz.questions[i]?.type === 'mcq');
         const handSum = handTotal(hand);
+        // Every bankable mark on the paper, for the verdict's tray. Read off the
+        // same marks the hand was dealt from, so a blank answer is the same
+        // blank the zero beside it was computed from.
+        const tray = trayGroups(shuffledQuiz.questions.map((_, i) => ({
+            qIndex: i, mark: aiFeedback[i]?.mark, blank: markFor(i).blank,
+        })));
+        // Saved this sit, or on an earlier one. Every "saved" the screen draws —
+        // the tray's rows and each mark's own button — reads this one set.
+        const inBank = new Set([...banked, ...alreadyBanked(tray, bankCards, {
+            quizId: quiz.id, sourceOf: (i) => shuffledQuiz.questions[i]?._sourceIndex ?? i,
+        })]);
         // Rank is your best, so the deck card on the shelf only turns when a
         // sit beats it. Read against the sits BEFORE this one.
         const before = sitHistory(quiz, pastAttempts);
@@ -1373,20 +1414,29 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                             `autoBankRows` was deleted for exactly this
                                             reason once already: a mistake and a question are
                                             different sizes. */}
-                                        {handSum.lost > 0 && !isGeneratingFeedback && (
-                                            <div className="card-soft p-5">
-                                                <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-                                                    You dropped marks on <span className="font-bold text-foreground">{handSum.lost}</span>
-                                                    {" "}question{handSum.lost === 1 ? "" : "s"}. Save the ones worth
-                                                    rehearsing from the marks below &mdash; your mistake bank drills each one
-                                                    until you can produce it, then asks you to prove it on the real question.
+                                        {/* ── THE TRAY ───────────────────────────────
+                                            Every dropped mark on the paper, the ones that
+                                            cost something already ticked, saved in one
+                                            press. It replaced a card that told the student
+                                            to save marks "from below" and offered a button
+                                            that LEFT for the bank — so banking four marks
+                                            was four trips through the questions. See
+                                            bankTray.js for what starts ticked. */}
+                                        {!isGeneratingFeedback && tray.length > 0 && (
+                                            <BankTray groups={tray} banked={inBank} saving={bankSaving}
+                                                onSave={(rows) => bankMarks(rows.map((r) => ({ mod: r.mod, qIndex: r.qIndex })))}
+                                                onOpenQuestion={openQuestion}
+                                                onOpenBank={() => navigate(createPageUrl("MistakeBank"))}>
+                                                <p className="text-sm text-muted-foreground leading-relaxed mt-1">
+                                                    {handSum.lost > 0
+                                                        ? <>You dropped marks on <span className="font-bold text-foreground">{handSum.lost}</span>{" "}
+                                                            question{handSum.lost === 1 ? "" : "s"}.{" "}
+                                                            {trayOpen(tray, inBank).length > 0
+                                                                ? "Tick what you want to drill."
+                                                                : "Every one is in your mistake bank."}</>
+                                                        : <>Nothing cost you a mark. These are notes on the wording, if you want to keep them.</>}
                                                 </p>
-                                                <Button data-open-bank
-                                                    onClick={() => navigate(createPageUrl("MistakeBank"))}
-                                                    className="btn-3d gap-2 bg-primary hover:bg-primary/90 text-white rounded-xl w-full sm:w-auto">
-                                                    <Layers className="w-4 h-4" /> Open my mistake bank
-                                                </Button>
-                                            </div>
+                                            </BankTray>
                                         )}
 
                                         {/* Both of these are things you do with the WHOLE
@@ -1567,7 +1617,8 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                                                quotes still find the text they came from. */
                                                             answer={answerTextFor(currentFeedbackIndex)}
                                                             onBank={bankMistake}
-                                                            banked={banked}
+                                                            onBankMany={(mods) => bankMarks(mods.map((mod) => ({ mod, qIndex: currentFeedbackIndex })))}
+                                                            banked={inBank}
                                                             saving={bankSaving}
                                                             questionIndex={currentFeedbackIndex}
                                                         />

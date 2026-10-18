@@ -157,16 +157,6 @@ export function nextSit(quizzes = [], attempts = [], now = Date.now()) {
         || pick("new", rows, (a, b) => stampOf(b.quiz) - stampOf(a.quiz));
 }
 
-/** The reason, in words. Every figure in it is on the deck face too. */
-export function nextSitLine(next) {
-    if (!next) return null;
-    const when = agoLabel(next.days);
-    if (next.reason === "low") return `Last sat ${when} at ${next.score}%.`;
-    if (next.reason === "new") return "You have not sat this one yet.";
-    if (next.reason === "stale") return `Last sat ${when}, at ${next.score}%.`;
-    if (next.reason === "lowest") return `Your lowest last sit, at ${next.score}%.`;
-    return null;
-}
 
 /* ── The scored hand ──────────────────────────────────────────────────────── */
 
@@ -303,6 +293,6 @@ export function handTiming(n) {
 
 export default {
     SAC_MIN_MINUTES, paperFacts, daysBetween, agoLabel, sitHistory,
-    LOW_SCORE, STALE_DAYS, nextSit, nextSitLine,
+    LOW_SCORE, STALE_DAYS, nextSit,
     cardState, handOf, handTotal, marksShown, rankTurn, HAND, handTiming,
 };
