@@ -612,14 +612,24 @@ saved answer is a plain string like every other answer.
 **"The core loop — make a quiz, sit it, get marked, see results — had never
 had one end-to-end design pass."** It had four screens and each one worked its
 own numbers out. `src/lib/quizSit.js` is the arithmetic for the whole journey
-now, pure, and `quizSit.test.mjs` holds it (37 checks, 35 injections, all
+now, pure, and `quizSit.test.mjs` holds it (36 checks, 35 injections, all
 biting against a green baseline).
 
-**THE SHELF OPENS ON ONE NEXT SIT** (`ShelfHead`). It was a coach headline, a
-hero panel, a mistake-bank panel and a "next quiz" strip — 70% printed three
-times (eyebrow, headline, tile) and the quiz count twice before the first pack.
-And "next quiz" was `quizzes[0]` under a sentence about active recall, or a
-RANDOM quiz for a library never sat. `nextSit` decides it, in this order:
+**THE SHELF'S HEADER WENT BACK TO HOW IT WAS, by request.** "Bring back the
+old header for the quizzes." This release had replaced the coach strip, the
+"Your quizzing" hero, the mistake-bank panel and the "Next quiz" strip with one
+`ShelfHead` card, on a measured argument (70% printed three times, the quiz
+count twice). The argument was true and the student liked the old look better,
+which is the Study revert's lesson a second time: **a page somebody likes is
+changed by fixing its fault, not by replacing its look.** `ShelfHead.jsx`,
+`nextSitLine` and the `?v=shelfhead` probe are deleted, and the header,
+including Saved answers above the hero, is the pre-release one.
+
+**ONE FIX SURVIVED, AND IT CHANGES NO PIXEL:** which quiz the "Next quiz" strip
+names. It was a RANDOM quiz for a library never sat (a different one every
+visit) and otherwise `quizzes[0]`, whichever row came back first, empty quizzes
+included. `nextSit` picks it now, in this order, and the strip's wording is
+exactly what it was:
 
 - **low** — the last sit was under `LOW_SCORE`, **at least a day ago**. Not
   the same day: running a paper straight back is rehearsing answers you just
@@ -627,13 +637,6 @@ RANDOM quiz for a library never sat. `nextSit` decides it, in this order:
 - **new** — never sat, newest first.
 - **stale** — last sat `STALE_DAYS` or more ago, longest first.
 - **lowest** — otherwise the lowest last sit.
-
-The reason under it is a FACT the card beside it can confirm ("Last sat 3 days
-ago at 48%"), never a slogan. The card is the quiz's own deck face (rank is
-your best), so it is the same card that turns on the results. Two figures,
-average and trend, each saying what it is over; the mistake bank is a third
-figure ONLY when something is in it. Saved answers moved to the foot — a
-collapsed library row was the first thing on the page.
 
 **THE TABLE BEFORE A SIT** (`PreSit`) replaced a two-step mode pop-up that
 asked "how do you want to take this quiz?" with nothing on screen about the
@@ -708,10 +711,106 @@ The "Quiz marked!" success toast went too: on a phone it sat over the top bar,
 and the hand turning over already says so.
 
 Draw it with `scripts/_floorProbe.jsx?v=hand` (a paper still marking, a
-finished one that turned the deck card, and thirty questions) and
-`?v=shelfhead` (a low sit with a bank, a never-sat quiz, and no quizzes), and
-the real page through the network harness — both themes, 390, reduced motion,
+finished one that turned the deck card, and thirty questions), and the real
+page through the network harness — both themes, 390, reduced motion,
 and judged on the clock: the count must only rise as cards land.
+
+## A dropped mark is saved where it is shown
+
+**"Make it easier to select a mistake to send to the mistake bank when marking
+a quiz. This UI and UX must be more seamless."** Banking a mistake took a tour.
+The verdict said "save the ones worth rehearsing from the marks below" and
+offered one button, which LEFT for /MistakeBank before anything from this quiz
+had been saved there. To save one, a student went through the questions one at
+a time, opened each mark and pressed a button at the bottom of its body, under
+the wording and the fixes, which on a long mark was below the fold. Four
+dropped marks was four trips, and "Save all" fired one toast per card.
+
+**THE VERDICT CARRIES THE TRAY** (`BankTray`). Every bankable mark on the paper,
+grouped by question, with the marks that COST something already ticked, and one
+button: "Save 3 to my mistake bank". The whole row is the checkbox, because a
+ten-pixel box to aim at on a phone is a control nobody uses twice. The bank is
+offered as a destination only once nothing is left to save. What starts ticked
+is `bankTray.js`, and it is three rules:
+
+- **a mark that cost something is ticked**, which is why the student is here;
+- **a note on the wording that cost nothing is listed and NOT ticked**, or the
+  bank fills with things that never cost a point;
+- **a question LEFT BLANK is listed and NOT ticked.** Every criterion on it is
+  "lost", so ticking them would turn one unanswered question into four drill
+  cards, and an unanswered question is a SIT, which "Sit again" already derives.
+  The mistake/question split `autoBankRows` was deleted over, kept.
+
+**THE SAVE IS ON THE MARK'S HEADER**, so keeping one is a tap whether or not the
+mark is open. On a phone it drops to its own line under the words; beside them
+it squeezed the criterion into a column one word wide. It says **"Save
+mistake"**, never a bare "Save", because the card it sits on already has a Save
+(for the whole answer) with the same bookmark beside it.
+
+**ONE SAVE PATH.** `bankMarks` takes one mark or a batch, claims every key in the
+ref before the write (the double-click guard), writes them with
+`Promise.allSettled` so one failure does not discard the cards that landed, and
+releases only what failed. **One toast a sit**: the first save names the place
+and links to it; after that the row says "in bank" itself, because six toasts
+for one decision is six interruptions.
+
+**AND A MISTAKE BANKED ON AN EARLIER SIT READS AS BANKED.** The saved keys lived
+in the player's state, so they lasted one sit. A re-sit from /MistakeBank is
+made of questions already in the bank, so dropping the same criterion again
+offered it as new, and every attempt would have banked another copy.
+`alreadyBanked` matches a live bank card on quiz, the question's index IN THAT
+QUIZ (`_sourceIndex` on a re-sit) and the criterion text. A CLEARED card does
+not count: clearing is "I have fixed this", and dropping it again is the one
+piece of evidence that says otherwise. The tray, every mark's button and "Save
+all" read the same set (`inBank`), so they cannot disagree about what is saved.
+
+`bankRun.test.mjs` holds the rules and the wiring. Draw it through the network
+harness: sit `?play=q1` to the verdict, at 1280 and 390, in both themes, and a
+re-sit from /MistakeBank for the already-banked case.
+
+## The Mistake Bank: one pile, worked from the top
+
+The page organised the same mistakes three ways (a subject accordion with a
+Review button per subject AND per topic, six state filter chips, and the full
+list), drew each one's state four ways (a dot, a border, a bar segment, a chip),
+and offered four buttons that each started a review. A drill run then ended on
+"3 of 4 recalled", when what a run changes is where each mistake sits on its
+ladder. `src/lib/bankRun.js` is the model, pure.
+
+- **ONE PILE.** The headline is the fraction fixed, over one slot per mistake in
+  ONE colour (`pileOf`), fixed at the end. Five colours needed a five-entry
+  legend, and the rows already say each one's state. Past `PILE_SLOTS_MAX` it is
+  a bar, because a slot a pixel wide is not a slot.
+- **ONE ORGANISATION: subject bands** (`bankBands`), the Quizzes shelf's idiom of
+  a colour spine and a rule to the end of the row. Subject is the unit a student
+  sits down with before a SAC. The topic rides on each row, and a repeated
+  criterion carries its count there (`2×`) rather than in a panel above the list.
+- **ONE PRIMARY BUTTON** plays what is ready; each band drills its own. The
+  ladder is on every row at every width (it was `hidden sm:block`, so on a phone
+  the most useful thing about the bank disappeared).
+- **THE ROW'S LADDER IS `stepsFor`, NOT THE COUNTER.** `ladderFor` reads the rung
+  off `repetitions`, and when that rung cannot be built for this mistake it marks
+  it skipped and lights NOTHING, while the drill serves the rung below. Found by
+  driving a real run: the tracker lit no step, the drill served See it again, and
+  the run reported the card as done.
+- **THE RUN REPORTS THE LADDER** (`DrillRun`, full screen on `SitScreen`). Each
+  rating says what it did, read off the card before and after through the real
+  scheduler (`moveOf`): climbed, CLOSER (Good inside a rung's range, "one more
+  good to reach Fill it"), held, slipped back to the start, rehearsed to the end
+  and waiting on the question, or fixed. The end groups the run that way, offers
+  to clear what it fixed (asked once, at the moment it became true), and sends a
+  rehearsed mistake to Sit again. **Every key in both animate targets**, or a
+  quick rating freezes the card mid-deal, tilted.
+- **A RE-SIT IS A SIT**: the pre-sit table, then the real player full screen,
+  scored as a retry so it moves no average and no deck card, with answers keyed
+  to the parent's indices.
+- **THE FOOTER SAID BANK CARDS "ALSO SHOW UP IN SPACED REPETITION".** They do
+  not: `deckCards` takes the bank out of every deck surface, on purpose. And an
+  empty command-term panel no longer draws a card apologising for itself.
+
+`bankRun.test.mjs`: 27 checks. The sweep put 27 bugs back across the tray, the
+page and the restored header, and every one was caught against a green
+baseline.
 
 ## The marker was told to be an examiner and shown none of the rules
 
@@ -8381,12 +8480,19 @@ student looking free in the nav, the planner and the companion.
   are dealt as Ace, King and Queen; rows race keyed by person; gaps share one
   scale; your row docks at the edge it left by. Ranked, the League and the
   group week all draw through it
-- `src/lib/quizSit.js` + `quizSit.test.mjs`, `src/components/quizzes/ShelfHead.jsx`,
-  `PreSit.jsx`, `ScoredHand.jsx`: one sit of a quiz. The next sit and why, the
-  table before it (marks, the SAC clock), and the results as the hand turned
-  over in MARKS, with pending written answers face down and the deck card
-  turning on a new best. Draw it with `scripts/_floorProbe.jsx?v=hand` and
-  `?v=shelfhead`
+- `src/lib/quizSit.js` + `quizSit.test.mjs`, `src/components/quizzes/PreSit.jsx`,
+  `ScoredHand.jsx`, `src/components/shared/SitScreen.jsx`: one sit of a quiz.
+  Which quiz the (restored) "Next quiz" strip names, the table before a sit
+  (marks, the SAC clock), the one full-screen wrapper every sit, re-sit and
+  drill run plays in, and the results as the hand turned over in MARKS, with
+  pending written answers face down and the deck card turning on a new best.
+  Draw it with `scripts/_floorProbe.jsx?v=hand`
+- `src/lib/bankTray.js`, `src/components/quizzes/marking/BankTray.jsx`: every
+  dropped mark on a marked paper, laid out on the verdict and saved in one
+  press, with what an earlier sit already banked shown as banked
+- `src/lib/bankRun.js` + `bankRun.test.mjs`, `src/components/mistakes/BankBand.jsx`,
+  `DrillRun.jsx`: the Mistake Bank as one pile in subject bands, and a drill run
+  that reports where each mistake went on its ladder
 - `src/lib/aceSpot.js` + `aceSpot.test.mjs`, `src/components/ace/AceSpot.jsx`:
   every PLACED Ace (not the floating one). He arrives, does the pose asked
   for, settles where his fidgets can reach him, and reacts to events the page

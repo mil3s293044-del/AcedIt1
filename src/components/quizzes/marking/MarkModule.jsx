@@ -73,7 +73,7 @@ export default function MarkModule({ mod, index, banked, saving, onBank, onPoint
     // closed header is a dead end — the pointer promised something to read.
     useEffect(() => { if (flash) setOpen(true); }, [flash]);
     const bankable = isBankable(mod);
-    const hasBody = Boolean(mod.wanted || mod.detail || mod.fixes.length || mod.evidence.length || bankable);
+    const hasBody = Boolean(mod.wanted || mod.detail || mod.fixes.length || mod.evidence.length);
 
     return (
         <motion.li
@@ -87,30 +87,59 @@ export default function MarkModule({ mod, index, banked, saving, onBank, onPoint
         >
             {/* The header is the ledger line: what was wanted, and what it cost.
                 It stays readable on its own — a student scrolling the list is
-                reading these and nothing else. */}
-            <button
-                type="button"
-                onClick={() => hasBody && setOpen((v) => !v)}
-                aria-expanded={hasBody ? open : undefined}
-                className={`w-full flex items-start gap-2.5 text-left px-3 py-2.5
-                    ${hasBody ? "cursor-pointer" : "cursor-default"}`}
-            >
-                <span className={`mt-0.5 w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${s.chip}`}>
-                    <Icon className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-                </span>
-                <span className="min-w-0 flex-1">
-                    <MarkdownMath className="text-sm font-bold text-foreground leading-snug">
-                        {mod.text}
-                    </MarkdownMath>
-                    <span className={`text-[11px] font-black tabular-nums ${s.label}`}>
-                        {s.cost(mod.worth)}
+                reading these and nothing else. The save sits ON this line, so
+                keeping a mark is one tap whether or not the module is open; it
+                used to be the last thing in the body, under the wording and
+                the fixes, which on a long mark was below the fold. */}
+            {/* On a phone the save drops to its own line under the words,
+                lined up with them — beside them it squeezed the criterion
+                into a column a word wide. */}
+            <div className="flex flex-wrap sm:flex-nowrap items-start">
+                <button
+                    type="button"
+                    onClick={() => hasBody && setOpen((v) => !v)}
+                    aria-expanded={hasBody ? open : undefined}
+                    className={`basis-full sm:basis-0 flex-1 min-w-0 flex items-start gap-2.5 text-left pl-3 py-2.5 pr-3
+                        ${bankable && onBank ? "sm:pr-1" : ""}
+                        ${hasBody ? "cursor-pointer" : "cursor-default"}`}
+                >
+                    <span className={`mt-0.5 w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 ${s.chip}`}>
+                        <Icon className="w-3.5 h-3.5 text-white" strokeWidth={3} />
                     </span>
-                </span>
-                {hasBody && (
-                    <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5
-                        transition-transform ${open ? "rotate-180" : ""}`} />
+                    <span className="min-w-0 flex-1">
+                        <MarkdownMath className="text-sm font-bold text-foreground leading-snug">
+                            {mod.text}
+                        </MarkdownMath>
+                        <span className={`text-[11px] font-black tabular-nums ${s.label}`}>
+                            {s.cost(mod.worth)}
+                        </span>
+                    </span>
+                    {hasBody && (
+                        <ChevronDown className={`w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5
+                            transition-transform ${open ? "rotate-180" : ""}`} />
+                    )}
+                </button>
+                {/* Always here for a mark that was lost, quote or no quote. */}
+                {bankable && onBank && (
+                    <button type="button" data-save-mark
+                        onClick={() => onBank(mod)}
+                        disabled={banked || saving}
+                        aria-label={banked ? "In your mistake bank" : "Save this mistake to your mistake bank"}
+                        className={`ml-[2.625rem] -mt-1 mb-2.5 sm:m-1.5 sm:ml-0 inline-flex items-center gap-1 rounded-xl border-2 px-2 py-1 text-xs font-bold
+                            flex-shrink-0 transition-colors disabled:cursor-default
+                            ${banked
+                                ? "border-primary/30 text-primary bg-primary/10"
+                                : "border-border text-foreground bg-surface hover:border-primary/50 cursor-pointer"}`}>
+                        {/* "Save mistake", never a bare "Save": the card this
+                            sits on already has a Save, for the whole answer. */}
+                        {banked
+                            ? <><Check className="w-3.5 h-3.5" strokeWidth={3} /> In your bank</>
+                            : saving
+                                ? <>Saving…</>
+                                : <><Plus className="w-3.5 h-3.5" strokeWidth={3} /> Save mistake</>}
+                    </button>
                 )}
-            </button>
+            </div>
 
             <AnimatePresence initial={false}>
                 {open && hasBody && (
@@ -185,23 +214,6 @@ export default function MarkModule({ mod, index, banked, saving, onBank, onPoint
                                 </div>
                             )}
 
-                            {/* Always here for a mark that was lost, quote or no
-                                quote. This is the button that did not exist for
-                                three quarters of a student's mistakes. */}
-                            {bankable && onBank && (
-                                <button type="button"
-                                    onClick={() => onBank(mod)}
-                                    disabled={banked || saving}
-                                    className="inline-flex items-center gap-1.5 rounded-xl border-2 border-border
-                                        px-2.5 py-1 text-xs font-bold text-foreground hover:border-primary/50
-                                        disabled:opacity-60 disabled:cursor-default cursor-pointer transition-colors">
-                                    {banked
-                                        ? <><Check className="w-3.5 h-3.5 text-primary" /> In your mistake bank</>
-                                        : saving
-                                            ? <>Saving…</>
-                                            : <><Plus className="w-3.5 h-3.5" /> Save this mistake</>}
-                                </button>
-                            )}
                         </div>
                     </motion.div>
                 )}

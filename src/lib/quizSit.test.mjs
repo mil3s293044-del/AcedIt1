@@ -16,7 +16,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import {
     paperFacts, SAC_MIN_MINUTES, daysBetween, agoLabel, sitHistory,
-    nextSit, nextSitLine, LOW_SCORE, STALE_DAYS,
+    nextSit, LOW_SCORE, STALE_DAYS,
     cardState, handOf, handTotal, marksShown, rankTurn, handTiming, HAND,
 } from "@/lib/quizSit";
 import { questionMark, attemptScore, needsDrill } from "@/lib/quizScore";
@@ -123,7 +123,6 @@ check("a low last sit is run back — but never the same day", () => {
     const n = nextSit(quizzes, yesterday, NOW);
     assert.equal(n.quiz.id, "a");
     assert.equal(n.reason, "low");
-    assert.equal(nextSitLine(n), "Last sat yesterday at 30%.");
 });
 
 check("the lowest of several low sits goes first", () => {
@@ -138,7 +137,6 @@ check("then a quiz never sat, newest first", () => {
     const n = nextSit([Q("old", 30), Q("new", 1), Q("sat", 30)], [{ quiz_id: "sat", score: 90, created_date: ago(2) }], NOW);
     assert.equal(n.quiz.id, "new");
     assert.equal(n.reason, "new");
-    assert.equal(nextSitLine(n), "You have not sat this one yet.");
 });
 
 check("then the longest since a sit, once it is STALE_DAYS old", () => {
@@ -148,7 +146,6 @@ check("then the longest since a sit, once it is STALE_DAYS old", () => {
     ], NOW);
     assert.equal(n.quiz.id, "b");
     assert.equal(n.reason, "stale");
-    assert.equal(nextSitLine(n), `Last sat ${STALE_DAYS + 5} days ago, at 90%.`);
 });
 
 check("otherwise the lowest last sit, and the line says so", () => {
@@ -157,7 +154,6 @@ check("otherwise the lowest last sit, and the line says so", () => {
         { quiz_id: "b", score: 72, created_date: ago(1) },
     ], NOW);
     assert.equal(n.quiz.id, "b");
-    assert.equal(nextSitLine(n), "Your lowest last sit, at 72%.");
 });
 
 check("a quiz with no questions is never offered, and nothing at all is null", () => {
@@ -281,7 +277,6 @@ const PLAYER = strip(read("src/components/quizzes/QuizPlayer.jsx"));
 const PAGE = strip(read("src/pages/Quizzes.jsx"));
 const PRESIT = strip(read("src/components/quizzes/PreSit.jsx"));
 const HANDC = strip(read("src/components/quizzes/ScoredHand.jsx"));
-const HEAD = strip(read("src/components/quizzes/ShelfHead.jsx"));
 const REACTS = strip(read("src/components/ace/AceReacts.jsx"));
 
 /** The body of `const name = (...) => { ... }`, by brace depth from its arrow. */
@@ -320,7 +315,10 @@ check("the SAC clock is paperFacts's, never a hand-rolled `q.marks || 1`", () =>
 });
 
 check("THE SIT IS FULL SCREEN WITH ONE EXIT", () => {
-    assert.ok(/data-sit className="fixed inset-0 z-50/.test(PAGE), "the sit is back inside the page frame");
+    // One wrapper for every sit — the quiz, a re-sit, a drill run.
+    assert.ok(/<SitScreen[^>]*>\s*<QuizPlayer/.test(PAGE), "the sit is back inside the page frame");
+    assert.ok(/data-sit[^>]*className="fixed inset-0 z-50/.test(strip(read("src/components/shared/SitScreen.jsx"))),
+        "the sit screen no longer covers the frame");
     assert.ok(!/Back to Quizzes/.test(PAGE), "a second exit is back above the player's own");
     assert.ok(/<button onClick=\{leave\}/.test(PLAYER), "the player's exit no longer goes through leave()");
     assert.ok(/if \(isSAC\)[\s\S]{0,120}window\.confirm/.test(bodyOf(PLAYER, "leave")), "leaving a SAC no longer asks");
@@ -358,19 +356,15 @@ check("ACE REACTS TO THE SAVED SCORE, after the marker — and no toast says it 
     assert.ok(!/into cards/.test(strip(after)), "Ace offers to make cards from misses, a button that was deleted");
 });
 
-check("THE NEXT SIT IS DECIDED, not the first row or a random one", () => {
-    assert.ok(/nextSit\(quizzes, quizAttempts\)/.test(PAGE), "the page no longer asks nextSit");
-    assert.ok(!/quizzes\[0\]/.test(PAGE), "\"next quiz\" is the first row again");
+check("THE OLD HEADER, AND THE QUIZ ITS STRIP NAMES IS DECIDED", () => {
+    // The head went back to the coach strip, the hero and the "Next quiz"
+    // strip by request. What survived is which quiz that strip names: it was
+    // a RANDOM one for a library never sat and otherwise the first row.
+    assert.ok(/nextSit\(quizzes, quizAttempts\)/.test(PAGE), "the strip no longer asks nextSit");
     assert.ok(!/Math\.random\(\)/.test(PAGE), "a random quiz is offered again");
-    assert.ok(/nextSitLine\(next\)/.test(HEAD), "the reason is no longer the model's fact");
-});
-
-check("the head prints each figure ONCE", () => {
-    // 70% was the eyebrow, the headline and a tile; the quiz count twice.
-    assert.ok(!/% avg/.test(PAGE), "the average is back in the eyebrow");
-    assert.ok(!/average —/.test(PAGE), "the average is back in a coach headline");
-    assert.equal((HEAD.match(/testid="average"/g) || []).length, 1, "the average is drawn more than once");
-    assert.ok(/bank\?\.total > 0 &&/.test(HEAD), "an empty mistake bank gets a figure again");
+    assert.ok(/const random = pick \|\|/.test(PAGE) && /const target = pick \|\|/.test(PAGE),
+        "the strip names a quiz nextSit did not choose");
+    assert.ok(!fs.existsSync("src/components/quizzes/ShelfHead.jsx"), "the reworked head is back");
 });
 
 check("the generator names the job, not the technology", () => {

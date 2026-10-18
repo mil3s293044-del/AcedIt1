@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import MegaPicker from "@/components/shared/MegaPicker";
 import { PRICE } from "@/lib/chips";
+import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
 import { isReady } from "@/lib/due";
 import { deleteResult } from "@/lib/saveResult";
@@ -25,7 +26,10 @@ import {
     FileText,
     Upload,
     X,
+    Sparkles,
     PlusCircle,
+    Trophy,
+    ArrowRight,
     AlertTriangle,
     Bookmark,
     ChevronDown,
@@ -42,13 +46,13 @@ import TierUsagePill from "@/components/shared/TierUsagePill";
 import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizDeck from "@/components/cards/QuizDeck";
-import { quizDeckStats, quizzingSummary } from "@/lib/quizDeck";
+import { quizDeckStats, quizzingSummary, effectiveScore, RECENT_WINDOW } from "@/lib/quizDeck";
 import { normaliseQuestions, formatGeneratedParts, referencesMissingSource, normaliseStimulus,
     STIMULUS_RULE, STIMULUS_SCHEMA, DEFAULT_SHORT_MARKS } from "@/lib/quizSchema";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import PreSit from "@/components/quizzes/PreSit";
-import ShelfHead from "@/components/quizzes/ShelfHead";
+import SitScreen from "@/components/shared/SitScreen";
 import { nextSit } from "@/lib/quizSit";
 import { subjectColor } from "@/components/cards/cardIdentity";
 import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
@@ -56,6 +60,39 @@ import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupField
 import { QUESTION_KINDS } from "@/lib/quizSetup";
 import { MINUTES_PER_MARK, paperShape, markRule, stimulusAsk } from "@/lib/quizSetup";
 import { commandTermRule } from "@/lib/subjectExaminerPrompts";
+
+// ─── Coach voice helpers (chill + motivational) ──────────────────────────────
+function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowScore }) {
+    const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
+    if (totalQuizzes === 0) {
+        return `${period}, ${name}. No quizzes yet — let's build your first one.`;
+    }
+    if (recentAttempts === 0) {
+        return `${period}, ${name}. ${totalQuizzes} quiz${totalQuizzes === 1 ? '' : 'zes'} ready when you are.`;
+    }
+    if (avgScore != null && avgScore >= 85) {
+        return `${period}, ${name}. ${avgScore}% average — you're nailing this.`;
+    }
+    if (avgScore != null && avgScore >= 60) {
+        return `${period}, ${name}. ${avgScore}% average — keep at it, you're getting there.`;
+    }
+    if (lowScore && avgScore != null) {
+        return `${period}, ${name}. ${avgScore}% average — let's run a few more and watch it climb.`;
+    }
+    if (avgScore != null) {
+        return `${period}, ${name}. Avg score ${avgScore}% across your recent sits. Solid.`;
+    }
+    return `${period}, ${name}. Let's get a quiz in.`;
+}
+
+const FOCUS_THEME = {
+    primary:   { bg: "bg-primary/10",  border: "border-primary/25",  iconBg: "bg-primary/15",  iconText: "text-primary"  },
+    xp:        { bg: "bg-xp/10",       border: "border-xp/25",       iconBg: "bg-xp/15",       iconText: "text-xp"       },
+    streak:    { bg: "bg-streak/10",   border: "border-streak/25",   iconBg: "bg-streak/15",   iconText: "text-streak"   },
+    "chart-3": { bg: "bg-chart-3/10",  border: "border-chart-3/25",  iconBg: "bg-chart-3/15",  iconText: "text-chart-3"  },
+    "chart-4": { bg: "bg-chart-4/10",  border: "border-chart-4/25",  iconBg: "bg-chart-4/15",  iconText: "text-chart-4"  },
+};
+
 
 /**
  * The generator's settings, in ONE place.
@@ -90,6 +127,7 @@ const DEFAULT_AI_SETTINGS = {
 };
 
 export default function Quizzes() {
+    const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
     const [quizzes, setQuizzes] = useState([]);
@@ -993,12 +1031,110 @@ Return valid JSON only.`,
         return { ...s, lowScore: s.avgScore != null && s.avgScore < 60 };
     }, [quizzes, quizAttempts]);
 
-    // ── THE ONE NEXT SIT ────────────────────────────────────────────────
-    // This was `quizzes[0]` under a sentence about active recall — whichever
-    // row came back first — or a RANDOM quiz for a library never sat. It is
-    // decided now, and the reason is a fact the card beside it can confirm.
-    // See `nextSit` in quizSit.js for the order.
-    const next = useMemo(() => nextSit(quizzes, quizAttempts), [quizzes, quizAttempts]);
+    const firstName = userProfile?.username || user?.full_name?.split(' ')[0] || 'friend';
+    const hour = new Date().getHours();
+    const coachLine = getCoachLine({
+        name: firstName,
+        hour,
+        totalQuizzes: quizStats.totalQuizzes,
+        recentAttempts: quizStats.totalAttempts,
+        avgScore: quizStats.avgScore,
+        lowScore: quizStats.lowScore,
+    });
+
+    // WHICH quiz the strip names. It was a RANDOM quiz for a library never
+    // sat — a different one on every visit — and otherwise `quizzes[0]`,
+    // whichever row came back first, empty quizzes included. `nextSit` picks
+    // the same quiz every time for a reason (see quizSit.js); the strip and
+    // its wording are exactly what they were.
+    const pick = useMemo(() => nextSit(quizzes, quizAttempts)?.quiz || null, [quizzes, quizAttempts]);
+
+    // Featured "Next quiz" — state-aware suggestion
+    const nextQuiz = useMemo(() => {
+        // Low recent score on a known quiz — suggest replay
+        // The score they were SHOWN, which is the adjusted one wherever they
+        // marked their own written work.
+        const lastScore = quizStats.lastAttempt ? effectiveScore(quizStats.lastAttempt) : null;
+        if (typeof lastScore === "number" && lastScore < 60) {
+            const target = quizzes.find(q => q.id === quizStats.lastAttempt.quiz_id);
+            if (target) {
+                return {
+                    label: "Run it back",
+                    title: `Try "${target.title}" again`,
+                    sub: `You scored ${Math.round(lastScore)}% last time — your score will climb.`,
+                    cta: "Retake quiz",
+                    accent: "streak",
+                    icon: AlertTriangle,
+                    action: () => { setPendingQuiz(target); },
+                };
+            }
+        }
+        // Strong streak of scores — challenge
+        if (quizStats.avgScore != null && quizStats.avgScore >= 85 && quizzes.length > 0) {
+            return {
+                label: "Stretch goal",
+                title: "Generate a harder AI quiz",
+                sub: "You're cruising — let's see how you handle exam-level difficulty.",
+                cta: "Make a harder quiz",
+                accent: "xp",
+                icon: Sparkles,
+                action: () => setShowAIDialog(true),
+            };
+        }
+        // Quizzes sitting there, never sat. The count is all-time, so this
+        // fires for somebody who has built a library and not opened it — not
+        // for somebody who simply has not been on this week.
+        if (quizzes.length >= 3 && quizStats.totalAttempts === 0) {
+            const random = pick || quizzes[0];
+            return {
+                label: "Pick something",
+                title: `Take "${random.title}"`,
+                sub: "Pick one and see what sticks — momentum starts here.",
+                cta: "Start quiz",
+                accent: "chart-3",
+                icon: Brain,
+                action: () => { setPendingQuiz(random); },
+            };
+        }
+        // Pending shared quizzes
+        if (pendingSharedQuizzes.length > 0) {
+            return {
+                label: "Shared with you",
+                title: `${pendingSharedQuizzes.length} quiz${pendingSharedQuizzes.length === 1 ? '' : 'zes'} waiting from friends`,
+                sub: "Accept and add them to your library.",
+                cta: "Review now",
+                accent: "primary",
+                icon: Sparkles,
+                // Accept/decline lives on Friends, next to the friend who sent
+                // it — this just takes you there rather than duplicating it.
+                action: () => navigate("/Friends"),
+            };
+        }
+        // Has quizzes — quick suggestion
+        if (quizzes.length > 0) {
+            const target = pick || quizzes[0];
+            return {
+                label: "Quick win",
+                title: `Take "${target.title}"`,
+                sub: "Active recall locks in what passive reading misses.",
+                cta: "Start quiz",
+                accent: "chart-3",
+                icon: Brain,
+                action: () => { setPendingQuiz(target); },
+            };
+        }
+        // Empty state default
+        return {
+            label: "Get started",
+            title: "Generate your first AI quiz",
+            sub: "Upload notes and we'll build a quiz tailored to your material.",
+            cta: "Make a quiz from my notes",
+            accent: "chart-4",
+            icon: Wand2,
+            action: () => setShowAIDialog(true),
+        };
+    }, [quizzes, quizStats, pendingSharedQuizzes, navigate, pick]);
+
     const toneOf = (subject) => subjectColor(userSubjects.find(s => s.subject_name === subject));
 
     if (isPlaying && selectedQuiz) {
@@ -1011,8 +1147,7 @@ Return valid JSON only.`,
         // journey changed shape halfway through. The player's ✕ is the exit
         // now, and it knows which kind of sit it is leaving.
         return (
-            <div data-sit className="fixed inset-0 z-50 bg-background overflow-y-auto">
-                <div className="max-w-3xl mx-auto px-4 py-5 sm:py-8">
+            <SitScreen label={selectedQuiz.title}>
                     <QuizPlayer
                         quiz={selectedQuiz}
                         mode={quizMode}
@@ -1025,8 +1160,7 @@ Return valid JSON only.`,
                             await loadData();
                         }}
                     />
-                </div>
-            </div>
+            </SitScreen>
         );
     }
 
@@ -1050,26 +1184,251 @@ Return valid JSON only.`,
             <div className="min-h-screen bg-background">
                 <div className="max-w-[1600px] mx-auto px-4 lg:px-8 py-6 lg:py-10 space-y-6 lg:space-y-8">
 
-                {/* ── THE HEAD: one next sit, and how it is going ─────────
-                    It was a coach headline, a hero panel, a mistake-bank panel
-                    and a "next quiz" strip — 70% printed three times and the
-                    quiz count twice before the first quiz on the shelf. See
-                    ShelfHead's header. */}
-                <div className="flex items-center justify-between -mb-2">
-                    <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">{format(new Date(), 'EEE · MMM d')}</span>
-                    <HelpButton page="Quizzes" />
-                </div>
-                <ShelfHead
-                    next={next}
-                    summary={quizStats}
-                    bank={bank}
-                    attempts={quizAttempts}
-                    tone={next ? toneOf(next.quiz.subject) : undefined}
-                    sharedWaiting={pendingSharedQuizzes.length}
-                    onSit={(quiz) => setPendingQuiz(quiz)}
-                    onGenerate={() => setShowAIDialog(true)}
-                    onCreate={() => setIsManualCreate(true)}
-                />
+                {/* ── COACH STRIP ─────────────────────────────────────── */}
+                <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2 text-xs">
+                            <span className="font-bold text-muted-foreground uppercase tracking-wider">{format(new Date(), 'EEE · MMM d')}</span>
+                            {quizStats.totalQuizzes > 0 && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className="inline-flex items-center gap-1 font-extrabold text-chart-3">
+                                        <Brain className="w-3.5 h-3.5" /> {quizStats.totalQuizzes} quiz{quizStats.totalQuizzes === 1 ? '' : 'zes'}
+                                    </span>
+                                </>
+                            )}
+                            {quizStats.avgScore != null && (
+                                <>
+                                    <span className="text-muted-foreground/40">·</span>
+                                    <span className={`inline-flex items-center gap-1 font-extrabold ${quizStats.avgScore >= 85 ? 'text-primary' : quizStats.avgScore >= 60 ? 'text-xp' : 'text-streak'}`}>
+                                        <Trophy className="w-3.5 h-3.5" /> {quizStats.avgScore}% avg
+                                    </span>
+                                </>
+                            )}
+                        </div>
+                        <HelpButton page="Quizzes" />
+                    </div>
+                    <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
+                        {coachLine}
+                    </h1>
+                </motion.section>
+
+                {/* ── SAVED ANSWERS LIBRARY ───────────────────────────── */}
+                {savedAnswers.length > 0 && (
+                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card-soft overflow-hidden">
+                        <button
+                            onClick={() => setShowSaved(s => !s)}
+                            className="w-full flex items-center justify-between px-5 py-4 hover:bg-secondary/40 transition-colors"
+                        >
+                            <div className="flex items-center gap-2">
+                                <Bookmark className="w-4 h-4 text-chart-4" />
+                                <span className="font-display font-extrabold text-foreground text-sm">Saved answers</span>
+                                <span className="pill bg-chart-4/15 text-chart-4">{savedAnswers.length}</span>
+                            </div>
+                            {showSaved ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+                        </button>
+                        {showSaved && (
+                            <div className="px-3 pb-3 space-y-2 max-h-80 overflow-y-auto border-t border-border pt-3">
+                                {savedAnswers.map(s => (
+                                    <div key={s.id} className="flex items-center justify-between gap-2 p-3 bg-background rounded-xl border border-border">
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-foreground truncate">{s.title}</p>
+                                            <p className="text-xs text-muted-foreground">{s.subject_name || s.topic || 'Quiz'} · {s.date_created}</p>
+                                        </div>
+                                        <div className="flex gap-1 flex-shrink-0">
+                                            <button onClick={() => setViewingSaved(s)} className="p-1.5 text-muted-foreground hover:text-chart-4 hover:bg-chart-4/10 rounded-lg transition-colors"><Eye className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => deleteResult('saved_answer', s.id).then(() => setSavedAnswers(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground hover:text-streak hover:bg-streak/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </motion.section>
+                )}
+
+                {/* ── HERO ROW: Your quizzing (3/5) + This week (2/5) ── */}
+                <motion.section
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.05 }}
+                    className="grid grid-cols-1 md:grid-cols-5 gap-5 lg:gap-6"
+                >
+                    {/* LEFT: Your quizzing — total + avg score, big numbers */}
+                    <div className="md:col-span-3">
+                        <div className="relative overflow-hidden rounded-3xl bg-chart-3/10 border-2 border-chart-3/25 p-6 lg:p-8 h-full">
+                            <Brain className="absolute -top-6 -right-6 w-32 h-32 text-chart-3/10 pointer-events-none" />
+                            <div className="relative grid grid-cols-1 sm:grid-cols-5 gap-5 items-center">
+                                <div className="sm:col-span-3">
+                                    <p className="stat-label text-chart-3/80 mb-1">Your quizzing</p>
+                                    <div className="flex items-baseline gap-3">
+                                        <span
+                                            className="font-display font-extrabold text-chart-3 leading-none"
+                                            style={{ fontSize: 'clamp(3.5rem, 10vw, 6rem)' }}
+                                        >
+                                            {quizStats.totalQuizzes}
+                                        </span>
+                                        <span className="font-display font-extrabold text-chart-3/50 text-2xl lg:text-3xl">
+                                            {quizStats.totalQuizzes === 1 ? 'quiz' : 'quizzes'}
+                                        </span>
+                                    </div>
+                                    <p className="text-foreground text-sm lg:text-base mt-2 max-w-md font-medium leading-snug">
+                                        {quizStats.totalQuizzes === 0
+                                            ? "Build your first quiz and start locking knowledge in."
+                                            : quizStats.totalAttempts === 0
+                                                ? "Take one to see how it sticks."
+                                                : `${quizStats.totalAttempts} attempt${quizStats.totalAttempts === 1 ? '' : 's'} logged. Keep building.`}
+                                    </p>
+                                </div>
+                                <div className="sm:col-span-2 grid grid-cols-2 sm:grid-cols-1 gap-3">
+                                    <div className="bg-surface rounded-xl p-3 border-2 border-chart-3/15">
+                                        <p className="stat-label">Avg score</p>
+                                        <p className={`font-display font-extrabold text-2xl mt-0.5 leading-none ${
+                                            quizStats.avgScore == null ? 'text-muted-foreground/60'
+                                                : quizStats.avgScore >= 85 ? 'text-primary'
+                                                    : quizStats.avgScore >= 60 ? 'text-xp'
+                                                        : 'text-streak'
+                                        }`}>
+                                            {quizStats.avgScore != null ? `${quizStats.avgScore}%` : '—'}
+                                        </p>
+                                        {/* Says what it actually averaged. "last 5"
+                                            over two sits is a small lie, and it
+                                            is the kind that makes a student stop
+                                            believing the bigger numbers. */}
+                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                            {quizStats.avgOver ? `last ${quizStats.avgOver}` : `last ${RECENT_WINDOW}`}
+                                        </p>
+                                    </div>
+                                    {/* TREND, not "best score all time".
+                                        A personal record only changes when you
+                                        beat it, so it sat there unmoved for
+                                        weeks — and it is set on your easiest
+                                        quiz by construction, which makes it a
+                                        trophy rather than a measurement. This
+                                        moves every time you sit one, and it
+                                        answers the only question a score panel
+                                        should: is it going up. */}
+                                    <div className="bg-surface rounded-xl p-3 border-2 border-border">
+                                        <p className="stat-label">Trend</p>
+                                        <p className={`font-display font-extrabold text-2xl mt-0.5 leading-none ${
+                                            quizStats.trend == null ? 'text-muted-foreground/60'
+                                                : quizStats.trend > 0 ? 'text-primary'
+                                                    : quizStats.trend < 0 ? 'text-streak'
+                                                        : 'text-foreground'
+                                        }`}>
+                                            {quizStats.trend == null
+                                                ? '—'
+                                                : quizStats.trend === 0
+                                                    ? 'Level'
+                                                    : `${quizStats.trend > 0 ? '+' : '−'}${Math.abs(quizStats.trend)}`}
+                                        </p>
+                                        {/* Says what unlocks it rather than
+                                            leaving a dash there forever. */}
+                                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                                            {quizStats.trend == null
+                                                ? `after ${quizStats.trendNeeds} more sit${quizStats.trendNeeds === 1 ? '' : 's'}`
+                                                : `vs your ${quizStats.trendOver} before`}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* RIGHT: The mistake bank.
+                        This was "This week: 3 quizzes taken. Keep stacking." —
+                        a count of activity, which is the weakest thing this
+                        page knows. How many quizzes you sat is not a fact you
+                        can act on; which marks you are still dropping is, and
+                        it is the one number on this page that goes DOWN when
+                        the student does the work. Making a quiz is not this
+                        panel's job — that button lives beside the quiz list,
+                        where somebody who wants one is already looking. */}
+                    <div className="md:col-span-2">
+                        <div className="rounded-3xl bg-streak/10 border-2 border-streak/25 p-6 h-full flex flex-col">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Bookmark className="w-4 h-4 text-streak" />
+                                <p className="stat-label text-streak/80">Mistake bank</p>
+                            </div>
+                            <p className="font-display font-extrabold text-foreground leading-none" style={{ fontSize: 'clamp(2.25rem, 5.5vw, 3rem)' }}>
+                                {bank.total === 0 ? '—' : bank.outstanding}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2 leading-snug">
+                                {bank.total === 0
+                                    ? "Mark a quiz and save the marks you drop — they come back until you have them."
+                                    : bank.outstanding === 0
+                                        ? `All ${bank.total} fixed. Nothing outstanding.`
+                                        : `${bank.outstanding} mistake${bank.outstanding === 1 ? '' : 's'} still costing you marks.`}
+                            </p>
+
+                            {bank.total > 0 && (
+                                <div className="space-y-2.5 mt-4 pt-4 border-t-2 border-streak/15">
+                                    <div className="flex items-baseline justify-between">
+                                        <p className="text-xs font-bold text-muted-foreground">Fixed</p>
+                                        <p className="text-xs font-bold text-foreground tabular-nums">
+                                            {bank.fixed} / {bank.total}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-baseline justify-between">
+                                        <p className="text-xs font-bold text-muted-foreground">Ready now</p>
+                                        <p className="text-xs font-bold text-foreground tabular-nums">{bank.ready}</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* One action, and it is the panel's own. Making a
+                                quiz already has a button beside the quiz list —
+                                where somebody who wants another quiz is
+                                actually looking — and a second copy here only
+                                existed because this panel used to be about
+                                quizzing. Three buttons on one page for one
+                                dialog is how a student stops trusting that any
+                                of them do different things. */}
+                            {bank.total > 0 && (
+                                <div className="mt-auto pt-4">
+                                    <Link to={createPageUrl("MistakeBank")} className="block">
+                                        <Button size="sm"
+                                            className="w-full btn-3d bg-streak hover:bg-streak text-white">
+                                            <Bookmark className="w-3.5 h-3.5" />
+                                            {bank.ready > 0 ? `Review ${bank.ready} now` : 'Open the bank'}
+                                        </Button>
+                                    </Link>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </motion.section>
+
+                {/* ── FEATURED "Next quiz" PANEL ──────────────────────── */}
+                {nextQuiz && (
+                    <motion.section
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                    >
+                        <div className={`rounded-2xl ${FOCUS_THEME[nextQuiz.accent].bg} border-2 ${FOCUS_THEME[nextQuiz.accent].border} p-5 lg:p-6`}>
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+                                <div className={`w-12 h-12 rounded-xl ${FOCUS_THEME[nextQuiz.accent].iconBg} flex items-center justify-center flex-shrink-0`}>
+                                    <nextQuiz.icon className={`w-6 h-6 ${FOCUS_THEME[nextQuiz.accent].iconText}`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="stat-label mb-1">Next quiz · {nextQuiz.label}</p>
+                                    <h2 className="font-display font-extrabold text-foreground text-base lg:text-lg leading-snug">
+                                        {nextQuiz.title}
+                                    </h2>
+                                    <p className="text-muted-foreground text-sm mt-0.5">{nextQuiz.sub}</p>
+                                </div>
+                                {nextQuiz.action && (
+                                    <Button
+                                        onClick={nextQuiz.action}
+                                        className="w-full sm:w-auto flex-shrink-0"
+                                    >
+                                        {nextQuiz.cta} <ArrowRight className="w-4 h-4" />
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </motion.section>
+                )}
 
                 {/* ── THE SHELF, FULL WIDTH ───────────────────────────────
                     The "What to work on" rail used to take 380px down the right
@@ -1271,43 +1630,6 @@ Return valid JSON only.`,
                         )}
                     </div>
                 </section>
-                )}
-
-                {/* ── SAVED ANSWERS, AT THE FOOT ──────────────────────────
-                    Questions you bookmarked to revise later. It sat ABOVE the
-                    hero, so a collapsed row about a library was the first thing
-                    on the page — before the quiz to sit. It is reference: it
-                    belongs after the shelf, where you go looking for it. */}
-                {savedAnswers.length > 0 && (
-                    <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="card-soft overflow-hidden">
-                        <button
-                            onClick={() => setShowSaved(s => !s)}
-                            className="w-full flex items-center justify-between px-5 py-4 hover:bg-secondary/40 transition-colors"
-                        >
-                            <div className="flex items-center gap-2">
-                                <Bookmark className="w-4 h-4 text-chart-4" />
-                                <span className="font-display font-extrabold text-foreground text-sm">Saved answers</span>
-                                <span className="pill bg-chart-4/15 text-chart-4">{savedAnswers.length}</span>
-                            </div>
-                            {showSaved ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                        </button>
-                        {showSaved && (
-                            <div className="px-3 pb-3 space-y-2 max-h-80 overflow-y-auto border-t border-border pt-3">
-                                {savedAnswers.map(s => (
-                                    <div key={s.id} className="flex items-center justify-between gap-2 p-3 bg-background rounded-xl border border-border">
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-bold text-foreground truncate">{s.title}</p>
-                                            <p className="text-xs text-muted-foreground">{s.subject_name || s.topic || 'Quiz'} · {s.date_created}</p>
-                                        </div>
-                                        <div className="flex gap-1 flex-shrink-0">
-                                            <button onClick={() => setViewingSaved(s)} className="p-1.5 text-muted-foreground hover:text-chart-4 hover:bg-chart-4/10 rounded-lg transition-colors"><Eye className="w-3.5 h-3.5" /></button>
-                                            <button onClick={() => deleteResult('saved_answer', s.id).then(() => setSavedAnswers(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground hover:text-streak hover:bg-streak/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </motion.section>
                 )}
 
                 {/* Manual Create Dialog */}
