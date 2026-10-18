@@ -52,9 +52,9 @@ check("an AI tool matches despite the -ise/-ize spelling in the wild", () => {
 });
 
 check("features that leave no client-readable trace are never claimed", () => {
-    // Reading Analytics or opening a Guide writes nothing we can see. They must
-    // stay out of the denominator rather than sit at a permanent zero.
-    for (const id of ["analytics", "guides", "atar", "strategise", "exam"]) {
+    // Reading Analytics writes nothing we can see. They must stay out of the
+    // denominator rather than sit at a permanent zero.
+    for (const id of ["analytics", "atar", "strategise", "exam"]) {
         assert.ok(!MEASURABLE.includes(id), id);
     }
 });

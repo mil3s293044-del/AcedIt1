@@ -352,14 +352,6 @@ export const FEATURES = [
         needs: null,
         aka: ["subjects", "add subject", "setup", "classes", "units"],
     },
-    {
-        id: "guides", name: "Guides", section: "Setup", suit: "spade",
-        to: "/Guides",
-        what: "How each subject is marked (where the marks are, what examiners reward, how marks are lost, the terms they want), the science behind each technique with its sources, and what every command term asks for.",
-        when: "Before a SAC, to see how it will be marked, or when you want to know why a technique works before you try it.",
-        needs: null,
-        aka: ["guides", "how it's marked", "marking", "examiner", "command terms", "how to study", "tips", "mark allocation"],
-    },
 ];
 
 export const BY_ID = Object.fromEntries(FEATURES.map(f => [f.id, f]));
@@ -395,7 +387,6 @@ export const PAGES = {
     Competitions: { route: "/Competitions", title: "Compete",      intro: "Head-to-head challenges. Most people will do it for a friend when they won't do it for themselves." },
     Subjects:     { route: "/Subjects",     title: "Subjects",     intro: "Your subjects and the SAC and exam dates inside them. Most of the app is organised by this." },
     Strategise:   { route: "/Strategise",   title: "Strategise",   intro: "A short check-in that turns how you're going into the next concrete move." },
-    Guides:       { route: "/Guides",       title: "Guides",       intro: "How each subject is marked, and the science behind each technique." },
     StudyGroups:  { route: "/StudyGroups",  title: "Study groups", intro: "Your class as a group: who has been studying this week, a shared shelf, and quick calls." },
 
     // Plumbing. Deliberately absent from FEATURES — a guide that offers to

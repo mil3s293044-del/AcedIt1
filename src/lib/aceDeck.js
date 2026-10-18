@@ -15,7 +15,7 @@
  *   the student across devices, because it lives in their rows.
  *
  *   OPENED — the route was visited on this device. It's all we can know about
- *   the read-only parts (Analytics, Ranked, the guides), and it is NOT the
+ *   the read-only parts (Analytics, Ranked), and it is NOT the
  *   same claim: opening Analytics once is not using Analytics. Kept as its own
  *   state so the deck never says you've done something you've only looked at.
  *

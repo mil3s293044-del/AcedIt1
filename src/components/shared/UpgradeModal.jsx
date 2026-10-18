@@ -4,19 +4,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button';
 import {
     Crown, Zap, Lock, ArrowRight,
-    BookOpen, Trophy, FileQuestion, Sparkles, Target, Brain, PenTool, Users, BarChart3, Check,
+    Trophy, FileQuestion, Sparkles, Target, Brain, PenTool, Users, BarChart3, Check,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Card, CardContent } from '@/components/ui/card';
 
 const FEATURE_DESCRIPTIONS = {
-    'Guides': {
-        title: 'Study Guides',
-        description: 'Access comprehensive VCE study guides covering all subjects and exam techniques.',
-        icon: BookOpen,
-        benefits: ['VCE system guides', 'Subject-specific strategies', 'Exam preparation tips', 'Study technique guides']
-    },
     'Ranked': {
         title: 'Ranked Leaderboard',
         description: 'Compete with other students and track your progress on the global leaderboard.',

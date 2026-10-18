@@ -7810,66 +7810,30 @@ endpoint answers 401 without a token, every column it names passes
 34 injections biting against a green baseline. Draw it with the network-level
 harness against `/StudyGroups` and `/StudyGroups?g=<id>`.
 
-## Guides are built from what the app knows, and nobody writes them
+## Guides are retired
 
-**/Guides was a page of student posts.** Any signed-in student could write one,
-every signed-in student could read every one, and the author ticked their own
-"featured" box. That is free text between students, published to the whole
-site with nothing checking a word of it. It is the thing migration 0034 refused
-for Compete and 0043 took out of study groups. It was also not in either nav.
+**/Guides is gone, by request.** It began as a page of student-written posts,
+open to every signed-in student. It was then rebuilt from the examiner
+profiles, the mark split and the technique science, with a "How it's marked"
+section on each subject hub. Both the page and the hub section are now deleted.
+The nav entries and Ace's map entry went with them. Old `/Guides` links
+redirect to `/Help`.
 
-**Meanwhile the app had been showing its real knowledge to a model and nobody
-else.** `subjectExaminerPrompts.js` holds 35 subjects of mark conventions, how
-candidates lose marks and the terms examiners want. The MARKER reads it on
-every call. A student revising for the same exam had never seen a line of it.
+Three things outlived it on purpose:
 
-`src/lib/guides.js` builds every guide from three sources: the examiner
-profiles (through `examinerProfile`), VCAA's split (through `markSplit`, the
-hub's own function) and `neuro.js`. Nothing is stored and nothing is written.
-There are three kinds of guide:
+- **The examiner-data corrections stay.** Specialist's and Media's exam
+  formats now agree with their own mark splits, and the General Maths
+  growth-factor line no longer names the same number twice. The MARKER reads
+  this text on every call. `markingPrompt.test.mjs` now holds both checks,
+  reading the profile through `getExaminerPrompt`. The student-facing accessor
+  `examinerProfile` had no other reader, so it went.
+- **Migration 0044 still has to be applied.** It takes away read and write on
+  `study_guides` for everyone but each post's author. Until it runs, the old
+  posts are readable through the API by any signed-in student.
+- **Account deletion still removes those rows** ("Study guides" in
+  `accountTables`).
 
-- **Subjects:** where the marks are, the exam, what examiners reward, how marks
-  are lost (`lostMarks` parses the three shapes the profiles use, splitting
-  only outside brackets), the words examiners want, what the course covers,
-  and what works.
-- **Techniques:** the panel Study already draws (`NeuroPanel layout="page"`),
-  so the science is written down once.
-- **Command terms:** ONE guide rather than thirty-five copies of the same table.
-
-**THE GENERIC FALLBACK IS NEVER A SUBJECT'S MARKING.** The prompts fall back to
-`_default` so a prompt always has something. Printed under a subject's name,
-that would be the app making up a subject's marking. `examinerProfile` returns
-null instead, and a subject with no profile has no guide. `examplePromptStyle`
-is instructions TO a model ("use phrasing students see on real exams…"), so
-the accessor does not return it at all.
-
-**TWO SCREENS, ONE COMPONENT.** `SubjectGuide` is the body of the guide on
-/Guides and the "How it's marked" section of that subject's hub. `place="hub"`
-leaves out the split, the course and the tips, which the hub already draws
-above it, rather than printing them twice. The split itself is
-`MarkSplitList`, lifted out of the hub so both screens draw it with one list.
-
-**THE DATA DISAGREED WITH ITSELF, AND NOW A TEST SAYS SO.** Specialist's exam
-format said "~17% each" against a 20/14 split. Media's said 30/10 against
-20/20. Both sat one block away from their own split. Every % in an exam format
-must now be a weight the catalogue can produce, or a sum of weights. General
-Maths warned against "using $r = 1.05$ instead of $r = 1.05$", which names the
-same number on both sides. And three catalogue tips said "don't", already on
-every hub. All five are fixed at the source, so the marker reads the corrected
-text too.
-
-**EVERY GUIDE ENDS IN A DOOR**, built as data so a test can check each one
-lands on a real page, a real tool and a technique Study honours. The subject
-door is chosen by `personaFor`, the same as the AI Tools brief: maths is worked
-through, English is planned and marked, everything else is sat.
-
-**Migration 0044 unpublishes the posts.** It drops the read-all, insert and
-update policies, and adds a read-own policy beside the existing delete-own, so
-account deletion ("Study guides" in `accountTables`) can still find and remove
-a student's old rows. Apply it AFTER the deploy.
-
-`guides.test.mjs` holds 25 checks, and all 25 injections were caught against a
-green baseline.
+`MarkSplitList` stays, because it is the hub's own mark split.
 
 ## A placed Ace arrives, settles and reacts
 
@@ -8482,12 +8446,6 @@ student looking free in the nav, the planner and the companion.
   `supabase/migrations/0042_friendships_server_only.sql` — friends by code and
   link, every friendship and share write on the server, set notes instead of
   free text. Apply 0042 AFTER the deploy
-- `src/lib/guides.js` + `guides.test.mjs`, `src/pages/Guides.jsx`,
-  `src/components/guides/SubjectGuide.jsx`, `src/components/subjects/MarkSplitList.jsx`,
-  `supabase/migrations/0044_study_guides_private.sql`: every guide built from
-  the examiner profiles, the catalogue split and the technique science, drawn
-  by one component on /Guides and on each subject's hub. Apply 0044 AFTER the
-  deploy
 - `src/lib/groups.js` + `groups.test.mjs`, `src/api/groupsApi.js`,
   `src/pages/StudyGroups.jsx`, `src/components/groups/`,
   `supabase/migrations/0043_study_groups_server_only.sql` — study groups on the

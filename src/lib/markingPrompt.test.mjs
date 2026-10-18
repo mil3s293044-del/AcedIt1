@@ -35,6 +35,7 @@ import {
 } from "@/lib/markingPrompt";
 import { EXEMPLARS, DISTRIBUTIONS, exemplarsFor, exemplarSection, distributionNote } from "@/lib/examinerReports";
 import { getProfiledSubjects, getExaminerPrompt, subjectIsMathHeavy } from "@/lib/subjectExaminerPrompts";
+import { VCE_SUBJECTS } from "@/data/vceSubjects";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -284,6 +285,36 @@ check("the carrier WORKS, so pasting real figures in is the whole change", () =>
         delete DISTRIBUTIONS["Chemistry"];
     }
     assert.deepEqual(DISTRIBUTIONS, {}, "the fixture leaked into shipped data");
+});
+
+// ─── The profile has to agree with the catalogue ─────────────────────────────
+
+check("a weight the marker is told is one the catalogue can produce", () => {
+    // Specialist's profile said SACs were "~17% each" against a 20/14 split,
+    // and Media's said 30/10 against 20/20 — the marker was handed a mark
+    // allocation that disagreed with the study design it was marking against.
+    // Every % in the exam format must be a component's weight or a sum of them.
+    for (const s of VCE_SUBJECTS) {
+        const weights = (s.assessment_structure || []).map((a) => Number(a.percentage)).filter((n) => n > 0);
+        if (!weights.length) continue;
+        const sums = new Set([0]);
+        for (const w of weights) for (const v of [...sums]) sums.add(v + w);
+        const line = getExaminerPrompt(s.name).match(/\nEXAM FORMAT: ([^\n]*)/)?.[1] || "";
+        for (const m of line.matchAll(/(\d+)%/g)) {
+            assert.ok(sums.has(Number(m[1])), `${s.name}'s exam format says ${m[1]}%, which its split cannot add up to`);
+        }
+    }
+});
+
+check("no common mistake names the same thing on both sides of 'instead of'", () => {
+    // General Maths read "Using $r = 1.05$ instead of $r = 1.05$" — handed to
+    // the marker as an error to call out.
+    for (const n of getProfiledSubjects()) {
+        const line = getExaminerPrompt(n).match(/\nCOMMON STUDENT ERRORS TO AVOID\/CALL OUT: ([^\n]*)/)?.[1] || "";
+        for (const m of line.matchAll(/(\$[^$]+\$)[^$;]*instead of[^$;]*(\$[^$]+\$)/g)) {
+            assert.notEqual(m[1], m[2], `${n}: "${m[0]}" names the same thing twice`);
+        }
+    }
 });
 
 console.log(`\nmarkingPrompt: ${passed} checks passed`);

@@ -46,8 +46,6 @@ import { alpha } from "@/components/cards/PlayingCard";
 import ScoreCurve from "@/components/subjects/ScoreCurve";
 import ScalingMark from "@/components/subjects/ScalingMark";
 import MarkSplitList from "@/components/subjects/MarkSplitList";
-import SubjectGuide from "@/components/guides/SubjectGuide";
-import { subjectGuide } from "@/lib/guides";
 import { scaledScore, clampScore } from "@/lib/studyScore";
 import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
@@ -164,8 +162,6 @@ export default function SubjectHub() {
         () => VCE_SUBJECTS.find((s) => String(s.name).toLowerCase() === name.toLowerCase()) || null,
         [name],
     );
-
-    const guide = useMemo(() => subjectGuide(name), [name]);
 
     const stats = useMemo(
         () => subjectStats(name, {
@@ -437,21 +433,6 @@ export default function SubjectHub() {
                 )}
             </div>
 
-            {/* ── How it's marked ───────────────────────────────────────
-                The subject's guide, drawn by the component /Guides draws it
-                with, so the two screens cannot word a convention differently.
-                `place="hub"` leaves out the split and the tips, which this
-                page already draws, and a subject with no examiner profile
-                (one the student made up) has no guide and no section. */}
-            {guide && (
-                <motion.section
-                    initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.12 }}
-                    className="card-soft on-table p-5 lg:p-6" data-hub-guide>
-                    <p className="stat-label mb-4">How it&apos;s marked</p>
-                    <SubjectGuide guide={guide} place="hub" hex={hex} />
-                </motion.section>
-            )}
 
             {/* ── The study design's own advice, if the catalogue has it ── */}
             {full?.study_tips?.length > 0 && (

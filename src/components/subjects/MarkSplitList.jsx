@@ -2,10 +2,9 @@
  * MarkSplitList — a subject's assessments, heaviest first, with their share of
  * the study score.
  *
- * Drawn by the subject hub AND the subject's guide. Two drawings of one split
- * is two places a weight can be printed differently, and the split is the one
- * number on either screen a student plans a term around. `split` is always
- * `markSplit`'s output, so the arithmetic is shared as well as the picture.
+ * Drawn by the subject hub. `split` is always `markSplit`'s output, so the
+ * arithmetic is the hub's own rather than a second copy of it — the split is
+ * the one number on the page a student plans a term around.
  */
 import React from "react";
 import { motion, useReducedMotion } from "framer-motion";

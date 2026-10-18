@@ -191,7 +191,7 @@ export default function Layout({ children }) {
 
     // The deck's weaker half. Opening a page isn't using a feature, which is
     // why this is kept apart from the evidence in the student's own rows — but
-    // for the read-only parts of the app (Analytics, Ranked, the guides) it's
+    // for the read-only parts of the app (Analytics, Ranked) it's
     // the only thing we can honestly know at all.
     useEffect(() => {
         recordVisit(location.pathname + location.search);

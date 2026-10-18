@@ -134,7 +134,6 @@ async function main() {
         ['Social', 'Wager',              reach(col(wagers, 'created_by'))],
         ['Social', 'Study group',        reach(col(groups, 'created_by'))],
 
-        ['Other', 'Guides',              UNMEASURED],
         ['Other', 'Timer page',          UNMEASURED],
     ];
 

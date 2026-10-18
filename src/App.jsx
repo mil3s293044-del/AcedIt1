@@ -183,6 +183,9 @@ const AuthenticatedApp = () => {
       <Route path="/StudyRoadmap" element={<Navigate to="/Goals" replace />} />
       {/* Explore became Help and moved under Account */}
       <Route path="/Explore" element={<Navigate to="/Help" replace />} />
+      {/* Guides retired. The route was live for a long time before that, so a
+          bookmark lands on the manual rather than on a 404. */}
+      <Route path="/Guides" element={<Navigate to="/Help" replace />} />
       {/* Analytics merged into Review: the queue is what you owe, Insights is
           the half of the old page that ended in something to do. Old links,
           bookmarks and the AI coach's own suggestions still land on the
