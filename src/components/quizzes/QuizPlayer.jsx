@@ -32,6 +32,8 @@ import { normaliseQuestion, stimulusText } from "@/lib/quizSchema";
 // "isCorrect is not a function" at runtime.
 import { questionMark, attemptScore, needsDrill, isCorrect as gradeOf } from "@/lib/quizScore";
 import { cardFromModule, bankKey } from "@/lib/mistakeBank";
+import ScoredHand from "@/components/quizzes/ScoredHand";
+import { handOf, handTotal, rankTurn, sitHistory } from "@/lib/quizSit";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import MathText from "@/components/shared/LatexRenderer";
 import { markingSystem } from "@/lib/markingPrompt";
@@ -40,7 +42,7 @@ import { fireXPFeedback } from "../ranked/XPFeedback";
 import QuizTable from "@/components/cards/QuizTable";
 import ChoiceCard from "@/components/cards/ChoiceCard";
 import { suitFor } from "@/components/cards/cardIdentity";
-import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
+import AceShuffle from "@/components/ace/AceShuffle";
 
 // ─── Static class lookup tables (no dynamic Tailwind interpolation) ──────────
 const CHOICE_STATE = {
@@ -261,6 +263,10 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     const [userAnswers, setUserAnswers] = useState({});
     const [showResults, setShowResults] = useState(false);
     const [startTime] = useState(Date.now());
+    // When the paper was handed in. The results printed `Date.now() - start`,
+    // which kept ticking on the results screen — "time taken" growing while a
+    // student read their marks.
+    const [finishedAt, setFinishedAt] = useState(null);
     // Re-render every second so the elapsed/countdown clock actually ticks.
     const [, setClockTick] = useState(0);
     useEffect(() => {
@@ -398,28 +404,13 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
      * disagreed on screen: a pill saying 3/5 above a panel saying 0/5, on a
      * question whose answer box read "No answer written".
      */
+    /** Questions with something in them — the SAC's pile, where nothing is "won" yet. */
+    const answeredCount = shuffledQuiz.questions.reduce((n, q, i) => n + (
+        q.type === "mcq" ? (userAnswers[i] !== undefined ? 1 : 0) : (answerTextFor(i).trim() ? 1 : 0)), 0);
+
     const markFor = (index) => questionMark(
         shuffledQuiz.questions[index], index, aiFeedback[index],
         selfMarkedMarks[index], answerTextFor(index));
-
-    /**
-     * Which questions actually cost marks. Read off the AI marks where they
-     * exist and off the MCQ key where they don't, so it still works when
-     * marking was skipped for a tier limit.
-     */
-    const missedIndexes = useMemo(() => shuffledQuiz.questions
-        .map((q, i) => {
-            const fb = aiFeedback[i];
-            // `gradeOf` reads the AUTO mark, so a question answered on paper
-            // and self-marked still counts as missed here. That is deliberate:
-            // this pile feeds "make cards from what you missed", and the app
-            // has seen no work on that question to say otherwise.
-            if (fb) return gradeOf(q, markFor(i)) ? -1 : i;
-            if (q.type !== 'mcq') return -1;
-            return parseInt(userAnswers[i], 10) === q.correct_answer ? -1 : i;
-        })
-        .filter(i => i >= 0),
-        [shuffledQuiz.questions, aiFeedback, userAnswers, selfMarkedMarks]);
 
     /**
      * The explanation for a question you got RIGHT, fetched on request.
@@ -523,11 +514,12 @@ In two or three sentences, explain what makes that the right answer and what the
     const openQuestion = (i) => { setCurrentFeedbackIndex(i); setResultsView("questions"); };
 
     /**
-     * How many questions the adaptive drill will actually re-ask. Its own
-     * threshold, not `missedIndexes`': the drill counts a short answer as worth
-     * redoing below 60% where the verdict counts it as missed below 80%, and
-     * offering "redo the 3 you missed" on a drill that then loads two questions
-     * is the kind of small lie that makes a screen untrustworthy.
+     * How many questions the adaptive drill will actually re-ask — the RED
+     * cards in the scored hand, because both are `needsDrill`. The verdict
+     * used to say "you lost marks on 2" beside "redo the 1 you missed" with
+     * nothing on screen saying which was which; the hand shows both now (red
+     * is missed, amber is dropped a mark), so the two counts can be checked
+     * against the cards they counted.
      */
     const drillCount = useMemo(() => shuffledQuiz.questions.filter((q, i) => {
         if (!aiFeedback[i]) return false;
@@ -633,10 +625,33 @@ In two or three sentences, explain what makes that the right answer and what the
         if (!showFeedback) setUserAnswers(prev => ({ ...prev, [currentQuestionIndex]: value }));
     };
 
+    /**
+     * The one way out of a sit. Practice offers to save your place, because
+     * practice can be picked up later. A SAC cannot — a SAC you could pause
+     * and resume is not a timed sit — so it asks once and leaves.
+     */
+    const leave = () => {
+        if (isSAC) {
+            if (window.confirm("Leave the SAC? Nothing from this sit is kept.")) onExit();
+            return;
+        }
+        if (Object.keys(userAnswers).length > 0) setShowSaveProgressDialog(true);
+        else onExit();
+    };
+
     const handleSubmitAnswer = () => {
         const userAnswer = userAnswers[currentQuestionIndex];
         if (currentQuestion.type === 'mcq') {
             if (userAnswer === undefined) { toast({ title: "Select an answer first", variant: "destructive" }); return; }
+            // EXAM CONDITIONS HOLD EVERY VERDICT TO THE END. The SAC sheet
+            // promised "nothing marked until you hand it in", and an option
+            // going green and Ace eating the card is a mark. Recorded, and on
+            // to the next question.
+            if (isSAC) {
+                setSubmittedQuestions(prev => new Set([...prev, currentQuestionIndex]));
+                handleNext();
+                return;
+            }
             const correct = parseInt(userAnswer) === currentQuestion.correct_answer;
             setIsCorrect(correct);
             setShowFeedback(true);
@@ -695,6 +710,7 @@ In two or three sentences, explain what makes that the right answer and what the
     const handleFinishQuiz = async () => {
         await clearSavedProgress();
         recordStudyAndGetStreak().catch(() => {});
+        setFinishedAt(Date.now());
         const timeTaken = Math.floor((Date.now() - startTime) / 1000);
         try {
             const user = await base44.auth.me();
@@ -720,13 +736,9 @@ In two or three sentences, explain what makes that the right answer and what the
             }
         } catch {}
         setShowResults(true);
-        // Ace reacts to the mark. One event; the reaction itself is mounted
-        // once in the Layout rather than built into three results screens.
-        const marked = shuffledQuiz.questions.filter(
-            (q, i) => q.type === "mcq" && userAnswers[i] !== undefined
-                && parseInt(userAnswers[i], 10) === q.correct_answer).length;
-        aceDone("quiz", shuffledQuiz.questions.length
-            ? Math.round((marked / shuffledQuiz.questions.length) * 100) : null);
+        // Ace reacts once the MARK is known — after the marker, below. He used
+        // to fire here, on MCQs right over ALL questions, so every written
+        // answer counted as wrong and a 71% paper got "Rough one".
         await generateAIFeedback(timeTaken);
     };
 
@@ -814,6 +826,7 @@ In two or three sentences, explain what makes that the right answer and what the
             if (created?.id) setCreatedAttemptId(created.id);
         } catch {}
         await awardQuizXP({ score: fallbackScore, questionsCorrect: mcqCorrect, totalMarks: mcqCorrect, timeTaken });
+        aceDone("quiz", mcqQuestions.length ? fallbackScore : null);
     };
 
     const generateAIFeedback = async (timeTaken) => {
@@ -1039,7 +1052,10 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
             // Real XP through the server engine + celebration popup.
             await awardQuizXP({ score: finalScore, questionsCorrect, totalMarks: totalMarksAwarded, timeTaken });
 
-            toast({ title: "Quiz marked!", description: `AI analysed all ${mappedFeedback.length} questions.` });
+            // Ace reacts to the score that was saved. No "Quiz marked!" toast:
+            // the hand turning over on the screen behind it already says so,
+            // and on a phone the toast sat over the top bar.
+            aceDone("quiz", finalScore);
         } catch (error) {
             setAiFeedback([]);
             toast({ title: "AI Marking Failed", description: error.message || "Could not analyse answers.", variant: "destructive" });
@@ -1142,7 +1158,23 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
         // things is what put 3/5 above a 0/5 on the same question.
         const currentMark = markFor(currentFeedbackIndex);
         const tier = tierFromScore(overallScore);
-        const TierIcon = tier.icon;
+
+        // ── THE HAND ──────────────────────────────────────────────────────
+        // An MCQ's mark is known the moment it is answered, from the key; a
+        // written answer's only when the marker returns. Until then it is
+        // PENDING, never zero — see quizSit's cardState.
+        const hand = handOf(shuffledQuiz.questions,
+            (i) => {
+                const q = shuffledQuiz.questions[i];
+                if (aiFeedback[i] || q?.type !== 'mcq') return markFor(i);
+                return questionMark(q, i, { marks: parseInt(userAnswers[i], 10) === q.correct_answer ? 1 : 0 });
+            },
+            (i) => !!aiFeedback[i] || shuffledQuiz.questions[i]?.type === 'mcq');
+        const handSum = handTotal(hand);
+        // Rank is your best, so the deck card on the shelf only turns when a
+        // sit beats it. Read against the sits BEFORE this one.
+        const before = sitHistory(quiz, pastAttempts);
+        const deckTurn = rankTurn({ previousBest: before.best, score: handSum.pct, isRetry: quiz._isRetry === true });
 
         return (
             <div className="fixed inset-0 z-50 bg-background flex flex-col">
@@ -1159,6 +1191,10 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                 <p className="text-xs text-muted-foreground/60">{shuffledQuiz.subject}</p>
                             </div>
                         </div>
+                        {/* The score lives on the felt in the verdict, so the
+                            pill is for the question-by-question view, where the
+                            felt is not on screen. */}
+                        {resultsView === "questions" && (
                         <div className="flex items-center gap-2">
                             {isGeneratingFeedback && (
                                 <div className="flex items-center gap-1.5 text-xs text-chart-4 bg-chart-4/10 px-3 py-1.5 rounded-full font-medium">
@@ -1180,11 +1216,16 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                 </div>
                             )}
                         </div>
+                        )}
                     </div>
                 </div>
 
                 <div className="flex-1 flex overflow-hidden">
-                    {/* Sidebar */}
+                    {/* Sidebar — the question list, for the question-by-question
+                        view. On the verdict the hand IS the list: every card is
+                        a question you can tap, and a second list beside it is
+                        the same thing twice. */}
+                    {resultsView === "questions" && (
                     <div className="hidden lg:flex flex-col w-60 bg-surface border-r border-border overflow-hidden">
                         <div className="p-4 border-b border-border">
                             <p className="text-xs font-bold text-muted-foreground/60 uppercase tracking-wider">Questions</p>
@@ -1222,10 +1263,12 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                             })}
                         </div>
                     </div>
+                    )}
 
                     {/* Main area */}
                     <div className="flex-1 flex flex-col overflow-hidden">
                         {/* Mobile question pills */}
+                        {resultsView === "questions" && (
                         <div className="lg:hidden flex-shrink-0 bg-surface border-b border-border px-4 py-2.5 overflow-x-auto">
                             <div className="flex gap-1.5">
                                 {shuffledQuiz.questions.map((q, index) => {
@@ -1250,6 +1293,7 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                 })}
                             </div>
                         </div>
+                        )}
 
                         <div className="flex-1 overflow-y-auto">
                             <div className="max-w-2xl mx-auto p-4 lg:p-6 space-y-4">
@@ -1262,39 +1306,19 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                 {resultsView === "verdict" && (
                                     <motion.div data-verdict initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
                                         className="space-y-4">
-                                        <div className={`card-soft p-6 text-center ${tier.tile} ${tier.border}`}>
-                                            <div className={`w-14 h-14 mx-auto rounded-2xl flex items-center justify-center mb-2 ${tier.badge}`}>
-                                                <TierIcon className="w-7 h-7" />
-                                            </div>
-                                            <p className={`text-5xl font-black ${tier.text}`}>
-                                                {isGeneratingFeedback ? "—" : `${overallScore}%`}
-                                            </p>
-                                            <p className="text-foreground/80 font-semibold mt-1">{tier.label}</p>
-                                            <div className="flex justify-center gap-8 mt-4 pt-4 border-t border-border text-center">
-                                                <div>
-                                                    <p className="stat-num text-primary">{totalQ - missedIndexes.length}</p>
-                                                    <p className="stat-label">Right</p>
-                                                </div>
-                                                <div>
-                                                    <p className="stat-num text-foreground">{totalQ}</p>
-                                                    <p className="stat-label">Total</p>
-                                                </div>
-                                                <div>
-                                                    <p className="stat-num font-mono text-xp">{formatElapsed(Date.now() - startTime)}</p>
-                                                    <p className="stat-label">Time</p>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {isGeneratingFeedback && (
-                                            <div className="card-soft p-6">
-                                                {/* Marking is the app reasoning about THEIR work,
-                                                    which is what `think` is for — see AceShuffle. */}
-                                                <AceLoading variant="think">
-                                                    Marking, and looking for what these have in common&hellip;
-                                                </AceLoading>
-                                            </div>
-                                        )}
+                                        <ScoredHand
+                                            hand={hand}
+                                            total={handSum}
+                                            suit={suitFor(shuffledQuiz.subject)}
+                                            marking={isGeneratingFeedback}
+                                            elapsed={formatElapsed((finishedAt ?? Date.now()) - startTime)}
+                                            turn={deckTurn}
+                                            previousBest={before.best}
+                                            onOpen={openQuestion}
+                                            footnote={!isGeneratingFeedback && handSum.pending > 0
+                                                ? "Your written answers were not marked this time, so this counts the multiple choice only."
+                                                : null}
+                                        />
 
                                         {/* THE THEMES. The most useful thing on the screen:
                                             three wrong answers for one reason is ONE thing to
@@ -1349,11 +1373,11 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                             `autoBankRows` was deleted for exactly this
                                             reason once already: a mistake and a question are
                                             different sizes. */}
-                                        {missedIndexes.length > 0 && !isGeneratingFeedback && (
+                                        {handSum.lost > 0 && !isGeneratingFeedback && (
                                             <div className="card-soft p-5">
                                                 <p className="text-sm text-muted-foreground leading-relaxed mb-3">
-                                                    You lost marks on <span className="font-bold text-foreground">{missedIndexes.length}</span>
-                                                    {" "}question{missedIndexes.length === 1 ? "" : "s"}. Save the ones worth
+                                                    You dropped marks on <span className="font-bold text-foreground">{handSum.lost}</span>
+                                                    {" "}question{handSum.lost === 1 ? "" : "s"}. Save the ones worth
                                                     rehearsing from the marks below &mdash; your mistake bank drills each one
                                                     until you can produce it, then asks you to prove it on the real question.
                                                 </p>
@@ -1662,8 +1686,8 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                     the piles say that, and say it better. */}
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3 min-w-0">
-                        <button onClick={() => { if (Object.keys(userAnswers).length > 0) setShowSaveProgressDialog(true); else onExit(); }}
-                            aria-label="Leave this quiz"
+                        <button onClick={leave} data-sit-exit
+                            aria-label={isSAC ? "Leave the SAC" : "Leave this quiz"}
                             className="w-8 h-8 rounded-xl border-2 border-border text-muted-foreground
                                 hover:text-foreground hover:bg-secondary flex items-center justify-center
                                 transition-colors flex-shrink-0">
@@ -1743,7 +1767,8 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                     number={currentQuestionIndex + 1}
                     suit={suitFor(shuffledQuiz.subject)}
                     remaining={totalQ - currentQuestionIndex}
-                    won={tally.won} missed={tally.missed} run={tally.run}
+                    won={isSAC ? answeredCount : tally.won} missed={tally.missed} run={tally.run}
+                    exam={isSAC}
                     verdict={showFeedback ? (isCorrect ? "correct" : "wrong") : null}
                     playedIndex={showFeedback ? parseInt(userAnswers[currentQuestionIndex], 10) : null}
                     optionCount={currentQuestion.options?.length || 0}

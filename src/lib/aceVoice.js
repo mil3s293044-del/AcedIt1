@@ -302,7 +302,10 @@ export const AFTER = {
     good: [
         "Solid. The misses are the useful bit — worth a second look.",
         "Good run. A couple of gaps, nothing structural.",
-        "That'll do nicely. Want me to turn the misses into cards?",
+        // Not "want me to turn the misses into cards?" — that button was
+        // deleted (a quiz miss is a SIT, not a flashcard), so he was offering
+        // something nothing on screen could do.
+        "That'll do nicely. The misses are where the next session starts.",
     ],
     rough: [
         "Rough one — which means you just found exactly what to study.",
