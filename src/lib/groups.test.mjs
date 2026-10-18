@@ -480,7 +480,12 @@ check("the group LEADS with this week, then the shelf, then the calls", () => {
 check("the week draws only who has started, and counts the rest", () => {
     const week = strip(read("src/components/groups/GroupWeek.jsx"));
     assert.match(week, /\{m\.minutes > 0 && <motion\.div/, "a member with no counted minutes draws a bar");
-    assert.match(week, /ranked\.studied\.map\(/);
+    // The top three may be on the table above the list (`from`), so the list
+    // is a slice — but it is a slice of who STARTED, never of every member.
+    assert.match(week, /ranked\.studied\.slice\(from\)\.map\(/);
+    assert.match(week, /ranked\.studied\.slice\(0, PODIUM_SIZE\)/);
+    assert.match(week, /const from = ranked\.studied\.length > PODIUM_SIZE \? PODIUM_SIZE : 0/,
+        "a podium is dealt for a group where three places is everybody who started");
     assert.match(week, /ranked\.notStarted/);
     assert.ok(!/week\??\.members\??\.map\(/.test(week), "every member is drawn by name again");
 });

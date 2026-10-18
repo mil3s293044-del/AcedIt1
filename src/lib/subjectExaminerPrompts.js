@@ -480,36 +480,9 @@ export function getLatexRules() {
     return SHARED_LATEX_RULES;
 }
 
-/**
- * What a STUDENT may read of a subject's profile — and null, never the generic
- * fallback, when there is no profile.
- *
- * Guides prints these, so two fields are deliberately absent. `_default` is
- * filler written so a prompt always has something; shown to a student under a
- * subject's name it would be the app inventing that subject's marking. And
- * `examplePromptStyle` is instructions TO a model ("use phrasing students see
- * on real exams…"), which reads as nonsense addressed to the wrong person.
- */
-export function examinerProfile(subjectName) {
-    const key = String(subjectName || "").trim().toLowerCase();
-    if (!key || key === "_default") return null;
-    const name = Object.keys(PROFILES).find(k => k !== "_default" && k.toLowerCase() === key);
-    if (!name) return null;
-    const p = PROFILES[name];
-    return {
-        name,
-        mathHeavy: !!p.mathHeavy,
-        examFormat: p.examFormat || "",
-        markConventions: p.markConventions || "",
-        keyTerms: Array.isArray(p.keyTerms) ? [...p.keyTerms] : [],
-        commonMistakes: p.commonMistakes || "",
-        topicCoverage: p.topicCoverage || "",
-    };
-}
-
 /** All subjects with explicit examiner profiles (for sanity checks/admin). */
 export function getProfiledSubjects() {
     return Object.keys(PROFILES).filter(k => k !== "_default");
 }
 
-export default { getExaminerPrompt, subjectIsMathHeavy, getLatexRules, getProfiledSubjects, examinerProfile, COMMAND_TERMS, commandTermRule };
+export default { getExaminerPrompt, subjectIsMathHeavy, getLatexRules, getProfiledSubjects, COMMAND_TERMS, commandTermRule };

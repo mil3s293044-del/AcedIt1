@@ -50,6 +50,12 @@ const strip = (src) => src
 const SERVER = read("server.mjs");
 const PAGE = read("src/pages/Ranked.jsx");
 const BOARD = read("src/components/ranked/RankedBoard.jsx");
+// The pieces every board shares moved into one kit; the properties these
+// checks hold moved with them, so they read the kit, and separately assert
+// the board still draws through it.
+const DOCK = read("src/components/boards/MyRowDock.jsx");
+const CHIP = read("src/components/boards/MoveChip.jsx");
+const ROW = read("src/components/boards/LedgerRow.jsx");
 
 const rows = (...emails) => emails.map((e) => ({ user_email: e }));
 
@@ -242,21 +248,26 @@ check("AND THE RANK STAT OPENS THE BOARD", () => {
 // ─── 7. The pinned row has to be reachable ─────────────────────────────────
 
 check("THE PINNED ROW SITS ABOVE THE BOTTOM NAV", () => {
-    assert.match(BOARD, /bottom-\[5\.25rem\]\s+md:bottom-5/,
+    assert.match(strip(BOARD), /<MyRowDock\b/, "the board no longer docks your row at all");
+    assert.match(DOCK, /bottom-\[5\.25rem\]\s+md:bottom-5/,
         "the pinned bar's offset has changed — under the bottom nav it is a control nobody " +
         "can tap on a phone, and only a screenshot would say so");
     const nav = read("src/components/layout/BottomNav.jsx");
     assert.match(nav, /md:hidden fixed bottom-0/,
         "the bottom nav has moved, so the clearance above is now reserved against nothing");
     assert.match(nav, /z-40/);
-    assert.match(BOARD, /z-30/, "the pinned bar must sit under the nav, not over it");
+    assert.match(DOCK, /z-30/, "the pinned bar must sit under the nav, not over it");
+    // Docked at the TOP it has to clear the sticky top bar the same way.
+    const top = read("src/components/layout/TopNav.jsx");
+    assert.match(top, /sticky top-0 z-30 h-12/, "the top bar has changed height, so top-14 clears nothing");
+    assert.match(DOCK, /top-14/);
 });
 
 check("it only appears when the real row is off screen", () => {
-    assert.match(BOARD, /IntersectionObserver/,
+    assert.match(DOCK, /IntersectionObserver/,
         "the pinned bar is drawn unconditionally — a permanent copy of a row already on " +
         "screen is a second, smaller answer to the same question");
-    assert.match(BOARD, /typeof IntersectionObserver !== "function"/,
+    assert.match(DOCK, /typeof IntersectionObserver !== "function"/,
         "no guard for an environment without IntersectionObserver");
 });
 
@@ -266,8 +277,9 @@ check("MOVEMENT IS SHAPE AS WELL AS COLOUR", () => {
     // The brand green and the streak red sit at ΔE 7.0 under deuteranopia —
     // the floor's own step-dot lesson. An arrow pointing the other way is the
     // second channel; the number is the third.
-    const i = BOARD.indexOf("function MoveChip");
-    const chip = BOARD.slice(i, i + 1400);
+    const i = CHIP.indexOf("export default function MoveChip");
+    assert.ok(i > -1, "MoveChip has moved");
+    const chip = CHIP.slice(i, i + 2400);
     assert.match(chip, /ChevronUp/, "no up glyph");
     assert.match(chip, /ChevronDown/, "no down glyph — direction would be carried by hue alone");
     assert.match(chip, /aria-label=/, "the chip says nothing to a screen reader");
@@ -276,8 +288,10 @@ check("MOVEMENT IS SHAPE AS WELL AS COLOUR", () => {
 check("the movement lane is reserved even with no snapshot", () => {
     // Otherwise every other column shifts sideways the moment the arrows
     // appear, which is the jump `SLOT_H` exists to stop on the floor.
-    assert.match(BOARD, /w-6 sm:w-7 flex items-center justify-center/,
+    assert.match(ROW, /w-6 sm:w-7 flex items-center justify-center/,
         "the arrow column is not a fixed lane");
+    // Ranked keeps the lane; only a board with no snapshot at all may drop it.
+    assert.ok(!/moveLane=\{false\}/.test(strip(BOARD)), "Ranked dropped its movement lane");
 });
 
 // ─── 9. The server's copy of the board ids ─────────────────────────────────

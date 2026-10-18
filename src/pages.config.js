@@ -71,7 +71,6 @@ const Dashboard = lazyPage('Dashboard', () => import('./pages/Dashboard'));
 const Friends = lazyPage('Friends', () => import('./pages/Friends'));
 const Goals = lazyPage('Goals', () => import('./pages/Goals'));
 const Strategise = lazyPage('Strategise', () => import('./pages/Strategise'));
-const Guides = lazyPage('Guides', () => import('./pages/Guides'));
 const PaymentCancel = lazyPage('PaymentCancel', () => import('./pages/PaymentCancel'));
 const PaymentSuccess = lazyPage('PaymentSuccess', () => import('./pages/PaymentSuccess'));
 const Premium = lazyPage('Premium', () => import('./pages/Premium'));
@@ -105,7 +104,6 @@ export const PAGES = {
     "Friends": Friends,
     "Goals": Goals,
     "Strategise": Strategise,
-    "Guides": Guides,
     "PaymentCancel": PaymentCancel,
     "PaymentSuccess": PaymentSuccess,
     "Premium": Premium,

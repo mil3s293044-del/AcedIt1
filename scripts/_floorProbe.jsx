@@ -66,6 +66,8 @@ import { PRANK_LIST } from "@/lib/pranks";
 import { BACK_SKINS } from "@/lib/cosmetics";
 import WeeklyBoard from "@/components/league/WeeklyBoard";
 import Podium from "@/components/league/Podium";
+import GroupWeek from "@/components/groups/GroupWeek";
+import { LayoutGroup } from "framer-motion";
 import ScoreGuide from "@/components/league/ScoreGuide";
 import Crest from "@/components/shared/Crest";
 import { podiumGap, ordinal } from "@/lib/league";
@@ -934,12 +936,14 @@ views.league = () => {
                     )}
                 </section>
 
+                <LayoutGroup id="league">
                 <Podium rows={LEAGUE_ROWS} groupSize={LEAGUE_ROWS.length} tiered={false} />
 
                 <section className="space-y-2">
                     <h2 className="font-display font-extrabold text-foreground text-base">Standings</h2>
-                    <WeeklyBoard rows={LEAGUE_ROWS} />
+                    <WeeklyBoard rows={LEAGUE_ROWS} from={3} />
                 </section>
+                </LayoutGroup>
 
                 <section className="space-y-2">
                     <h2 className="font-display font-extrabold text-foreground text-base">
@@ -951,6 +955,31 @@ views.league = () => {
         </div>
     );
 };
+
+/* ── ?v=groupweek — the study-group week, with and without a podium ───────
+ *
+ * A group's week deals a small table once four people have started, and has
+ * none under that — so it takes two groups to see both, which no single login
+ * shows at once.
+ */
+const WEEK_MEMBERS = [
+    { id: "a", name: "Priyanka", minutes: 312, days: 4 },
+    { id: "b", name: "Marcus", minutes: 255, days: 3 },
+    { id: "c", name: "Jordan", minutes: 190, days: 3, me: true },
+    { id: "d", name: "Hana", minutes: 120, days: 2 },
+    { id: "e", name: "Dao", minutes: 45, days: 1 },
+    { id: "f", name: "Oliver", minutes: 0, days: 1 },
+    { id: "g", name: "Sam", minutes: 0, days: 0 },
+];
+
+views.groupweek = () => (
+    <div className="min-h-screen bg-background p-4 sm:p-6">
+        <div className="max-w-2xl mx-auto space-y-8">
+            <GroupWeek week={{ members: WEEK_MEMBERS }} sacs={[]} todayIso="2026-10-17" soonDays={14} />
+            <GroupWeek week={{ members: WEEK_MEMBERS.slice(1, 4) }} sacs={[]} todayIso="2026-10-17" soonDays={14} />
+        </div>
+    </div>
+);
 
 /* ── ?v=study — the Active Recall / Blurting setup card ─────────────────────
  *
@@ -1555,9 +1584,23 @@ views.board = () => {
     const meta = boardById(boardId);
     const me = "me@acedit.au";
 
+    // Friends is a real subset, so switching scope moves people between the
+    // podium and the ledger — the race the kit animates.
+    const FRIENDS = ["maya", "tom", "leo", "you", "noah", "mia", "ruby"];
+    // A live refresh in which YOU studied: same board, a bigger figure, and
+    // enough of it to pass two people — the count, the flash and the race at
+    // once, which no static fixture can show.
+    const [bump, setBump] = React.useState(0);
     const field = React.useMemo(
-        () => [...BOARD_ROWS].sort((a, b) => (meta.value(b) || 0) - (meta.value(a) || 0)),
-        [meta]);
+        () => [...BOARD_ROWS]
+            .map((r) => (r.user_email !== "me@acedit.au" || !bump ? r : {
+                ...r, acedit_atar: +(r.acedit_atar + 2.3 * bump).toFixed(2),
+                total_xp: r.total_xp + 6000 * bump, total_study_time: r.total_study_time + 900 * bump,
+            }))
+            .filter((r) => scope !== "friends" || FRIENDS.includes(r.user_name.toLowerCase()))
+            .sort((a, b) => (meta.value(b) || 0) - (meta.value(a) || 0)),
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [meta, scope, bump]);
     // A snapshot with every case in it: climbers, fallers, somebody holding,
     // and two rows absent so the NEW badge is drawn.
     const snapshot = {
@@ -1587,7 +1630,11 @@ views.board = () => {
                         </div>
                         <BoardSwitch boards={[boardById("atar"), ...boardsFor("alltime")]} board={boardId} onBoard={setBoardId} />
                     </div>
-                    <ScopeSwitch scope={scope} onScope={setScope} hasSchool={false} />
+                    <div className="flex flex-wrap items-center gap-3">
+                        <ScopeSwitch scope={scope} onScope={setScope} hasSchool={false} />
+                        <button type="button" data-probe-bump onClick={() => setBump((n) => n + 1)}
+                            className="pill bg-secondary text-foreground text-xs">Simulate a live refresh</button>
+                    </div>
                     <div className="grid xl:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
                         <div className="min-w-0">
                             {/* FOURTEEN rows against a board that opens at

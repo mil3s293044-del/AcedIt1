@@ -7810,66 +7810,30 @@ endpoint answers 401 without a token, every column it names passes
 34 injections biting against a green baseline. Draw it with the network-level
 harness against `/StudyGroups` and `/StudyGroups?g=<id>`.
 
-## Guides are built from what the app knows, and nobody writes them
+## Guides are retired
 
-**/Guides was a page of student posts.** Any signed-in student could write one,
-every signed-in student could read every one, and the author ticked their own
-"featured" box. That is free text between students, published to the whole
-site with nothing checking a word of it. It is the thing migration 0034 refused
-for Compete and 0043 took out of study groups. It was also not in either nav.
+**/Guides is gone, by request.** It began as a page of student-written posts,
+open to every signed-in student. It was then rebuilt from the examiner
+profiles, the mark split and the technique science, with a "How it's marked"
+section on each subject hub. Both the page and the hub section are now deleted.
+The nav entries and Ace's map entry went with them. Old `/Guides` links
+redirect to `/Help`.
 
-**Meanwhile the app had been showing its real knowledge to a model and nobody
-else.** `subjectExaminerPrompts.js` holds 35 subjects of mark conventions, how
-candidates lose marks and the terms examiners want. The MARKER reads it on
-every call. A student revising for the same exam had never seen a line of it.
+Three things outlived it on purpose:
 
-`src/lib/guides.js` builds every guide from three sources: the examiner
-profiles (through `examinerProfile`), VCAA's split (through `markSplit`, the
-hub's own function) and `neuro.js`. Nothing is stored and nothing is written.
-There are three kinds of guide:
+- **The examiner-data corrections stay.** Specialist's and Media's exam
+  formats now agree with their own mark splits, and the General Maths
+  growth-factor line no longer names the same number twice. The MARKER reads
+  this text on every call. `markingPrompt.test.mjs` now holds both checks,
+  reading the profile through `getExaminerPrompt`. The student-facing accessor
+  `examinerProfile` had no other reader, so it went.
+- **Migration 0044 still has to be applied.** It takes away read and write on
+  `study_guides` for everyone but each post's author. Until it runs, the old
+  posts are readable through the API by any signed-in student.
+- **Account deletion still removes those rows** ("Study guides" in
+  `accountTables`).
 
-- **Subjects:** where the marks are, the exam, what examiners reward, how marks
-  are lost (`lostMarks` parses the three shapes the profiles use, splitting
-  only outside brackets), the words examiners want, what the course covers,
-  and what works.
-- **Techniques:** the panel Study already draws (`NeuroPanel layout="page"`),
-  so the science is written down once.
-- **Command terms:** ONE guide rather than thirty-five copies of the same table.
-
-**THE GENERIC FALLBACK IS NEVER A SUBJECT'S MARKING.** The prompts fall back to
-`_default` so a prompt always has something. Printed under a subject's name,
-that would be the app making up a subject's marking. `examinerProfile` returns
-null instead, and a subject with no profile has no guide. `examplePromptStyle`
-is instructions TO a model ("use phrasing students see on real exams…"), so
-the accessor does not return it at all.
-
-**TWO SCREENS, ONE COMPONENT.** `SubjectGuide` is the body of the guide on
-/Guides and the "How it's marked" section of that subject's hub. `place="hub"`
-leaves out the split, the course and the tips, which the hub already draws
-above it, rather than printing them twice. The split itself is
-`MarkSplitList`, lifted out of the hub so both screens draw it with one list.
-
-**THE DATA DISAGREED WITH ITSELF, AND NOW A TEST SAYS SO.** Specialist's exam
-format said "~17% each" against a 20/14 split. Media's said 30/10 against
-20/20. Both sat one block away from their own split. Every % in an exam format
-must now be a weight the catalogue can produce, or a sum of weights. General
-Maths warned against "using $r = 1.05$ instead of $r = 1.05$", which names the
-same number on both sides. And three catalogue tips said "don't", already on
-every hub. All five are fixed at the source, so the marker reads the corrected
-text too.
-
-**EVERY GUIDE ENDS IN A DOOR**, built as data so a test can check each one
-lands on a real page, a real tool and a technique Study honours. The subject
-door is chosen by `personaFor`, the same as the AI Tools brief: maths is worked
-through, English is planned and marked, everything else is sat.
-
-**Migration 0044 unpublishes the posts.** It drops the read-all, insert and
-update policies, and adds a read-own policy beside the existing delete-own, so
-account deletion ("Study guides" in `accountTables`) can still find and remove
-a student's old rows. Apply it AFTER the deploy.
-
-`guides.test.mjs` holds 25 checks, and all 25 injections were caught against a
-green baseline.
+`MarkSplitList` stays, because it is the hub's own mark split.
 
 ## A placed Ace arrives, settles and reacts
 
@@ -7927,6 +7891,127 @@ the listeners it adds: the first draft added an anonymous `focusout` listener
 that no unmount could remove. To check motion, sample `data-ace-pose` over
 time rather than judging one frame. The harness's TIMELINE probe does that,
 and found nothing a screenshot could have.
+
+## Every leaderboard is one card tournament
+
+**"Rework all the leaderboards. They need to feel calm, aesthetic, with cool
+animations, utterly premium."** There were three boards and they disagreed
+about nearly everything that is not a number. Ranked's podium was three tinted
+cards; the League's was three coloured blocks; the study-group week had none.
+Ranked measured gaps against the upper median of every gap, ties included; the
+League used the true median of the real gaps, floored at one. That is three
+answers to "how far apart are these people" on three screens a student moves
+between in one sitting.
+
+There is one kit now. `src/components/boards/` is the drawing and
+`src/lib/boardKit.js` is the arithmetic. Ranked (Board and All time, every
+scope), the League and the group week all deal the same table.
+
+### The top three are dealt, and the Ace lands last
+
+`CardPodium` is the signup deal's felt, held still (`felt-still`). First holds
+the Ace of spades, second the King, third the Queen. They are real
+`PlayingCard`s with real faces, on white stock in both themes, because an Ace
+is always earned and this is the one place a student sees somebody else
+holding it.
+
+On arrival the plinths come up out of the table and each card is dealt face
+down. The back is the student's own if they bought one. The cards turn over
+third, second, first, then the medallion and the figure arrive and the figure
+counts up. After that the table holds still, except for one pass of light
+across the Ace every nine seconds. `DEAL` holds the timings and the test holds
+their order.
+
+**A CHANGE IS NOT A RE-DEAL.** If a scope switch puts somebody new in second,
+their medallion flies up from the row it was on (a shared `layoutId`). That
+flight is the change.
+
+**THE MEDALLION SITS ACROSS THE CARD'S EDGE, NOT ON ITS FACE.** There are two
+reasons and both are about the flight. A card face is `overflow-hidden`, so it
+would clip the medallion landing on it. A face is also hidden while it turns,
+so a medallion on it would fly invisibly. For the same reason nothing on the
+path clips: not the felt, and not the ledger. The plinths stand on a rail
+inside the felt's padding, so its rounded corners cannot cut a step off.
+
+### Rows race, keyed by the person
+
+`LedgerRow` is the shared row. It has fixed lanes for the place, the movement,
+the avatar, the name and the figure, and it carries `layout="position"`. It is
+keyed by the PERSON, never the place. So when the board under it changes, a
+student who was 6th and is now 3rd SLIDES there rather than a different name
+appearing in the slot.
+
+Leaving rows use `AnimatePresence mode="popLayout"`, so the rows that stay start
+racing at once. In default mode a leaving row held its place through its own
+exit and the race started a beat late.
+
+**AND popLayout REPLACES A CHILD'S `ref`.** It clones every child with a ref of
+its own. The ref the dock observed your row through was silently swapped out,
+so nothing would have followed you. Boards pass `rowRef` instead and
+`LedgerRow` merges the two. The test refuses a `ref=` on a `LedgerRow`.
+
+### Gaps, on one scale
+
+The scale is twice the median of the REAL gaps (`gapScale`). Ties are left out,
+because the ATAR steps in 0.05s. On a board with a lot of ties, counting them
+dragged the median toward nothing and drew every real gap as full. That is the
+League's old answer, now Ranked's too.
+
+`gapsOf` and `countFrame` each tripped on `Number(null) === 0` on their first
+test run. A missing figure drew as a whole score behind, and a null target
+counted to zero. This is the trap's twelfth module.
+
+### Live numbers: count on change, print on a new quantity
+
+`LiveFigure` counts from the old value to the new one when a live refresh
+moves somebody's figure. An increase flashes the brand green for a moment. A
+decrease is printed and left alone: a board that turns a number red because
+somebody else studied is editorialising.
+
+Switching XP to study time is a new QUANTITY, not a change in anybody's figure,
+so it is printed rather than counted across. Only the podium counts in on
+arrival. Thirty rows all counting from zero is a slot machine.
+
+### Your row follows you
+
+`MyRowDock` covers the case where your row leaves the screen. It holds on at
+the edge the row left by: the TOP if you scrolled past it, the BOTTOM if you
+opened a long board from the podium. The arrow points at the real row, and a
+tap scrolls back and pulses the row.
+
+**THE OBSERVER ONLY REPORTS A CROSSING.** A jump or a fling can carry the row
+from below the screen to above it with no frame in which it was visible, so the
+dock stayed at the bottom pointing down at a row that was now above. While the
+row is off screen, the dock reads its edge on scroll.
+
+**THE BOTTOM DOCK STOPS SHORT OF ACE'S CORNER.** His launcher is
+`fixed right-4 bottom-24` on a phone. A full-width dock drew straight over him,
+and the old pinned bar had always done so. The test measures the launcher's
+footprint against the dock's offsets at each breakpoint. Hiding him while
+somebody is scrolled past their own row would switch the mascot off for
+reading a leaderboard. On a phone the dock drops its movement chip, which is on
+the row anyway, so its label is not truncated.
+
+### Where each board puts it
+
+- **The League** podium carries the payout on each step (crest, credits, XP,
+  all from `grantForLeague`). The ledger now starts at fourth
+  (`WeeklyBoard from=`), so the top three are no longer drawn twice. The
+  payline is the ledger's top edge. One `LayoutGroup` wraps the table and the
+  ledger in League.jsx, or the two never share an id.
+- **The group week** deals a small table once four people have started. With
+  three, three places is everybody. It drops the movement lane, because a
+  group has no snapshot.
+
+### What was verified
+
+34 injections were run against a green baseline, checking both the exit code
+and the FAIL output, and every one bit. The real /Ranked and /League were drawn
+against network fixtures in both themes and at 390. The reveal, the race, the
+dock at both edges and the live count were sampled over time.
+`scripts/_floorProbe.jsx` has `?v=board` (with a "Simulate a live refresh"
+button and a Friends scope that really filters), `?v=league` and
+`?v=groupweek`.
 
 ## Premium codes (the Year 10 program)
 
@@ -8184,6 +8269,12 @@ student looking free in the nav, the planner and the companion.
   a real quiz, built from their subject, sat in the REAL player and marked.
   The close reports what happened and refuses to quote an ATAR. Draw the beats
   with `scripts/_floorProbe.jsx?v=firstwin`, at the bubble's true width
+- `src/lib/boardKit.js` + `boardKit.test.mjs`, `src/components/boards/`
+  (`CardPodium`, `LedgerRow`, `MyRowDock`, `LiveFigure`, `MoveChip`,
+  `BoardAvatar`, `useArrival`): every leaderboard's one table. The top three
+  are dealt as Ace, King and Queen; rows race keyed by person; gaps share one
+  scale; your row docks at the edge it left by. Ranked, the League and the
+  group week all draw through it
 - `src/lib/aceSpot.js` + `aceSpot.test.mjs`, `src/components/ace/AceSpot.jsx`:
   every PLACED Ace (not the floating one). He arrives, does the pose asked
   for, settles where his fidgets can reach him, and reacts to events the page
@@ -8355,12 +8446,6 @@ student looking free in the nav, the planner and the companion.
   `supabase/migrations/0042_friendships_server_only.sql` — friends by code and
   link, every friendship and share write on the server, set notes instead of
   free text. Apply 0042 AFTER the deploy
-- `src/lib/guides.js` + `guides.test.mjs`, `src/pages/Guides.jsx`,
-  `src/components/guides/SubjectGuide.jsx`, `src/components/subjects/MarkSplitList.jsx`,
-  `supabase/migrations/0044_study_guides_private.sql`: every guide built from
-  the examiner profiles, the catalogue split and the technique science, drawn
-  by one component on /Guides and on each subject's hub. Apply 0044 AFTER the
-  deploy
 - `src/lib/groups.js` + `groups.test.mjs`, `src/api/groupsApi.js`,
   `src/pages/StudyGroups.jsx`, `src/components/groups/`,
   `supabase/migrations/0043_study_groups_server_only.sql` — study groups on the
