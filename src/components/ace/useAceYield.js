@@ -107,7 +107,10 @@ const owners = () => [...holders.keys()];
 // button on a phone. Ranked under everything that is about the student's
 // moment and over the buddy and the launcher, which are what is there when
 // nothing is happening.
-export const ACE_ORDER = ["reacts", "premium", "onboarding", "first-win", "tour", "report", "chat", "buddy", "intro", "roam", "launcher"];
+// "quiz" is the one at the quiz table, who eats the cards you got right. The
+// launcher used to stand under him, and on a phone it stood on Next. Below
+// the reaction that plays when the marks come back, which is a celebration.
+export const ACE_ORDER = ["reacts", "premium", "onboarding", "first-win", "tour", "report", "chat", "quiz", "buddy", "intro", "roam", "launcher"];
 
 /** An id nobody registered loses to everything, rather than winning by accident. */
 const rank = (id) => {

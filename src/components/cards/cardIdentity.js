@@ -32,6 +32,11 @@ export const RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K
 /** Spoken forms, for the bits a screen reader has to say out loud. */
 const SPOKEN = { J: "Jack", Q: "Queen", K: "King", A: "Ace" };
 
+/** A rank as it is said: "Queen", "9". */
+export const rankName = (rank) => SPOKEN[rank] || String(rank);
+/** With its article: "a Queen", "an 8", "an Ace". */
+export const aRank = (rank) => `${/^(8|A)/.test(String(rank)) ? "an" : "a"} ${rankName(rank)}`;
+
 export const SUITS = ["spade", "heart", "diamond", "club"];
 
 export const SUIT_LABEL = { spade: "Spades", heart: "Hearts", diamond: "Diamonds", club: "Clubs" };

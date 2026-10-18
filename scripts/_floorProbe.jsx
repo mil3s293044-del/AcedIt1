@@ -69,6 +69,9 @@ import Podium from "@/components/league/Podium";
 import GroupWeek from "@/components/groups/GroupWeek";
 import { LayoutGroup } from "framer-motion";
 import ScoreGuide from "@/components/league/ScoreGuide";
+import ScoredHand from "@/components/quizzes/ScoredHand";
+import ShelfHead from "@/components/quizzes/ShelfHead";
+import { handTotal } from "@/lib/quizSit";
 import Crest from "@/components/shared/Crest";
 import { podiumGap, ordinal } from "@/lib/league";
 import { grantForLeague } from "@/lib/credStore";
@@ -2107,6 +2110,48 @@ views.table = () => {
         </FlightProvider>
     );
 };
+
+/* ── ?v=hand — the scored hand, in every state a card can be in ────────────
+ *
+ * A real results screen shows one paper at a time, and the marker is usually
+ * back before anybody looks, so the PENDING state is almost never on screen.
+ * This deals three: a paper with written answers still with the marker, a
+ * finished one whose sit turned the deck card, and a thirty-question paper,
+ * which is where the card width and the turn cap earn their keep. Judge it on
+ * the clock as well as the frame: the count rises only as cards land.
+ */
+const card = (index, state, auto, outOf) => ({ index, state, auto: state === "pending" ? null : auto, outOf });
+const HAND_MARKING = [card(0, "full", 1, 1), card(1, "pending", 0, 3), card(2, "missed", 0, 1), card(3, "pending", 0, 4)];
+const HAND_DONE = [card(0, "full", 1, 1), card(1, "part", 2, 3), card(2, "full", 1, 1), card(3, "missed", 0, 2), card(4, "full", 4, 4)];
+const HAND_LONG = Array.from({ length: 30 }, (_, i) => card(i, i % 7 === 3 ? "missed" : i % 5 === 1 ? "part" : "full", i % 5 === 1 ? 1 : i % 7 === 3 ? 0 : 2, 2));
+views.hand = () => (
+    <div className="min-h-screen bg-background p-4 sm:p-6">
+        <div className="max-w-2xl mx-auto space-y-6">
+            <ScoredHand hand={HAND_MARKING} total={handTotal(HAND_MARKING)} suit="heart" marking elapsed="6:41" />
+            <ScoredHand hand={HAND_DONE} total={handTotal(HAND_DONE)} suit="club" elapsed="9:12"
+                turn={{ first: false, from: "9", to: "Q", turned: true }} previousBest={68} />
+            <ScoredHand hand={HAND_LONG} total={handTotal(HAND_LONG)} suit="diamond" elapsed="41:05" />
+        </div>
+    </div>
+);
+
+/* ── ?v=shelfhead — the top of /Quizzes, in its three shapes ─────────────── */
+const SH_QUIZ = (id, title, subject) => ({ id, title, subject, questions: [{ type: "mcq" }], created_date: "2026-10-01T00:00:00Z" });
+const SH_SUMMARY = { avgScore: 72, avgOver: 5, trend: 6, trendOver: 5, trendNeeds: 0 };
+views.shelfhead = () => (
+    <MemoryRouter>
+        <div className="min-h-screen bg-background p-4 sm:p-6">
+            <div className="max-w-5xl mx-auto space-y-6">
+                <ShelfHead next={{ quiz: SH_QUIZ("a", "Redox and galvanic cells", "Chemistry"), reason: "low", score: 48, days: 3 }}
+                    summary={SH_SUMMARY} bank={{ total: 9, outstanding: 4, fixed: 5, ready: 2 }}
+                    attempts={[{ quiz_id: "a", score: 48, created_date: "2026-10-15T09:00:00Z" }]} tone="#F59E0B" sharedWaiting={2} />
+                <ShelfHead next={{ quiz: SH_QUIZ("b", "Language analysis — persuasive techniques in opinion pieces", "English"), reason: "new" }}
+                    summary={{ avgScore: null, trend: null, trendNeeds: 4 }} bank={{ total: 0 }} attempts={[]} tone="#8B5CF6" />
+                <ShelfHead next={null} />
+            </div>
+        </div>
+    </MemoryRouter>
+);
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));

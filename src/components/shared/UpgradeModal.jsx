@@ -18,10 +18,12 @@ const FEATURE_DESCRIPTIONS = {
         benefits: ['Global rankings', 'Compare study stats', 'Achievement badges', 'Motivation boost']
     },
     'Quizzes': {
-        title: 'AI Quiz Generator',
-        description: 'Generate unlimited quizzes from your notes using AI technology.',
+        // Named for the job, like the generator it describes. And not
+        // "unlimited": Premium spends from a weekly chip budget (chips.js).
+        title: 'Quizzes from your notes',
+        description: 'VCAA-style questions written from your own material, with your written answers marked.',
         icon: FileQuestion,
-        benefits: ['Unlimited quiz generation', 'Custom practice questions', 'Multiple choice & short answer', 'Progress tracking']
+        benefits: ['Quizzes from your own notes', 'Written answers marked', 'Multiple choice & short answer', 'Progress tracking']
     },
     'AITools': {
         title: 'AI Study Tools',

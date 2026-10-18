@@ -607,6 +607,112 @@ for the transcriber's mistake would be invisible to us and infuriating to them.
 The transcript is what gets marked; the strokes are session-only, because the
 saved answer is a plain string like every other answer.
 
+## Quizzes: one sit, from the shelf to the scored hand
+
+**"The core loop — make a quiz, sit it, get marked, see results — had never
+had one end-to-end design pass."** It had four screens and each one worked its
+own numbers out. `src/lib/quizSit.js` is the arithmetic for the whole journey
+now, pure, and `quizSit.test.mjs` holds it (37 checks, 35 injections, all
+biting against a green baseline).
+
+**THE SHELF OPENS ON ONE NEXT SIT** (`ShelfHead`). It was a coach headline, a
+hero panel, a mistake-bank panel and a "next quiz" strip — 70% printed three
+times (eyebrow, headline, tile) and the quiz count twice before the first pack.
+And "next quiz" was `quizzes[0]` under a sentence about active recall, or a
+RANDOM quiz for a library never sat. `nextSit` decides it, in this order:
+
+- **low** — the last sit was under `LOW_SCORE`, **at least a day ago**. Not
+  the same day: running a paper straight back is rehearsing answers you just
+  saw, and the results already offered the questions missed.
+- **new** — never sat, newest first.
+- **stale** — last sat `STALE_DAYS` or more ago, longest first.
+- **lowest** — otherwise the lowest last sit.
+
+The reason under it is a FACT the card beside it can confirm ("Last sat 3 days
+ago at 48%"), never a slogan. The card is the quiz's own deck face (rank is
+your best), so it is the same card that turns on the results. Two figures,
+average and trend, each saying what it is over; the mistake bank is a third
+figure ONLY when something is in it. Saved answers moved to the foot — a
+collapsed library row was the first thing on the page.
+
+**THE TABLE BEFORE A SIT** (`PreSit`) replaced a two-step mode pop-up that
+asked "how do you want to take this quiz?" with nothing on screen about the
+quiz. One sheet: the card, questions · MARKS · about how long, best and last
+sit, then Practice or Timed SAC with the clock set right there.
+
+- **The SAC clock hand-rolled its marks** as `Number(q.marks) || 1`, which
+  reads a nine-mark multipart question as one mark — the `q.marks || 5` bug in
+  its fifth place. `paperFacts` goes through `normaliseQuestion`; the test
+  scans the tree for the hand-rolled form.
+- **THE SAC PROMISED WHAT THE PLAYER DID NOT DO.** "Per-question feedback is
+  turned off until you finish" — and nothing in the player checked for a SAC,
+  so options went green and Ace ate cards in exam mode. `handleSubmitAnswer`
+  holds every verdict in a SAC now, and the table's pile reads "answered"
+  rather than a "0 won" that sat there for the whole paper. The sheet's line
+  and the player's hold are asserted together.
+
+**THE SIT IS FULL SCREEN IN BOTH MODES, WITH ONE EXIT.** Practice sat in the
+page frame under a "Back to Quizzes" pill ABOVE the player's own ✕, and only a
+SAC went full screen — so the journey changed shape halfway. The player's ✕ is
+the exit (`leave`): practice offers to save your place, a SAC asks once.
+`QuizTable` claims the Ace stage as `"quiz"` (ranked under the reaction that
+plays when the marks land): the corner launcher stood under him, and on a
+phone it stood on Next.
+
+**THE RESULTS ARE THE HAND, IN MARKS** (`ScoredHand`). They opened on a star in
+a tinted tile, "71%", and under it "2 RIGHT · 4 TOTAL" — a percentage of MARKS
+over a count of QUESTIONS, so a four-mark answer that earned three read as
+wrong directly under a figure that counted the three. Now every question comes
+back as the card it was dealt as, face down on the felt, turned one at a time:
+
+- **The count is the cards** (`marksShown`): only a card that has finished
+  turning adds, so "5 of 7 marks" is the cards being added, not a number
+  animating on its own. The percentage appears once they are all in.
+- **A written answer the marker has not returned STAYS FACE DOWN** and adds
+  nothing. It is not a zero (`cardState` → `pending`), and when the marks land
+  those cards turn. If the marking failed, the hand's percentage IS the
+  MCQ-only fallback that gets saved — asserted, along with the full case
+  equalling `attemptScore(...).autoPct`.
+- **Full, part, missed, and MISSED IS `needsDrill`.** "You lost marks on 2"
+  sat beside "Redo the 1 you missed" with nothing saying which was which. The
+  red cards are exactly what Redo re-asks and amber is dropped a mark, so both
+  sentences can be checked against the cards they counted. Shape carries it
+  too (tick, dash, cross), the CVD rule.
+- **THE DECK CARD TURNS** (`rankTurn`) when a sit beats the best and the new
+  best is a different rank — "First sit. This quiz's card is a Jack now." A
+  retry never turns it; `Number(null)` is guarded so a null best reads as a
+  first sit.
+- The reveal is CAPPED (`handTiming`) so a thirty-question paper does not hold
+  anybody through six seconds of turns; under reduced motion it is simply up.
+- The question list in the sidebar shows only on the question-by-question
+  view: on the verdict the hand IS the list, and every card is a button.
+- **The time stopped counting at hand-in** (`finishedAt`). It printed
+  `Date.now() - start`, which kept ticking while a student read their marks.
+
+**ACE REACTED TO THE WRONG NUMBER, OFF-CENTRE, OFFERING A DELETED BUTTON.**
+Three bugs in one six-second appearance:
+
+- He fired on finish with MCQs right over ALL questions, so every written
+  answer counted as wrong and a 71% paper got "Rough one". He reacts to the
+  SAVED score now, after the marker (or the fallback).
+- `AceReacts` was centred with `left-1/2 -translate-x-1/2` on the moving
+  element, and **framer-motion writes its own inline `transform`**, which
+  replaced Tailwind's translate outright — so he started at mid-screen and the
+  bubble ran off a phone. A full-width row centres him now. Any `motion.*`
+  that animates x/y/scale must not be positioned with a Tailwind translate.
+- One of his lines offered to "turn the misses into cards" — the button the
+  mistake-bank section records deleting. A mascot advertising a removed
+  feature is "retire something, grep the copy", in his voice.
+
+The "Quiz marked!" success toast went too: on a phone it sat over the top bar,
+and the hand turning over already says so.
+
+Draw it with `scripts/_floorProbe.jsx?v=hand` (a paper still marking, a
+finished one that turned the deck card, and thirty questions) and
+`?v=shelfhead` (a low sit with a bank, a never-sat quiz, and no quizzes), and
+the real page through the network harness — both themes, 390, reduced motion,
+and judged on the clock: the count must only rise as cards land.
+
 ## The marker was told to be an examiner and shown none of the rules
 
 **`subjectExaminerPrompts.js` carries 35 subjects of real study-design detail**
@@ -8275,6 +8381,12 @@ student looking free in the nav, the planner and the companion.
   are dealt as Ace, King and Queen; rows race keyed by person; gaps share one
   scale; your row docks at the edge it left by. Ranked, the League and the
   group week all draw through it
+- `src/lib/quizSit.js` + `quizSit.test.mjs`, `src/components/quizzes/ShelfHead.jsx`,
+  `PreSit.jsx`, `ScoredHand.jsx`: one sit of a quiz. The next sit and why, the
+  table before it (marks, the SAC clock), and the results as the hand turned
+  over in MARKS, with pending written answers face down and the deck card
+  turning on a new best. Draw it with `scripts/_floorProbe.jsx?v=hand` and
+  `?v=shelfhead`
 - `src/lib/aceSpot.js` + `aceSpot.test.mjs`, `src/components/ace/AceSpot.jsx`:
   every PLACED Ace (not the floating one). He arrives, does the pose asked
   for, settles where his fidgets can reach him, and reacts to events the page

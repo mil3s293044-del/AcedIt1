@@ -36,6 +36,7 @@ import { Pile, Count } from "@/components/cards/Pile";
 import AceBody from "@/components/ace/AceBody";
 import { suitForOption } from "@/components/cards/ChoiceCard";
 import { rankAt } from "@/components/cards/cardIdentity";
+import { claimAce } from "@/components/ace/useAceYield";
 
 /** The piles beside the question. Small — the question is the hero here. */
 const PILE_H = "clamp(3.2rem, 7vh, 4.4rem)";
@@ -75,9 +76,20 @@ export default function QuizTable({
     optionCount = 4,
     question,
     children,
+    /**
+     * A timed SAC. Nothing is marked until it is handed in, so the pile
+     * behind him is what has been ANSWERED rather than what was won — a
+     * "0 won" sitting there for the whole paper reads as a score of nothing.
+     */
+    exam = false,
 }) {
     const reduce = useReducedMotion();
     const aceRef = useRef(null);
+    // HE IS THE ACE ON THIS SCREEN. The corner launcher stood under him, and
+    // on a phone it stood on the Next button too. The sit is full screen now,
+    // which hides it, and the claim is what makes that true rather than an
+    // accident of stacking.
+    useEffect(() => claimAce("quiz"), []);
     const [flight, setFlight] = useState(null);
     const firedRef = useRef(null);
     const timerRef = useRef(null);
@@ -141,8 +153,8 @@ export default function QuizTable({
 
                 <div className="flex items-end gap-2">
                     <div className="text-right">
-                        <Count n={won} label="won" className="!text-right" />
-                        {missed > 0 && (
+                        <Count n={won} label={exam ? "answered" : "won"} className="!text-right" />
+                        {missed > 0 && !exam && (
                             <p className="text-[10px] text-muted-foreground/70 text-right leading-tight">
                                 {missed} missed
                             </p>

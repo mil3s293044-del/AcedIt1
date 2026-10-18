@@ -68,6 +68,12 @@ export default function AceReacts() {
     return (
         <AnimatePresence>
             {showing && (
+                // CENTRED BY A FULL-WIDTH ROW, NEVER BY A TRANSFORM. This was
+                // `left-1/2 -translate-x-1/2` on the moving element, and
+                // framer-motion writes its own inline `transform` for the
+                // slide-up — which replaces Tailwind's translate outright. So
+                // he started at the middle of the screen and the bubble ran off
+                // the right edge of a phone, over whatever was under it.
                 <motion.div
                     key={event.line}
                     initial={{ y: 140, opacity: 0 }}
@@ -76,12 +82,12 @@ export default function AceReacts() {
                     transition={{ type: "spring", stiffness: 260, damping: 22 }}
                     data-ace-reacts={event.band}
                     role="status"
-                    className="fixed z-[60] left-1/2 -translate-x-1/2 bottom-24 sm:bottom-8
-                        flex items-end gap-2 pointer-events-none max-w-[calc(100vw-1.5rem)]"
+                    className="fixed z-[60] inset-x-3 bottom-24 sm:bottom-8
+                        flex items-end justify-center gap-2 pointer-events-none"
                 >
                     <AceBody className="w-20 sm:w-24 flex-shrink-0" pose={POSE[event.band]} title="Ace" />
                     <div className="rounded-2xl bg-surface border-2 border-border shadow-soft-lg
-                        px-4 py-3 mb-2 relative">
+                        px-4 py-3 mb-2 relative min-w-0 max-w-[20rem]">
                         {/* Tail toward him. `block` matters: an inline element
                             with borders and no box doesn't form a triangle. */}
                         <span aria-hidden="true"
