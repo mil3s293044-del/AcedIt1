@@ -50,7 +50,7 @@ import { scaledScore, clampScore } from "@/lib/studyScore";
 import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
-import { markSplit, coverage, subjectStats, subjectLead } from "@/lib/subjectHub";
+import { markSplit, coverageFor, subjectStats, subjectLead } from "@/lib/subjectHub";
 import { toolQuery, personaFor } from "@/lib/toolBrief";
 import HelpButton from "@/components/shared/HelpButton";
 
@@ -175,16 +175,9 @@ export default function SubjectHub() {
     // flashcard for Vectors but has sat three quizzes on it has covered it,
     // and a page that said otherwise would be wrong in the direction that
     // matters least — but wrong all the same.
-    const cov = useMemo(() => {
-        const topics = [
-            ...stats.topics,
-            ...data.quizzes
-                .filter((q) => String(q?.subject || "").toLowerCase() === name.toLowerCase())
-                .map((q) => q?.title)
-                .filter(Boolean),
-        ];
-        return coverage(full?.key_skills, topics);
-    }, [full, stats.topics, data.quizzes, name]);
+    const cov = useMemo(
+        () => coverageFor({ keySkills: full?.key_skills, name, stats, quizzes: data.quizzes }),
+        [full, stats, data.quizzes, name]);
 
     const split = useMemo(() => markSplit(full), [full]);
     const lead = useMemo(() => subjectLead(stats, cov, split), [stats, cov, split]);

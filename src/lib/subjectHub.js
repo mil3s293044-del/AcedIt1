@@ -132,6 +132,25 @@ export function coverage(keySkills = [], topics = []) {
     };
 }
 
+/**
+ * A subject's coverage off the student's own material: the topics of their
+ * decks in it (`subjectStats(...).topics`) and the titles of their quizzes in
+ * it. ONE composition, read by the hub and by the subject information page —
+ * a deck ticking an area on one and not the other would be two screens
+ * disagreeing about the same course.
+ */
+export function coverageFor({ keySkills = [], name = "", stats = null, quizzes = [] } = {}) {
+    const n = String(name || "").toLowerCase();
+    const topics = [
+        ...(stats?.topics || []),
+        ...(Array.isArray(quizzes) ? quizzes : [])
+            .filter((q) => String(q?.subject || "").toLowerCase() === n)
+            .map((q) => q?.title)
+            .filter(Boolean),
+    ];
+    return coverage(keySkills, topics);
+}
+
 // ─── One subject's own numbers ──────────────────────────────────────────────
 
 /**

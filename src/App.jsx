@@ -9,6 +9,7 @@ import { MotionConfig } from 'framer-motion';
 import { Suspense, useEffect } from 'react';
 import { lazyPage } from '@/lib/lazyPage';
 import { rememberFriendLink, takePendingFriend } from '@/lib/pendingFriend';
+import { rememberSubjectLink, takePendingSubject } from '@/lib/pendingSubject';
 import { rememberGroupLink, takePendingGroup } from '@/lib/pendingGroup';
 import PageErrorBoundary from '@/components/shared/PageErrorBoundary';
 import PageNotFound from './lib/PageNotFound';
@@ -85,13 +86,19 @@ const AuthenticatedApp = () => {
   // always lands on the root, and the student is taken back to it once they
   // are in. See src/lib/pendingFriend.js.
   useEffect(() => {
-    if (!isAuthenticated) { rememberFriendLink(location); rememberGroupLink(location); return; }
-    if (isLoadingAuth || /^\/(friends|studygroups)\/?$/i.test(location.pathname)) return;
+    if (!isAuthenticated) {
+      rememberFriendLink(location); rememberGroupLink(location); rememberSubjectLink(location);
+      return;
+    }
+    if (isLoadingAuth || /^\/(friends|studygroups|subjects)\/?$/i.test(location.pathname)) return;
     const code = takePendingFriend();
     if (code) { navigate(`/Friends?add=${encodeURIComponent(code)}`, { replace: true }); return; }
     // A group link kept the same way (src/lib/pendingGroup.js).
     const group = takePendingGroup();
-    if (group) navigate(`/StudyGroups?join=${encodeURIComponent(group)}`, { replace: true });
+    if (group) { navigate(`/StudyGroups?join=${encodeURIComponent(group)}`, { replace: true }); return; }
+    // And a subject page somebody sent them (src/lib/pendingSubject.js).
+    const subject = takePendingSubject();
+    if (subject) navigate(`/Subjects?view=${encodeURIComponent(subject)}`, { replace: true });
   }, [isAuthenticated, isLoadingAuth, location, navigate]);
 
   // Show loading spinner while checking app public settings or auth

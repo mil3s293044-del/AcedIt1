@@ -26,9 +26,10 @@ import {
 } from "@/lib/subjectBrowse";
 import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
-import { subjectStats, subjectLead } from "@/lib/subjectHub";
+import { subjectStats, subjectLead, coverageFor } from "@/lib/subjectHub";
+import { subjectForView } from "@/lib/subjectInfo";
 import { base44 } from "@/api/base44Client";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 
 /**
@@ -93,8 +94,15 @@ function BrowseSubjectCard({ subject, isSelected, onAdd, onRemove, onViewDetails
             <div className="flex-1 pl-4 pr-3 py-3.5">
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                        <h3 className="font-display font-extrabold text-foreground text-sm
-                            leading-tight">{subject.name}</h3>
+                        {/* The name opens the subject's page. "Details" at
+                            11px was the only way in, on the screen where a
+                            student is deciding what to take. */}
+                        <button type="button" onClick={onViewDetails} data-open-subject={subject.id}
+                            className="text-left rounded focus-visible:outline focus-visible:outline-2
+                                focus-visible:outline-offset-2 focus-visible:outline-ring">
+                            <h3 className="font-display font-extrabold text-foreground text-sm
+                                leading-tight hover:underline decoration-2 underline-offset-2">{subject.name}</h3>
+                        </button>
                         <p className="text-[10px] text-muted-foreground/70 font-mono mt-0.5">
                             {subject.code}
                         </p>
@@ -272,11 +280,22 @@ function SubjectRow({ userSubject, fullSubject, stats, lead, target, onTarget, o
 export default function Subjects() {
     const [subjects, setSubjects] = useState([]);
     const [mySubjects, setMySubjects] = useState([]);
-    const [selectedSubject, setSelectedSubject] = useState(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [debouncedSearch, setDebouncedSearch] = useState("");
     const [user, setUser] = useState(null);
-    const [activeTab, setActiveTab] = useState("my");
+    // ─── The open subject lives in the address ────────────────────────────
+    // `?view=vce-maths-methods` is a link somebody can send, and the browser's
+    // own back button closes the page. Held in state it was neither: a shared
+    // subject opened on the shelf, and back left the app altogether.
+    const location = useLocation();
+    const navigate = useNavigate();
+    const view = new URLSearchParams(location.search).get("view");
+    // A subject shared in a group chat opens before the student's own
+    // custom subjects have loaded, so the catalogue answers first.
+    const selectedSubject = subjectForView(view, subjects.length ? subjects : VCE_SUBJECTS);
+    // Arriving on a link lands Browse behind it: the page is a catalogue page.
+    const [activeTab, setActiveTab] = useState(() => (view ? "all" : "my"));
+    const listScroll = useRef(0);
     // Browse filters. `area` null means every area.
     const [area, setArea] = useState(null);
     const [sortKey, setSortKey] = useState("area");
@@ -547,18 +566,126 @@ export default function Subjects() {
         }
     };
 
+    // ─── Opening and closing a subject ─────────────────────────────────────────
+
+    /**
+     * Open a subject's page. From the list it is a PUSH, so the browser's back
+     * button returns here; switching between subjects on the page is a REPLACE,
+     * so back still means "the list" rather than walking every subject you
+     * flicked through.
+     */
+    const openSubject = useCallback((subject, { replace = false } = {}) => {
+        if (!subject?.id) return;
+        if (!replace) listScroll.current = window.scrollY;
+        // A replace KEEPS the entry's own state. Marking it "opened from the
+        // list" when it was opened from a link made the page's back button
+        // `navigate(-1)` straight out of the app, to whatever came before.
+        navigate({ search: `?view=${encodeURIComponent(subject.id)}` },
+            { replace, state: replace ? location.state : { fromSubjects: true } });
+    }, [navigate, location.state]);
+
+    /**
+     * Back to the list. If the list is what opened it, that is the browser's
+     * own back, so the history stays honest; a page opened from a link has
+     * nothing behind it here, so the address is simply cleared.
+     */
+    const closeSubject = useCallback(() => {
+        if (location.state?.fromSubjects) navigate(-1);
+        else navigate({ search: "" }, { replace: true });
+    }, [location.state, navigate]);
+
+    // Coming back lands where the student left the list, not at the top of it.
+    const wasOpen = useRef(!!selectedSubject);
+    useEffect(() => {
+        if (wasOpen.current && !selectedSubject) {
+            const y = listScroll.current;
+            requestAnimationFrame(() => window.scrollTo(0, y));
+        }
+        wasOpen.current = !!selectedSubject;
+    }, [selectedSubject]);
+
+    // ─── Year Level Dialog ────────────────────────────────────────────────────
+    // Drawn on BOTH views: the subject page has its own Add button, and a
+    // dialog that only exists on the list would open on a screen nobody is on.
+
+    const yearDialog = (
+        <Dialog open={showYearLevelDialog} onOpenChange={setShowYearLevelDialog}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="text-lg font-bold">Add {selectedSubjectForYear?.name}</DialogTitle>
+                </DialogHeader>
+                <div className="py-4 space-y-5">
+                    <div>
+                        <label className="text-sm font-semibold text-foreground mb-2 block">Year Level</label>
+                        <Select value={selectedYearLevel} onValueChange={setSelectedYearLevel}>
+                            <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Year 9">Year 9</SelectItem>
+                                <SelectItem value="Year 10">Year 10</SelectItem>
+                                <SelectItem value="Year 11 Units 1&2">Year 11 Units 1&2</SelectItem>
+                                <SelectItem value="Year 12 Units 3&4">Year 12 Units 3&4</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div>
+                        <label className="text-sm font-semibold text-foreground mb-2 block">Color</label>
+                        <div className="grid grid-cols-5 gap-2">
+                            {SUBJECT_PALETTE.map(c => (
+                                <button key={c.key} type="button" title={c.label}
+                                    aria-label={c.label}
+                                    aria-pressed={selectedSubjectColor === c.hex}
+                                    onClick={() => setSelectedSubjectColor(c.hex)}
+                                    className={`h-10 rounded-lg transition-all ${selectedSubjectColor === c.hex
+                                        ? "ring-4 ring-offset-2 ring-foreground/20 scale-110" : "hover:scale-105"}`}
+                                    style={{ backgroundColor: c.hex }} />
+                            ))}
+                        </div>
+                    </div>
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => { setShowYearLevelDialog(false); setSelectedSubjectForYear(null); }} className="rounded-xl">Cancel</Button>
+                    <Button onClick={handleConfirmYearLevel} className="bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl">Add Subject</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+
     // ─── Detail view ──────────────────────────────────────────────────────────
 
     if (selectedSubject) {
-        // Static catalog entries can't be edited or deleted via the UI.
+        // Only a student's OWN subject can be deleted; the catalogue is static.
         const canEdit = !selectedSubject.is_static && user && (selectedSubject.created_by === user.email || isAdmin);
+        const mine = mySelectedSubjects.find((us) => us.vce_subject_id === selectedSubject.id)
+            || mySelectedSubjects.find((us) => !us.vce_subject_id && us.subject_name === selectedSubject.name)
+            || null;
+        // Coverage is only claimed for a subject the student takes: ticks off
+        // somebody's decks on a subject they do not do would be noise.
+        const coverage = mine ? coverageFor({
+            keySkills: selectedSubject.key_skills, name: mine.subject_name,
+            stats: mine.stats, quizzes: work.quizzes,
+        }) : null;
         return (
-            <SubjectDetail
-                subject={selectedSubject}
-                onBack={() => setSelectedSubject(null)}
-                onEdit={canEdit ? () => setSelectedSubject(null) : null}
-                onDelete={canEdit ? async () => { await VCESubject.delete(selectedSubject.id); setSelectedSubject(null); if (user?.email) await loadData(user.email); } : null}
-            />
+            <>
+                <SubjectDetail
+                    subject={selectedSubject}
+                    catalogue={subjects.length ? subjects : VCE_SUBJECTS}
+                    hex={mine ? mine.hex : colorFor(selectedSubject.name)}
+                    userSubject={mine}
+                    coverage={coverage}
+                    target={mine ? mine.target : null}
+                    onTarget={mine ? (n) => handleTarget(mine.id, n) : undefined}
+                    onCommitTarget={mine ? () => handleCommitTarget(mine.id) : undefined}
+                    onBack={closeSubject}
+                    onAdd={handleAddSubject}
+                    onOpen={(s) => openSubject(s, { replace: true })}
+                    onDelete={canEdit ? async () => {
+                        await VCESubject.delete(selectedSubject.id);
+                        closeSubject();
+                        if (user?.email) await loadData(user.email);
+                    } : null}
+                />
+                {yearDialog}
+            </>
         );
     }
 
@@ -760,7 +887,7 @@ export default function Subjects() {
                                                     isSelected={isSubjectInMyList(subject.id)}
                                                     onAdd={() => handleAddSubject(subject)}
                                                     onRemove={() => handleRemoveByVCEId(subject.id)}
-                                                    onViewDetails={() => setSelectedSubject(subject)}
+                                                    onViewDetails={() => openSubject(subject)}
                                                 />
                                             ))}
                                         </div>
@@ -776,7 +903,7 @@ export default function Subjects() {
                                         isSelected={isSubjectInMyList(subject.id)}
                                         onAdd={() => handleAddSubject(subject)}
                                         onRemove={() => handleRemoveByVCEId(subject.id)}
-                                        onViewDetails={() => setSelectedSubject(subject)}
+                                        onViewDetails={() => openSubject(subject)}
                                     />
                                 ))}
                             </div>
@@ -784,46 +911,7 @@ export default function Subjects() {
                     </div>
                 )}
 
-                {/* Year Level Dialog */}
-                <Dialog open={showYearLevelDialog} onOpenChange={setShowYearLevelDialog}>
-                    <DialogContent className="sm:max-w-md">
-                        <DialogHeader>
-                            <DialogTitle className="text-lg font-bold">Add {selectedSubjectForYear?.name}</DialogTitle>
-                        </DialogHeader>
-                        <div className="py-4 space-y-5">
-                            <div>
-                                <label className="text-sm font-semibold text-foreground mb-2 block">Year Level</label>
-                                <Select value={selectedYearLevel} onValueChange={setSelectedYearLevel}>
-                                    <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Year 9">Year 9</SelectItem>
-                                        <SelectItem value="Year 10">Year 10</SelectItem>
-                                        <SelectItem value="Year 11 Units 1&2">Year 11 Units 1&2</SelectItem>
-                                        <SelectItem value="Year 12 Units 3&4">Year 12 Units 3&4</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <label className="text-sm font-semibold text-foreground mb-2 block">Color</label>
-                                <div className="grid grid-cols-5 gap-2">
-                                    {SUBJECT_PALETTE.map(c => (
-                                        <button key={c.key} type="button" title={c.label}
-                                            aria-label={c.label}
-                                            aria-pressed={selectedSubjectColor === c.hex}
-                                            onClick={() => setSelectedSubjectColor(c.hex)}
-                                            className={`h-10 rounded-lg transition-all ${selectedSubjectColor === c.hex
-                                                ? "ring-4 ring-offset-2 ring-foreground/20 scale-110" : "hover:scale-105"}`}
-                                            style={{ backgroundColor: c.hex }} />
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => { setShowYearLevelDialog(false); setSelectedSubjectForYear(null); }} className="rounded-xl">Cancel</Button>
-                            <Button onClick={handleConfirmYearLevel} className="bg-chart-4 hover:bg-chart-4/90 text-white rounded-xl">Add Subject</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                {yearDialog}
 
                 {/* Create Dialog */}
                 <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>

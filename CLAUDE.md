@@ -2509,6 +2509,114 @@ the strip says what it averaged over. An account with nothing picked is not
 failing two requirements — it is a student who has not started, and gets one
 neutral line instead of two warnings.
 
+## A subject's own page is where the choice gets made
+
+**"Rework the actual subject information pages to feel far more aesthetic, high
+utility and with friendly UI and UX, with cool animations that are also very
+useful."** The page was eight bordered boxes in a stack, and three of them said
+nothing about the subject in front of it:
+
+- **"Popular choice" and "2 year program" were printed beside EVERY subject**
+  in the catalogue, so neither sentence said anything about any of them.
+- **The scaling pill was coloured by reputation**, not by direction: the
+  wrong-arrow bug `ScalingMark` was written to fix on Browse, still alive one
+  click further in.
+- **Prerequisites were printed raw**, so "Year 10 maths recommended" read as a
+  gate. They go through `prerequisiteOf`, as on Browse, with the catalogue's
+  full sentence kept, since this is the page where nothing is trimmed.
+
+`src/lib/subjectInfo.js` is the model and every figure on the page comes off a
+catalogue field. `SubjectDetail.jsx` lays it out in the order a choice gets
+made: the subject, how it is marked, what a score is worth, what you will
+study, how students do well, the rest of its learning area, and where it leads.
+**The hero and the alternatives are bordered because you act on them;
+everything else is a ruled section**, the Progress page's rule.
+
+### The year as one bar
+
+Four grey boxes with a percentage each made "how much of this is decided in
+the exam" an addition the student had to do. That is the question somebody
+choosing a subject actually has, so it is the sentence over the bar
+(`barLead`), and the bar answers it at a glance (`YearBar`).
+
+- **IN THE ORDER OF THE YEAR**: assessed at school first, then the exams, which
+  come at the end. Music Repertoire lists its performance exam FIRST in the
+  catalogue, which drew an exam before the SACs it follows. No dates are
+  claimed, because the catalogue has none.
+- **THE KIND IS READ OFF THE COMPONENT'S OWN NAME, AND A GUESS IS `other`.**
+  "Solo performance" is neither exam nor SAC by name, and putting it on either
+  side would move a third of Music's score across the headline. It is hatched
+  and labelled "Assessed tasks". Lightness AND hatching carry the kind, so it
+  survives greyscale.
+- **NOT RENORMALISED**, `markSplit`'s rule. The width is drawn against the
+  larger of 100 and the total, so a study design that overshoots cannot push
+  the bar past its own edge, and the rows say when the parts do not add to 100.
+- **The segments grow left to right in turn**, because that is the year's order,
+  and the brackets arrive once the bar is full: the parts first, then what they
+  add up to. A figure fades in AFTER its segment has grown, never squashed by
+  the scale it rides on. Pointing at a segment lifts its row and pointing at a
+  row lifts its segment; a tap does it on a phone.
+- **HALF THE PALETTE IS LIGHT.** White on amber is about 2:1, so a figure on a
+  solid segment is inked by contrast (`inkOn`), not white by default.
+
+### What a score is worth
+
+`ScoreCurve`, the same one the shelf and the hub draw. **For a subject you take
+it IS your target**: same column, same handlers. **For one you are only looking
+at it is a what-if**, held on the page, written nowhere, and reset on every
+subject. A target you never chose is the app inventing an answer to the
+question it is asking. `emptyHint` is what lets the curve say "try a score"
+rather than "set a target" when nothing will be set.
+
+### The rest of the area, and side by side
+
+`alternativesFor` is the rest of the learning area, the current subject
+INCLUDED and flagged, sorted by scaling, so General, Methods and Specialist
+read as the ladder they are. Unknown scaling sorts last, never as a zero; a
+private subject never joins a strip. Tapping one SLIDES the page in the
+direction of the ladder and jumps to the top FIRST. Scrolling smoothly while the
+old page faded out left a frame of empty ground where the strip had been, and
+only a timed screenshot said so.
+
+**COMPARE NAMES NO WINNER** (`SubjectCompare`, `compareRows`). A higher scaling
+number is not a better subject and a smaller exam share is not an easier one,
+so a row carries a label and two values and NO verdict field, and every cell is
+drawn from the row's own value. The two year bars STACK rather than sit side by
+side, so they line up segment for segment. A fact one side lacks is a dash,
+never a zero. There is no scaling mark in the column headers, because the first
+row is scaling and the duplicate squeezed the right-hand picker to "Mathematic"
+on a phone.
+
+### The page is an address
+
+**`?view=vce-maths-methods` is the open subject**, read through
+`subjectForView`. Held in state it could not be sent to anyone, and the
+browser's back button left the app. The catalogue answers first, so a shared
+link does not flash Browse while custom subjects load.
+
+- **From the list it is a push, and between subjects it is a REPLACE**, so back
+  means "the list" rather than walking every subject flicked through.
+- **A REPLACE KEEPS THE ENTRY'S OWN STATE.** The first wiring stamped
+  `fromSubjects` on every navigation, so a page opened from a link and then
+  switched once made the page's own back button `navigate(-1)` straight out of
+  the app. Found by driving it, as a white screen.
+- **Back returns to where you were in the list**, not to its top.
+- **Share** is the share sheet on a phone and the clipboard elsewhere. A
+  failed copy SAYS so, and a private subject has no share button, because a
+  link to it opens nothing for anyone else.
+- **A link opened signed out survives the sign-in** (`pendingSubject.js`), the
+  reason `pendingFriend` and `pendingGroup` exist, and only for a catalogue id.
+
+**Coverage is ONE composition now** (`coverageFor` in subjectHub.js): deck
+topics plus that subject's quiz titles. The hub and this page both read it, and
+it is only claimed for a subject the student takes.
+
+`subjectInfo.test.mjs` holds 25 checks against the real catalogue as well as
+fixtures, and all 35 injections bite against a green baseline. One was silent
+on the first pass and it was the guard's fault: an exemption matched
+quote-to-quote swallowed the JSX text around the sentence it meant to exempt,
+which is exactly where the injected verdict landed.
+
 ## The study-score curve
 
 **`goal_study_score` has been on `user_subjects` since migration 0002, and
@@ -8391,6 +8499,12 @@ student looking free in the nav, the planner and the companion.
   session and the sources it runs on, drawn as the TOP OF the setup card rather
   than as panels on it. The test holds the two sentences that were false under
   a real account's rows
+- `src/lib/subjectInfo.js` + `subjectInfo.test.mjs`,
+  `src/components/vce/SubjectDetail.jsx`, `YearBar.jsx`, `SubjectCompare.jsx`,
+  `src/lib/pendingSubject.js`: one subject's page, reached at
+  `/Subjects?view=<id>`. The year as one bar in the order it happens, a
+  what-if on the state curve, the rest of its area as a ladder, and a
+  side-by-side that names no winner
 - `src/lib/studyScore.js`, `src/components/subjects/ScoreCurve.jsx` — the state
   distribution, and the drag that finally sets `goal_study_score`
 - `src/lib/subjectBrowse.js`, `src/components/subjects/ScalingMark.jsx`,
