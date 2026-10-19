@@ -67,7 +67,7 @@ const AREA = `${OUTLINE} L${xOf(SCORE_MAX)} ${H - PAD_B} L${xOf(SCORE_MIN)} ${H 
 
 const TICKS = [10, 20, 30, 40, 50];
 
-export default function ScoreCurve({ target, tone, scaled, onChange, onCommit, label }) {
+export default function ScoreCurve({ target, tone, scaled, onChange, onCommit, label, emptyHint = "Drag the curve to set a target" }) {
     const svgRef = useRef(null);
     // `useId` returns ":r3:" and a colon in an id is legal in XML but hostile
     // in a `url(#...)` reference. PlayingCard's CardBack sanitises for the same
@@ -242,9 +242,7 @@ export default function ScoreCurve({ target, tone, scaled, onChange, onCommit, l
 
             <div className="flex items-baseline gap-2 mt-1 min-h-[1.25rem]">
                 {set == null ? (
-                    <p className="text-[11px] text-muted-foreground">
-                        Drag the curve to set a target
-                    </p>
+                    <p className="text-[11px] text-muted-foreground">{emptyHint}</p>
                 ) : (
                     <>
                         <span className="font-display font-extrabold text-lg leading-none

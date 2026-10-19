@@ -1,338 +1,431 @@
-
-import React from "react";
+/**
+ * SubjectDetail — one VCE subject, laid out in the order a choice gets made.
+ *
+ *   the subject     what it is, where it sits, how it scales, what it needs
+ *   how it's marked the study score as one bar, in the order of the year
+ *   a score here    the state curve: drag a raw score, see it placed and scaled
+ *   the course      its areas of study, ticked off your own work if you take it
+ *   alternatives    the rest of its learning area, one tap to switch or compare
+ *   where it leads  careers
+ *
+ * ─── What the old page said, and why it went ────────────────────────────────
+ * "Popular choice" and "2 year program" were printed beside EVERY subject in
+ * the catalogue, so they told a student nothing about this one. The scaling
+ * pill was coloured by reputation rather than by direction — the wrong-arrow
+ * bug `ScalingMark` was written to end on Browse. Prerequisites were printed
+ * raw, so "Year 10 maths recommended" read as a gate. And it was cards inside
+ * a card, eight of them, so nothing led. Every figure on this page now comes
+ * off a catalogue field (`subjectInfo.js`), and none of it names a better
+ * subject — scaling is the cohort, not a discount, `LoadStrip`'s rule.
+ *
+ * ─── One box is something you press ─────────────────────────────────────────
+ * The hero and the alternatives are bordered, because both are things you act
+ * on. Everything else is a ruled section on the page's own ground — the
+ * Progress page's rule, and the reason this no longer reads as a stack of
+ * identical tiles.
+ */
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { ArrowLeft, ArrowRight, Plus, Check, Columns2, Trash2, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-    ArrowLeft,
-    BookOpen,
-    Target,
-    BarChart3,
-    Lightbulb,
-    CheckCircle,
-    TrendingUp,
-    Users,
-    Clock,
-    Calculator,
-    Edit2,
-    Trash2
-} from "lucide-react";
+import ScalingMark from "@/components/subjects/ScalingMark";
+import ScoreCurve from "@/components/subjects/ScoreCurve";
+import YearBar from "@/components/vce/YearBar";
+import SubjectCompare from "@/components/vce/SubjectCompare";
+import { alpha } from "@/components/cards/PlayingCard";
+import { colorFor } from "@/components/cards/cardIdentity";
+import { scaledScore, clampScore } from "@/lib/studyScore";
+import { yearBar, prereqsOf, alternativesFor, areaNameOf, subjectLink } from "@/lib/subjectInfo";
+import { createPageUrl } from "@/utils";
 
-// Static lookup for subject.color values → full Tailwind class strings (avoid JIT interpolation pitfalls)
-const SUBJECT_COLOR_CLASSES = {
-    primary:   { bg: "bg-primary",   bgSoft: "bg-primary/10",   text: "text-primary",   ring: "ring-primary/20" },
-    xp:        { bg: "bg-xp",        bgSoft: "bg-xp/10",        text: "text-xp",        ring: "ring-xp/20" },
-    streak:    { bg: "bg-streak",    bgSoft: "bg-streak/10",    text: "text-streak",    ring: "ring-streak/20" },
-    "chart-3": { bg: "bg-chart-3",   bgSoft: "bg-chart-3/10",   text: "text-chart-3",   ring: "ring-chart-3/20" },
-    "chart-4": { bg: "bg-chart-4",   bgSoft: "bg-chart-4/10",   text: "text-chart-4",   ring: "ring-chart-4/20" },
-};
+/** A heading with a rule to the end of the row — the band idiom. */
+function Section({ title, aside, children, index = 0 }) {
+    const reduce = useReducedMotion();
+    return (
+        <motion.section
+            initial={reduce ? false : { opacity: 0, y: 12 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, margin: "-40px" }}
+            transition={{ duration: 0.35, delay: Math.min(index * 0.04, 0.2) }}>
+            <div className="flex items-center gap-3 mb-4">
+                <h2 className="font-display font-extrabold text-foreground text-lg flex-shrink-0">{title}</h2>
+                <span className="flex-1 h-px bg-border" aria-hidden="true" />
+                {aside}
+            </div>
+            {children}
+        </motion.section>
+    );
+}
 
-const DIFFICULTY_PILL = {
-    beginner:     "bg-primary/10 text-primary",
-    intermediate: "bg-xp/10 text-xp",
-    advanced:     "bg-streak/10 text-streak",
-};
-
-const SCALING_PILL = {
-    high_scaling:     "bg-primary/10 text-primary",
-    moderate_scaling: "bg-xp/10 text-xp",
-    low_scaling:      "bg-streak/10 text-streak",
-};
-
-export default function SubjectDetail({ subject, onBack, onEdit, onDelete }) {
-    const getDifficultyColor = (level) => {
-        return DIFFICULTY_PILL[level] || "bg-secondary text-muted-foreground";
+/**
+ * Hand the page over. On a phone that is the share sheet, because that is
+ * where a link is sent from; anywhere else it is the clipboard. A cancelled
+ * share says nothing, and a copy that fails SAYS SO — a button that does
+ * nothing on a locked-down school laptop reads as broken.
+ */
+function ShareLink({ subject }) {
+    const [state, setState] = useState(null); // "copied" | "failed" | null
+    useEffect(() => {
+        if (!state) return undefined;
+        const t = setTimeout(() => setState(null), 2400);
+        return () => clearTimeout(t);
+    }, [state]);
+    const share = async () => {
+        const url = subjectLink(subject.id, window.location.origin);
+        const touch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+        if (touch && navigator.share) {
+            try { await navigator.share({ title: subject.name, url }); } catch { /* cancelled */ }
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(url);
+            setState("copied");
+        } catch {
+            setState("failed");
+        }
     };
+    return (
+        <Button variant="outline" onClick={share} data-share-subject
+            className="rounded-xl gap-1.5 border-2 border-border">
+            {state === "copied" ? <Check className="w-4 h-4 text-primary" /> : <Link2 className="w-4 h-4" />}
+            {state === "copied" ? "Link copied" : state === "failed" ? "Copy from the address bar" : "Share"}
+        </Button>
+    );
+}
 
-    const getScalingColor = (reputation) => {
-        if (!reputation) return "bg-secondary text-muted-foreground";
-        return SCALING_PILL[reputation] || "bg-secondary text-muted-foreground";
+/** A delete that asks once: the first press arms it, the second deletes. */
+function DeleteOwn({ onDelete }) {
+    const [armed, setArmed] = useState(false);
+    useEffect(() => {
+        if (!armed) return undefined;
+        const t = setTimeout(() => setArmed(false), 3500);
+        return () => clearTimeout(t);
+    }, [armed]);
+    return (
+        <Button variant="outline" size="sm" data-delete-own
+            onClick={() => (armed ? onDelete() : setArmed(true))}
+            className={`rounded-xl gap-1.5 border-2 ${armed ? "border-streak/60 text-streak" : "border-border"}`}>
+            <Trash2 className="w-3.5 h-3.5" /> {armed ? "Delete it?" : "Delete"}
+        </Button>
+    );
+}
+
+export default function SubjectDetail({
+    subject, catalogue = [], hex: hexProp, userSubject = null, coverage = null,
+    target = null, onTarget, onCommitTarget,
+    onBack, onAdd, onOpen, onDelete,
+}) {
+    const reduce = useReducedMotion();
+    const hex = hexProp || colorFor(subject?.name);
+    const taken = !!userSubject;
+
+    const bar = useMemo(() => yearBar(subject), [subject]);
+    const prereqs = useMemo(() => prereqsOf(subject), [subject]);
+    const alts = useMemo(() => alternativesFor(subject, catalogue), [subject, catalogue]);
+    const area = areaNameOf(subject);
+    const skills = (subject?.key_skills || []).filter(Boolean);
+    const tips = (subject?.study_tips || []).filter(Boolean);
+    const careers = (subject?.career_pathways || []).filter(Boolean);
+    const scaling = subject?.scaling_info || null;
+    const mean = Number(scaling?.mean_study_score);
+
+    // ── The score you are trying ────────────────────────────────────────
+    // For a subject you take, the curve IS your target — the same column the
+    // shelf and the hub write. For one you are only looking at, it is a
+    // what-if held here and written nowhere, and it starts empty rather than
+    // claiming a score you never chose.
+    const [whatIf, setWhatIf] = useState(null);
+    useEffect(() => { setWhatIf(null); }, [subject?.id]);
+    const shown = taken ? target : whatIf;
+
+    // ── Switching subject, with a direction ─────────────────────────────
+    // A tap on an alternative to the RIGHT on the ladder slides the page in
+    // from the right, so the strip and the page agree about where you went.
+    const dirRef = useRef(0);
+    const open = (next) => {
+        const from = alts.findIndex((a) => a.current);
+        const to = alts.findIndex((a) => a.subject.id === next.id);
+        dirRef.current = from < 0 || to < 0 ? 0 : Math.sign(to - from);
+        // To the top FIRST, instantly, so the slide plays where the student
+        // is looking. Scrolling smoothly while the old page faded out left a
+        // frame of empty ground where the strip they tapped had been.
+        window.scrollTo?.(0, 0);
+        onOpen?.(next);
     };
+    useEffect(() => { window.scrollTo?.(0, 0); }, [subject?.id]);
 
-    // Safe helper function to format text
-    const formatText = (text) => {
-        return text ? text.replace(/_/g, ' ') : 'N/A';
-    };
+    const [comparing, setComparing] = useState(null);
+    const compareDefault = alts.find((a) => !a.current)?.subject
+        || catalogue.find((s) => s.id !== subject?.id && !s.is_private) || null;
 
-    const headerColor = SUBJECT_COLOR_CLASSES[subject.color] || SUBJECT_COLOR_CLASSES["chart-4"];
+    if (!subject) return null;
+    const slide = reduce ? 0 : 36;
 
     return (
-        <div className="p-4 lg:p-8">
-            <div className="max-w-4xl mx-auto">
-                <Button variant="outline" onClick={onBack} className="mb-6">
-                    <ArrowLeft className="w-4 h-4 mr-2" />
-                    Back to Subjects
-                </Button>
+        <div className="min-h-screen bg-background" data-subject-info={subject.id}>
+            <div className="max-w-4xl mx-auto px-4 lg:px-8 py-6 lg:py-8">
+                <button onClick={onBack}
+                    className="inline-flex items-center gap-1.5 text-xs font-bold text-muted-foreground
+                        hover:text-foreground transition-colors mb-4">
+                    <ArrowLeft className="w-3.5 h-3.5" /> Subjects
+                </button>
 
-                <div className="card-soft">
-                    <div className="p-6">
-                        <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                                <div className="flex items-start gap-4 mb-6">
-                                    <div
-                                        className={`w-16 h-16 rounded-xl flex items-center justify-center flex-shrink-0 ${headerColor.bg}`}
-                                    >
-                                        <BookOpen className="w-8 h-8 text-white" />
-                                    </div>
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-3 mb-2">
-                                            <h1 className="text-3xl font-bold text-foreground">
-                                                {subject.name || "Unknown Subject"}
-                                            </h1>
-                                            <span className="pill bg-secondary text-foreground font-mono">
-                                                {subject.code || "N/A"}
-                                            </span>
-                                            {subject.is_private && (
-                                                <span className="pill bg-chart-4 text-white">Private</span>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-3 mb-4 flex-wrap">
-                                            <span className={`pill ${getDifficultyColor(subject.difficulty_level)}`}>
-                                                {subject.difficulty_level || 'intermediate'} level
-                                            </span>
-                                            {subject.scaling_info && (
-                                                <span className={`pill ${getScalingColor(subject.scaling_info.difficulty_reputation)}`}>
-                                                    Scaling: {subject.scaling_info.scaling_factor || 'Unknown'}
-                                                </span>
-                                            )}
-                                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                                <Users className="w-4 h-4" />
-                                                <span>Popular choice</span>
-                                            </div>
-                                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                                                <Clock className="w-4 h-4" />
-                                                <span>2 year program</span>
-                                            </div>
-                                        </div>
-                                        <p className="text-lg text-muted-foreground leading-relaxed">
-                                            {subject.overview || "No overview available."}
+                <AnimatePresence mode="wait" initial={false} custom={dirRef.current}>
+                    <motion.div key={subject.id} custom={dirRef.current}
+                        variants={{
+                            enter: (d) => ({ opacity: 0, x: d * slide }),
+                            center: { opacity: 1, x: 0 },
+                            exit: (d) => ({ opacity: 0, x: -d * slide }),
+                        }}
+                        initial="enter" animate="center" exit="exit"
+                        transition={{ duration: reduce ? 0 : 0.24, ease: [0.22, 1, 0.36, 1] }}
+                        className="space-y-10">
+
+                        {/* ── THE SUBJECT ─────────────────────────────────── */}
+                        <section className="relative rounded-3xl bg-surface border border-border on-table overflow-hidden">
+                            <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1.5" style={{ background: hex }} />
+                            <span aria-hidden="true" className="absolute inset-0 pointer-events-none"
+                                style={{ background: `linear-gradient(110deg, ${alpha(hex, 0.12)}, transparent 55%)` }} />
+                            <div className="relative pl-6 pr-5 sm:pl-8 sm:pr-7 py-6 sm:py-7">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div className="min-w-0">
+                                        <p className="stat-label text-muted-foreground">
+                                            {/* The area alone: the catalogue's codes are just
+                                                the name shortened ("GENERAL MATHS"), so printing
+                                                one over the name says it twice. */}
+                                            {subject.is_private ? "Your own subject" : area || "VCE"}
                                         </p>
+                                        <h1 className="font-display font-extrabold tracking-tight text-foreground
+                                            text-3xl sm:text-4xl leading-[1.05] mt-1.5">{subject.name}</h1>
                                     </div>
+                                    <ScalingMark subject={subject} size="lg" />
                                 </div>
-                            </div>
-                            {(onEdit || onDelete) && (
-                                <div className="flex gap-2">
-                                    {onEdit && (
-                                        <Button variant="outline" size="sm" onClick={onEdit}>
-                                            <Edit2 className="w-4 h-4 mr-2" />
-                                            Edit
+                                {subject.overview && (
+                                    <p className="text-[15px] sm:text-base text-muted-foreground leading-relaxed mt-3 max-w-2xl">
+                                        {subject.overview}
+                                    </p>
+                                )}
+
+                                {/* Before you start. A requirement is NEEDS, advice is
+                                    SUITS, and the catalogue's own sentence is kept —
+                                    Browse trims it, so this is where it is whole. */}
+                                {prereqs.length > 0 && (
+                                    <ul className="flex flex-wrap gap-2 mt-4" data-prereqs>
+                                        {prereqs.map((p) => (
+                                            <li key={p.raw} title={p.raw !== p.text ? p.raw : undefined}
+                                                className={`pill text-[12px] ${p.kind === "required"
+                                                    ? "bg-xp/10 text-xp"
+                                                    : "bg-secondary text-muted-foreground"}`}>
+                                                <span className="font-bold mr-1">{p.kind === "required" ? "Needs" : "Suits"}</span>
+                                                {p.text}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+
+                                <div className="flex flex-wrap items-center gap-2.5 mt-5">
+                                    {taken ? (
+                                        <>
+                                            <span className="pill bg-primary/10 text-primary text-[12px] font-bold">
+                                                <Check className="w-3.5 h-3.5 mr-1" /> In your subjects
+                                            </span>
+                                            <Link to={`${createPageUrl("SubjectHub")}?subject=${encodeURIComponent(userSubject.subject_name || subject.name)}`}>
+                                                <Button className="btn-3d gap-1.5 bg-primary hover:bg-primary/90 text-white rounded-xl" data-open-hub>
+                                                    Open your hub <ArrowRight className="w-4 h-4" />
+                                                </Button>
+                                            </Link>
+                                        </>
+                                    ) : onAdd && (
+                                        <Button onClick={() => onAdd(subject)} data-add-subject
+                                            className="btn-3d gap-1.5 bg-primary hover:bg-primary/90 text-white rounded-xl">
+                                            <Plus className="w-4 h-4" /> Add to my subjects
                                         </Button>
                                     )}
-                                    {onDelete && (
-                                        <Button variant="destructive" size="sm" onClick={onDelete}>
-                                            <Trash2 className="w-4 h-4 mr-2" />
-                                            Delete
+                                    {compareDefault && (
+                                        <Button variant="outline" onClick={() => setComparing(compareDefault)} data-compare
+                                            className="rounded-xl gap-1.5 border-2 border-border">
+                                            <Columns2 className="w-4 h-4" /> Compare
                                         </Button>
                                     )}
+                                    {/* A student's own subject is private, so a link to it
+                                        would open nothing for anybody else. */}
+                                    {!subject.is_private && <ShareLink subject={subject} />}
+                                    {onDelete && <DeleteOwn onDelete={onDelete} />}
                                 </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* All content previously directly under motion.div, now inside content wrapper */}
-                    <div className="p-6 pt-0">
-                        <div className="grid lg:grid-cols-3 gap-6">
-                            {/* Main Content */}
-                            <div className="lg:col-span-2 space-y-6">
-                                {/* Study Design Summary */}
-                                {subject.study_design_summary && (
-                                    <div className="card-soft">
-                                        <div className="p-6 pb-3">
-                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2">
-                                                <Target className="w-5 h-5 text-chart-3" />
-                                                Study Design Summary
-                                            </h3>
-                                        </div>
-                                        <div className="p-6 pt-0">
-                                            <div className="prose prose-sm max-w-none">
-                                                <p className="text-muted-foreground leading-relaxed">
-                                                    {subject.study_design_summary}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Assessment Structure */}
-                                {subject.assessment_structure && subject.assessment_structure.length > 0 && (
-                                    <div className="card-soft">
-                                        <div className="p-6 pb-3">
-                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2">
-                                                <BarChart3 className="w-5 h-5 text-primary" />
-                                                Assessment Structure
-                                            </h3>
-                                        </div>
-                                        <div className="p-6 pt-0">
-                                            <div className="space-y-4">
-                                                {subject.assessment_structure.map((assessment, index) => (
-                                                    <div key={index} className="flex items-center justify-between p-4 bg-secondary/50 rounded-lg">
-                                                        <div className="flex-1">
-                                                            <h4 className="font-medium text-foreground mb-1">
-                                                                {assessment.component || "Assessment Component"}
-                                                            </h4>
-                                                            <p className="text-sm text-muted-foreground">
-                                                                {assessment.description || "No description available."}
-                                                            </p>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="text-right">
-                                                                <div className="text-2xl font-bold text-foreground">
-                                                                    {assessment.percentage || 0}%
-                                                                </div>
-                                                            </div>
-                                                            <div
-                                                                className="w-2 h-12 bg-chart-3 rounded-full"
-                                                                style={{ height: `${Math.max((assessment.percentage || 0) / 2, 12)}px` }}
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Scaling Information */}
-                                {subject.scaling_info && (
-                                    <div className="card-soft bg-chart-4/5 border-chart-4/20">
-                                        <div className="p-6 pb-3">
-                                            <h3 className="font-display font-extrabold flex items-center gap-2 text-chart-4">
-                                                <Calculator className="w-5 h-5" />
-                                                Scaling & Study Score Information
-                                            </h3>
-                                        </div>
-                                        <div className="p-6 pt-0">
-                                            <div className="grid md:grid-cols-2 gap-6">
-                                                <div>
-                                                    <h4 className="font-semibold text-chart-4 mb-2">Scaling Factor</h4>
-                                                    <div className="flex items-center gap-2 mb-3">
-                                                        <span className="text-3xl font-bold text-chart-4">
-                                                            {subject.scaling_info.scaling_factor || "Unknown"}
-                                                        </span>
-                                                        <span className={`pill ${getScalingColor(subject.scaling_info.difficulty_reputation)}`}>
-                                                            {formatText(subject.scaling_info.difficulty_reputation)}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-sm text-foreground">
-                                                        {subject.scaling_info.scaling_description || "No scaling information available."}
-                                                    </p>
-                                                </div>
-                                                <div>
-                                                    <h4 className="font-semibold text-chart-4 mb-2">Average Scaled Study Score</h4>
-                                                    <div className="text-3xl font-bold text-chart-4 mb-3">
-                                                        {subject.scaling_info.mean_study_score || "N/A"}
-                                                    </div>
-                                                    <p className="text-sm text-foreground">
-                                                        This is the average scaled study score achieved by students in this subject.
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <div className="mt-4 p-3 bg-surface/70 rounded-lg">
-                                                <p className="text-xs text-muted-foreground">
- <strong>Remember:</strong> Scaling is based on the academic strength of students taking the subject. Choose subjects you're genuinely interested in and can perform well in!
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Study Tips */}
-                                {subject.study_tips && subject.study_tips.length > 0 && (
-                                    <div className="card-soft">
-                                        <div className="p-6 pb-3">
-                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2">
-                                                <Lightbulb className="w-5 h-5 text-xp" />
-                                                Study Tips & Strategies
-                                            </h3>
-                                        </div>
-                                        <div className="p-6 pt-0">
-                                            <div className="grid gap-3">
-                                                {subject.study_tips.map((tip, index) => (
-                                                    <div key={index} className="flex items-start gap-3 p-3 bg-xp/5 rounded-lg border border-xp/20">
-                                                        <CheckCircle className="w-5 h-5 text-xp mt-0.5 flex-shrink-0" />
-                                                        <p className="text-foreground">{tip || "Study tip not available."}</p>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
+                        </section>
 
-                            {/* Sidebar */}
-                            <div className="space-y-6">
-                                {/* Key Skills */}
-                                {subject.key_skills && subject.key_skills.length > 0 && (
-                                    <div className="card-soft">
-                                        <div className="p-6 pb-3">
-                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2 text-lg">
-                                                <TrendingUp className="w-5 h-5 text-chart-4" />
-                                                Key Skills
-                                            </h3>
-                                        </div>
-                                        <div className="p-6 pt-0">
-                                            <div className="space-y-2">
-                                                {subject.key_skills.map((skill, index) => (
-                                                    <div key={index} className="flex items-center gap-2">
-                                                        <div className="w-2 h-2 bg-chart-4 rounded-full" />
-                                                        <span className="text-sm text-muted-foreground">{skill || "Skill not specified"}</span>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                        {/* ── HOW IT'S MARKED ─────────────────────────────── */}
+                        {bar && (
+                            <Section title="How it's marked" index={1}>
+                                <p className="font-display font-extrabold text-xl sm:text-2xl text-foreground leading-snug mb-4"
+                                    data-bar-lead>{bar.lead}</p>
+                                <YearBar bar={bar} hex={hex} delay={0.1} />
+                            </Section>
+                        )}
 
-                                {/* Prerequisites */}
-                                {subject.prerequisites && subject.prerequisites.length > 0 && (
-                                    <div className="card-soft">
-                                        <div className="p-6 pb-3">
-                                            <h3 className="font-display font-extrabold text-foreground flex items-center gap-2 text-lg">
-                                                <BookOpen className="w-5 h-5 text-chart-3" />
-                                                Prerequisites
-                                            </h3>
+                        {/* ── WHAT A SCORE IS WORTH HERE ──────────────────── */}
+                        <Section title="What a score is worth here" index={2}>
+                            <div className="grid lg:grid-cols-[1fr_15rem] gap-6 lg:gap-8 items-start">
+                                <div>
+                                    <ScoreCurve target={shown} tone={hex}
+                                        scaled={shown == null ? null : scaledScore(shown, subject)}
+                                        label={taken ? `Target study score for ${subject.name}` : `Try a study score in ${subject.name}`}
+                                        onChange={(n) => (taken ? onTarget?.(clampScore(n)) : setWhatIf(clampScore(n)))}
+                                        onCommit={taken ? onCommitTarget : undefined}
+                                        emptyHint={taken ? undefined : "Drag the curve to try a score"} />
+                                    <p className="text-[12px] text-muted-foreground mt-2 leading-relaxed" data-curve-note>
+                                        {taken
+                                            ? "This is your target — the same one on your shelf and your hub. Drag to change it."
+                                            : "Where a score sits in the state is exact; what it scales to is an estimate. Nothing here is saved."}
+                                    </p>
+                                </div>
+                                <dl className="space-y-4">
+                                    {scaling?.scaling_description && (
+                                        <div>
+                                            <dt className="stat-label">Scaling</dt>
+                                            <dd className="text-sm text-foreground leading-relaxed mt-1">{scaling.scaling_description}</dd>
                                         </div>
-                                        <div className="p-6 pt-0">
-                                            <div className="space-y-2">
-                                                {subject.prerequisites.map((prereq, index) => (
-                                                    <span key={index} className="pill border border-border text-foreground mr-2 mb-2">
-                                                        {prereq || "No prerequisite specified"}
+                                    )}
+                                    {Number.isFinite(mean) && mean > 0 && (
+                                        <div>
+                                            <dt className="stat-label">Average scaled score</dt>
+                                            <dd className="mt-0.5">
+                                                <span className="font-display font-extrabold text-2xl tabular-nums text-foreground">{mean}</span>
+                                                <span className="block text-[12px] text-muted-foreground leading-snug">
+                                                    Where the typical student in it finishes, after scaling.
+                                                </span>
+                                            </dd>
+                                        </div>
+                                    )}
+                                </dl>
+                            </div>
+                        </Section>
+
+                        {/* ── WHAT YOU'LL STUDY ───────────────────────────── */}
+                        {skills.length > 0 && (
+                            <Section title="What you'll study" index={3}
+                                aside={coverage?.total > 0 && (
+                                    <span className="text-[12px] font-bold tabular-nums text-muted-foreground flex-shrink-0" data-coverage>
+                                        {coverage.covered} of {coverage.total} in your work
+                                    </span>
+                                )}>
+                                <ol className="grid sm:grid-cols-2 gap-x-6 gap-y-1">
+                                    {skills.map((skill, i) => {
+                                        const area = coverage?.areas?.find((a) => a.skill === skill);
+                                        return (
+                                            <motion.li key={skill}
+                                                initial={reduce ? false : { opacity: 0, x: -6 }}
+                                                whileInView={{ opacity: 1, x: 0 }}
+                                                viewport={{ once: true }}
+                                                transition={{ duration: 0.25, delay: i * 0.05 }}
+                                                className="flex items-center gap-3 py-2 border-b border-border/60">
+                                                <span className="font-display font-extrabold text-sm tabular-nums w-6 flex-shrink-0"
+                                                    style={{ color: hex }}>{String(i + 1).padStart(2, "0")}</span>
+                                                <span className="flex-1 min-w-0 text-[15px] text-foreground">{skill}</span>
+                                                {area && (
+                                                    <span title={area.covered ? `In your work: ${area.topics.join(", ")}` : "Nothing of yours names this yet"}
+                                                        data-covered={area.covered ? "1" : "0"}
+                                                        className={`w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0
+                                                            ${area.covered ? "bg-primary" : "border-2 border-border"}`}>
+                                                        {area.covered && <Check className="w-3 h-3 text-white" strokeWidth={3.5} />}
                                                     </span>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
+                                                )}
+                                            </motion.li>
+                                        );
+                                    })}
+                                </ol>
+                                {coverage?.total > 0 && (
+                                    <p className="text-[12px] text-muted-foreground mt-3 leading-relaxed">
+                                        Ticked off your own decks and quizzes by name — an area is ticked only if
+                                        something of yours names it.
+                                    </p>
                                 )}
+                            </Section>
+                        )}
 
-                                {/* Career Pathways */}
-                                {subject.career_pathways && subject.career_pathways.length > 0 && (
-                                    <div className="card-soft bg-chart-4/5 border-chart-4/20">
-                                        <div className="p-6 pb-3">
-                                            <h3 className="font-display font-extrabold flex items-center gap-2 text-lg text-chart-4">
-                                                <Users className="w-5 h-5" />
-                                                Career Pathways
-                                            </h3>
-                                        </div>
-                                        <div className="p-6 pt-0">
-                                            <div className="space-y-2">
-                                                {subject.career_pathways.map((career, index) => (
-                                                    <div key={index} className="flex items-center gap-2">
-                                                        <div className="w-2 h-2 bg-chart-4 rounded-full" />
-                                                        <span className="text-sm text-foreground">{career || "Career path not specified"}</span>
+                        {/* ── HOW STUDENTS DO WELL ────────────────────────── */}
+                        {tips.length > 0 && (
+                            <Section title="How students do well in it" index={4}>
+                                <ul className="space-y-3">
+                                    {tips.map((tip) => (
+                                        <li key={tip} className="pl-4 border-l-2 text-[15px] text-foreground leading-relaxed"
+                                            style={{ borderColor: alpha(hex, 0.55) }}>{tip}</li>
+                                    ))}
+                                </ul>
+                            </Section>
+                        )}
+
+                        {/* ── ALTERNATIVES ────────────────────────────────── */}
+                        {alts.length > 0 && (
+                            <Section title={`Other ${area} subjects`} index={5}>
+                                <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x" data-alternatives>
+                                    {alts.map((a) => {
+                                        const tone = colorFor(a.subject.name);
+                                        return (
+                                            <div key={a.subject.id}
+                                                className={`relative snap-start flex-shrink-0 w-[13.5rem] rounded-2xl border-2 overflow-hidden
+                                                    ${a.current ? "border-foreground/25 bg-secondary/40" : "border-border bg-surface on-table"}`}>
+                                                <span aria-hidden="true" className="absolute inset-y-0 left-0 w-1" style={{ background: tone }} />
+                                                <button type="button" disabled={a.current} data-alt={a.subject.id}
+                                                    onClick={() => open(a.subject)}
+                                                    className="w-full text-left pl-4 pr-3 pt-3 pb-2 disabled:cursor-default">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <span className="font-display font-extrabold text-sm text-foreground leading-tight">
+                                                            {a.subject.name}
+                                                        </span>
+                                                        <ScalingMark subject={a.subject} size="sm" showLabel={false} />
                                                     </div>
-                                                ))}
+                                                    <span className="block text-[11px] text-muted-foreground mt-1 tabular-nums">
+                                                        {a.exam != null ? `${a.exam}% in the exams` : "No assessment data"}
+                                                    </span>
+                                                </button>
+                                                <div className="pl-4 pr-3 pb-3">
+                                                    {a.current ? (
+                                                        <span className="text-[11px] font-bold text-muted-foreground">Viewing</span>
+                                                    ) : (
+                                                        <button type="button" onClick={() => setComparing(a.subject)}
+                                                            className="text-[11px] font-bold text-muted-foreground hover:text-foreground
+                                                                underline underline-offset-4" data-alt-compare={a.subject.id}>
+                                                            Compare side by side
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="mt-4 p-3 bg-surface/70 rounded-lg">
-                                                <p className="text-xs text-muted-foreground">
- These are just some of the many career opportunities available. Talk to a career counselor for personalized advice!
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                                        );
+                                    })}
+                                </div>
+                            </Section>
+                        )}
+
+                        {/* ── WHERE IT LEADS ──────────────────────────────── */}
+                        {careers.length > 0 && (
+                            <Section title="Where it leads" index={6}>
+                                <ul className="flex flex-wrap gap-2">
+                                    {careers.map((c) => (
+                                        <li key={c} className="px-3 py-1.5 rounded-full text-[13px] font-bold text-foreground"
+                                            style={{ background: alpha(hex, 0.12) }}>{c}</li>
+                                    ))}
+                                </ul>
+                                <p className="text-[12px] text-muted-foreground mt-3">
+                                    A few of the places it leads, not a list of requirements — a careers adviser
+                                    can say what a particular course asks for.
+                                </p>
+                            </Section>
+                        )}
+
+                        <p className="text-[12px] text-muted-foreground leading-relaxed border-t border-border pt-4">
+                            Scaling reflects the strength of the students who take a subject, not how hard it is to
+                            do well in. The subject you can do well in is usually the better choice.
+                        </p>
+                    </motion.div>
+                </AnimatePresence>
             </div>
+
+            <SubjectCompare open={!!comparing} a={subject} b={comparing} catalogue={catalogue}
+                hexA={hex} onChangeB={setComparing} onClose={() => setComparing(null)}
+                onOpen={(s) => { setComparing(null); open(s); }} />
         </div>
     );
 }
