@@ -54,6 +54,7 @@ import {
 import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceSpot from "@/components/ace/AceSpot";
+import { signalBrain } from "@/lib/brainSignal";
 
 const TYPE_ICON = {
     idea: Lightbulb, cause: Zap, effect: Target, step: ListOrdered,
@@ -403,6 +404,8 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
         // goes through this one call, so a minute cannot be marked worked
         // without something actually changing.
         noteEdit(session.current);
+        // Something was built from memory: the science card pulses it.
+        signalBrain("mind_map", "build");
     }, []);
 
     // ── Saving ──────────────────────────────────────────────────────────────

@@ -4514,6 +4514,90 @@ has a look somebody likes, change the fault and leave the look.
 And one word: the no-subjects screen said "Five evidence-based techniques" on a
 page with six.
 
+## The science card: three beats, footnoted, and live
+
+**"I love the brain and the aesthetics of it, but the whole thing needs to be
+far more aesthetic, less wordy, more high utility — not a slab of text but an
+intuitive, entwined neuroscience part of the study."** The rail beside each
+technique was five stacked boxes: a pale brain, a paragraph, a five-row region
+list, a chart with a paragraph under it, two more boxes of prose, and a source
+list nothing pointed at. All of it true, and the brain was the only part
+anybody looked at.
+
+`NeuroPanel` is ONE card in three beats, each one line: **the brain** (on the
+landing page's dark glow plate, in both themes, because additive light only
+reads on dark), **the evidence** (the headline, then the chart), and **the
+catch**. The long versions are not deleted. Each one sits behind a tap: a
+region chip, a footnote, or "Worth knowing". This card exists to earn trust,
+and the long version is where the trust is. `neuroPanel.js` is the model, and
+the copy lives in `neuro.js` beside what it summarises (`brief`, `catch`, a
+`gist` per region).
+
+**EVERY LINE POINTS AT A PAPER.** `cites` maps each beat to numbers in that
+technique's own `sources`, and tapping a number opens the paper and what it
+found under the line it backs. `citesFor` drops a number that resolves to
+nothing, and the test requires every source to be cited by something, so a
+reference list can no longer hold a paper the card never uses.
+
+**WOVEN INTO THE SESSION.** The card reacts to the work while it happens. It
+never measures anything: it shows, at the moment of doing it, which systems
+the evidence says that work uses.
+
+- **Pomodoro.** `timerStateChanged` now carries the block's `total`; without
+  it there was nothing honest to place. A running block sits on the attention
+  curve as "You · 12 min". Minutes are FLOORED, and a block past the chart's
+  fifty minutes sits at its end as "50+". A break lights the daydreaming
+  network and draws no marker.
+- **Everything else** fires `signalBrain(technique)` (window event
+  `acedit:brain`) at the moment of work:
+  - rating a flashcard;
+  - moving past an Active Recall answer you actually WROTE (a blank one pulses
+    nothing);
+  - finishing a word while blurting;
+  - picking or self-marking a mock exam answer;
+  - any edit to a mind map.
+
+  The named regions flare and a ring ripples out. The line reads e.g.
+  "Recall · Hippocampus + vlPFC", built only from regions that technique's own
+  card already names. Pulses are throttled (`PULSE_GAP_MS`), so a burst of
+  edits is one pulse.
+- **The line's order:** a fresh pulse, then a region the student picked (they
+  asked, so the timer does not talk over it), then the timer, then the brief.
+  Each line carries the beat whose paper backs it. The minute line cites the
+  ATTENTION study, not the network paper.
+
+**THE BRAIN IS DRIVEN THROUGH REFS.** `focus`, `pulse` and `labelId` are read
+by the draw loop through refs, so a tap, or a timer ticking every second,
+never tears the canvas loop down. The region's name tag follows it as the
+brain turns by writing its transform each frame; through React state that
+would be sixty renders a second. Under reduced motion a pulse is not drawn,
+and the chart is simply placed.
+
+**THE CHART'S ANIMATION IS THE FINDING.** Bars grow GROUP BY GROUP, so on a
+crossover chart the day-one result lands before the week-later one, and the
+reversal happens in front of the student. A line draws itself by revealing a
+clip, never by tweening `pathLength`. The provenance badge is still required
+on every chart.
+
+**Mind Maps lost its "Moderate utility" badge.** The badge reads as Dunlosky's
+verdict, and concept mapping is not one of Dunlosky's ten techniques; the card
+did not even list his review as a source. A utility badge now needs a Dunlosky
+source behind it, and the test holds that.
+
+`neuroPanel.test.mjs`: 14 checks, and all 38 injections bite against a green
+baseline. Two were silent on the first pass, and both were the guard's fault:
+- every real pulse config is already well formed, so the region filter needed
+  a fixture table to be tested at all;
+- the exam signals from two places, and a scan that finds one good call passes
+  with the other naming nobody.
+
+The first run also caught a real bug: `timeLeft: null` placed a block at its
+end, because `Number(null)` is 0 — the same trap, in one more module.
+
+`hookDeps.test.mjs` reported a false positive on the way: a local
+`const pulse` inside the draw loop shares its name with the new prop. It was
+renamed rather than argued with, because shadowing a prop is confusing anyway.
+
 ## Study intent
 
 The Dashboard modal asks what today is for (homework / cramming / free study)
@@ -8713,6 +8797,11 @@ student looking free in the nav, the planner and the companion.
   three-hop relay with two timer races and nothing on the far end, so "review
   this deck" never opened one. Draw the bar with
   `scripts/_floorProbe.jsx?v=reach`
+- `src/lib/neuroPanel.js` + `neuroPanel.test.mjs`, `src/lib/brainSignal.js`,
+  `src/components/study/NeuroPanel.jsx`, `BrainModel.jsx`, `EvidenceChart.jsx`:
+  the science card beside every technique, as three footnoted beats that react
+  to the session (the timer's minute on the curve, a pulse when a card is
+  rated or an answer written)
 - `src/components/ai_tools/Console.jsx` + `src/index.css` `.console` /
   `.dark .console` + `src/lib/consoleInk.test.mjs` — the app's SECOND room: ~12
   scoped tokens, a fixed-gauge lattice, and the five silent ways to break a

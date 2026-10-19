@@ -20,6 +20,7 @@ import { normaliseStimulus } from "@/lib/quizSchema";
 // had not been marked. See quizScore.js.
 import { markedPct } from "@/lib/quizScore";
 import SourcePanel from "@/components/quizzes/SourcePanel";
+import { signalBrain } from "@/lib/brainSignal";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
   ChevronLeft, ChevronRight, Play, Trophy, RefreshCw,
@@ -413,6 +414,7 @@ Return exactly ${openQs.length} results, in order.`,
 
   const handleSelectMCQ = (qId, idx) => {
     setAnswers((prev) => ({ ...prev, [qId]: { ...prev[qId], selectedIndex: idx } }));
+    signalBrain("exam", "answer");
     // Auto-advance after short delay for MCQ
     setTimeout(() => {
       setCurrentIndex((i) => Math.min(i + 1, examQuestions.length - 1));
@@ -439,6 +441,7 @@ Return exactly ${openQs.length} results, in order.`,
 
   const handleSelfMark = (qId, correct) => {
     setAnswers((prev) => ({ ...prev, [qId]: { ...prev[qId], selfMark: correct } }));
+    signalBrain("exam", "answer");
     feedWeakSpot(examQuestions.find((q) => q.id === qId), correct);
   };
 

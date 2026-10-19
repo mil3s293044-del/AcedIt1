@@ -17,6 +17,17 @@
  *     scale with it, so a month of nothing but Pomodoro reads as a bright
  *     front and a dark middle at a glance.
  *
+ * Three things the science card drives, all through refs so the animation
+ * loop is never torn down and rebuilt on a tap:
+ *   • `focus` — region ids to isolate; every other region drops to a glimmer.
+ *   • `pulse` — `{ ids, at }`: those regions flare and a ring ripples out, for
+ *     about a second, when the student does the work they are about.
+ *   • `labelId` — a name tag that follows that region as the brain turns,
+ *     moved by writing its transform directly each frame. Through React state
+ *     it would re-render the card sixty times a second.
+ * Under reduced motion none of them animate: a pulse is not drawn at all,
+ * and the label sits still because the brain does.
+ *
  * The point cloud is atmosphere. The INFORMATION lives in the HTML beside it,
  * which is where a screen reader, a search engine and anyone with
  * prefers-reduced-motion will find it. If the canvas never painted, nothing
@@ -48,9 +59,19 @@ export default function BrainModel({
     height = 220,
     glow = false,          // additive bloom + travelling pulses
     plate = glow,          // dark backing panel — see the note below
+    focus = null,          // region ids to isolate, or null for all lit
+    pulse = null,          // { ids, at } — a flare when the work happens
+    labelId = null,        // a region whose name tag follows it as it turns
 }) {
     const canvasRef = useRef(null);
     const wrapRef = useRef(null);
+    const labelRef = useRef(null);
+    const focusRef = useRef(focus);
+    const pulseRef = useRef(pulse);
+    const labelIdRef = useRef(labelId);
+    useEffect(() => { focusRef.current = focus; }, [focus]);
+    useEffect(() => { pulseRef.current = pulse; }, [pulse]);
+    useEffect(() => { labelIdRef.current = labelId; }, [labelId]);
     const yaw = useRef(0.6);
     const pitch = useRef(-0.12);
     const drag = useRef(null);
@@ -78,7 +99,8 @@ export default function BrainModel({
             const v = css.getPropertyValue(TONE_VAR[t] || "--map").trim();
             return v || "175 80% 40%";
         };
-        const hot = regions.map(r => ({
+        const base0 = regions.map(r => ({
+            id: r.id,
             xyz: REGIONS[r.id]?.xyz || [0, 0, 0],
             hsl: tone(r.tone),
             // No activation supplied → fully lit. That's the Study-page case,
@@ -92,11 +114,25 @@ export default function BrainModel({
             ? "213 30% 80%"
             : (css.getPropertyValue("--muted-foreground").trim() || "220 9% 46%");
 
-        // Pulses travel between the two busiest regions — the eye reads that as
-        // a system doing something rather than a diagram sitting still.
-        const ranked = [...hot].sort((x, y) => y.a - x.a).slice(0, 3);
-
         const draw = () => {
+            // ── What the card is asking for this frame. A region outside the
+            // focus drops to a glimmer rather than vanishing, so the student
+            // still sees where it sits; a pulsed region flares and decays.
+            const now = Date.now();
+            const pz = pulseRef.current;
+            const age = pz && Number.isFinite(pz.at) ? now - pz.at : Infinity;
+            const pk = reduced || age > 1400 ? 0 : Math.exp(-age / 450);
+            const pulsed = pk > 0 ? new Set(pz.ids || []) : null;
+            const fz = focusRef.current;
+            const focused = Array.isArray(fz) && fz.length ? new Set(fz) : null;
+            const hot = base0.map(r => ({
+                ...r,
+                a: r.a * (focused && !focused.has(r.id) ? 0.14 : 1) * (pulsed?.has(r.id) ? 1 + 0.9 * pk : 1),
+            }));
+            // Pulses travel between the busiest regions — the eye reads that
+            // as a system doing something rather than a diagram sitting still.
+            const ranked = [...hot].sort((x, y) => y.a - x.a).slice(0, 3);
+
             const rect = wrap.getBoundingClientRect();
             const dpr = Math.min(window.devicePixelRatio || 1, 2);
             const w = Math.max(1, rect.width), h = Math.max(1, height);
@@ -127,17 +163,17 @@ export default function BrainModel({
                 for (const r of hot) {
                     const q = project(r.xyz);
                     if (q.z < -0.55) continue;              // behind the brain
-                    const pulse = reduced ? 1 : 0.82 + 0.18 * Math.sin(t * 1.6 + r.xyz[0] * 5);
+                    const throb = reduced ? 1 : 0.82 + 0.18 * Math.sin(t * 1.6 + r.xyz[0] * 5);
                     // Scaled off the drawing size, not fixed pixels — a fixed
                     // 70px halo is a tasteful glow at 430px wide and a single
                     // wash of colour on a 354px phone.
-                    const rad = S * (0.16 + 0.26 * r.a) * q.persp * pulse;
+                    const rad = S * (0.16 + 0.26 * r.a) * q.persp * throb;
                     const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, rad);
                     // Weighted toward the centre so it reads as a source with a
                     // falloff. A linear ramp is what made this look like fog.
-                    g.addColorStop(0,    `hsl(${r.hsl} / ${(0.42 * r.a).toFixed(3)})`);
-                    g.addColorStop(0.28, `hsl(${r.hsl} / ${(0.16 * r.a).toFixed(3)})`);
-                    g.addColorStop(0.62, `hsl(${r.hsl} / ${(0.04 * r.a).toFixed(3)})`);
+                    g.addColorStop(0,    `hsl(${r.hsl} / ${Math.min(1, 0.42 * r.a).toFixed(3)})`);
+                    g.addColorStop(0.28, `hsl(${r.hsl} / ${Math.min(1, 0.16 * r.a).toFixed(3)})`);
+                    g.addColorStop(0.62, `hsl(${r.hsl} / ${Math.min(1, 0.04 * r.a).toFixed(3)})`);
                     g.addColorStop(1,    `hsl(${r.hsl} / 0)`);
                     ctx.fillStyle = g;
                     ctx.beginPath();
@@ -159,8 +195,8 @@ export default function BrainModel({
                 const depth = (p.z + 1.2) / 2.4;               // 0 back → 1 front
                 if (best) {
                     const falloff = 1 - bestD / HOT_R;
-                    const pulse = reduced ? 0.85 : 0.72 + 0.28 * Math.sin(t * 2 + bestD * 6);
-                    const a = (0.22 + 0.78 * falloff * falloff) * pulse * (0.45 + 0.55 * depth) * best.a;
+                    const throb = reduced ? 0.85 : 0.72 + 0.28 * Math.sin(t * 2 + bestD * 6);
+                    const a = Math.min(1, (0.22 + 0.78 * falloff * falloff) * throb * (0.45 + 0.55 * depth) * best.a);
                     ctx.fillStyle = `hsl(${best.hsl} / ${a.toFixed(3)})`;
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, (1.0 + 2.4 * falloff * (0.5 + 0.5 * best.a)) * p.persp, 0, Math.PI * 2);
@@ -186,11 +222,11 @@ export default function BrainModel({
                 for (const r of hot) {
                     const q = project(r.xyz);
                     if (q.z < -0.3) continue;
-                    const pulse = reduced ? 1 : 0.86 + 0.14 * Math.sin(t * 2.1 + r.xyz[2] * 4);
-                    const rad = S * 0.028 * (0.55 + 0.45 * r.a) * q.persp * pulse;
+                    const throb = reduced ? 1 : 0.86 + 0.14 * Math.sin(t * 2.1 + r.xyz[2] * 4);
+                    const rad = S * 0.028 * (0.55 + 0.45 * r.a) * q.persp * throb;
                     const g = ctx.createRadialGradient(q.x, q.y, 0, q.x, q.y, rad * 3);
-                    g.addColorStop(0,   `hsl(${r.hsl} / ${(0.95 * r.a).toFixed(3)})`);
-                    g.addColorStop(0.4, `hsl(${r.hsl} / ${(0.35 * r.a).toFixed(3)})`);
+                    g.addColorStop(0,   `hsl(${r.hsl} / ${Math.min(1, 0.95 * r.a).toFixed(3)})`);
+                    g.addColorStop(0.4, `hsl(${r.hsl} / ${Math.min(1, 0.35 * r.a).toFixed(3)})`);
                     g.addColorStop(1,   `hsl(${r.hsl} / 0)`);
                     ctx.fillStyle = g;
                     ctx.beginPath();
@@ -214,9 +250,9 @@ export default function BrainModel({
                     const px = (1 - k) * (1 - k) * a.x + 2 * (1 - k) * k * mx + k * k * bq.x;
                     const py = (1 - k) * (1 - k) * a.y + 2 * (1 - k) * k * my + k * k * bq.y;
                     const fade = Math.sin(k * Math.PI);
-                    const rad = 3.4 * fade * (0.5 + 0.5 * from.a);
+                    const rad = 3.4 * fade * (0.5 + 0.5 * Math.min(1.6, from.a));
                     const g = ctx.createRadialGradient(px, py, 0, px, py, rad * 3.5);
-                    g.addColorStop(0, `hsl(${from.hsl} / ${(0.85 * fade).toFixed(3)})`);
+                    g.addColorStop(0, `hsl(${from.hsl} / ${(0.85 * fade * Math.min(1, from.a)).toFixed(3)})`);
                     g.addColorStop(1, `hsl(${from.hsl} / 0)`);
                     ctx.fillStyle = g;
                     ctx.beginPath();
@@ -224,6 +260,37 @@ export default function BrainModel({
                     ctx.fill();
                 }
                 ctx.globalCompositeOperation = "source-over";
+            }
+
+            // ── A ring rippling out of each pulsed region: the "that was you"
+            // moment. Drawn in the region's own colour, gone in a second.
+            if (pulsed) {
+                for (const r of hot) {
+                    if (!pulsed.has(r.id)) continue;
+                    const q = project(r.xyz);
+                    const rad = S * (0.05 + 0.36 * (1 - pk)) * q.persp;
+                    ctx.strokeStyle = `hsl(${r.hsl} / ${(0.8 * pk).toFixed(3)})`;
+                    ctx.lineWidth = 1.6;
+                    ctx.beginPath();
+                    ctx.arc(q.x, q.y, rad, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+
+            // ── The name tag. A region named once is drawn on both
+            // hemispheres, so it follows whichever copy is nearer the viewer.
+            const tag = labelRef.current;
+            if (tag) {
+                const reg = labelIdRef.current ? REGIONS[labelIdRef.current] : null;
+                if (!reg) {
+                    tag.style.opacity = "0";
+                } else {
+                    const [hx, hy, hz] = reg.xyz;
+                    const a1 = project([hx, hy, hz]), a2 = project([-hx, hy, hz]);
+                    const q = a1.z >= a2.z ? a1 : a2;
+                    tag.style.transform = `translate(${q.x.toFixed(1)}px, ${q.y.toFixed(1)}px)`;
+                    tag.style.opacity = q.z < -0.4 ? "0.45" : "1";
+                }
             }
 
             if (!reduced && !drag.current) yaw.current += 0.0035;
@@ -274,6 +341,17 @@ export default function BrainModel({
                 style={{ height }}
                 role="img"
                 aria-label={`Brain diagram with ${regions.length} region${regions.length === 1 ? "" : "s"} highlighted: ${named}`} />
+            {/* Positioned by the draw loop, never by React. */}
+            <span ref={labelRef} aria-hidden="true" data-brain-tag
+                className="absolute left-0 top-0 pointer-events-none transition-opacity duration-200"
+                style={{ opacity: 0 }}>
+                <span className={`block -translate-x-1/2 -translate-y-[calc(100%+10px)] whitespace-nowrap rounded-md
+                    px-1.5 py-0.5 text-[10px] font-bold ${plate
+                        ? "bg-white/90 text-[#0A121F]"
+                        : "bg-foreground text-background"}`}>
+                    {labelId ? REGIONS[labelId]?.short : ""}
+                </span>
+            </span>
             <span className={`absolute bottom-1.5 right-2.5 text-[10px] pointer-events-none ${
                 plate ? "text-white/60" : "text-muted-foreground"}`}>
                 drag to rotate
