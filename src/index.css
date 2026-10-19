@@ -536,6 +536,96 @@
   }
 
   /**
+   * THE CARD BACK, by theme. CardBack publishes its deck colour at a few
+   * strengths (`--back-*`) and these rules pick which one each part reads.
+   *
+   * On light the back was always fine: a 16% tint and a half-strength weave
+   * read clearly on white stock. On dark the same values drew a navy card a
+   * few points off a navy page with a faint rim, and the medallion was a dark
+   * disc on a dark card — the dashboard's face-down card read as blank. So on
+   * dark the ground, weave and rim take twice the colour, the medallion is
+   * LIT from its own centre, and the elevation is a glow in the deck's colour:
+   * a black shadow on a near-black page is no shadow at all, the lesson the
+   * floating timer already records. A card lying under another (`flat`) keeps
+   * its lifted edge and drops the glow, or a pile glows as one smear.
+   *
+   * A back inside `.theme-locked-light` is on white stock in both themes and
+   * keeps the light values — a dark rule reaching into it would draw a dark
+   * back on a card the onboarding table deliberately printed white.
+   */
+  /* THE FLOOR'S TICKER. A CSS animation rather than a framer loop, so a
+     running track costs no React renders; the list is printed twice and the
+     track moves half its length, which is the seam-free loop. It pauses under
+     a pointer so a name can be read, and stands still under reduced motion. */
+  @keyframes floor-ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  .floor-ticker-run {
+    animation-name: floor-ticker;
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+  .floor-ticker:hover .floor-ticker-run { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) {
+    .floor-ticker-run { animation: none; }
+  }
+
+  /* A price that just moved because somebody else called it. Played on a
+     CHANGE only (PriceBar keys it), never on arrival. */
+  @keyframes floor-price-pulse {
+    0% { opacity: 0.9; transform: scaleY(1.9); }
+    100% { opacity: 0; transform: scaleY(1); }
+  }
+  .floor-price-pulse { animation: floor-price-pulse 0.9s ease-out forwards; }
+  @media (prefers-reduced-motion: reduce) {
+    .floor-price-pulse { animation: none; opacity: 0; }
+  }
+
+  .card-back {
+    --back-fill: var(--back-soft-l);
+    --back-weave: 0.5;
+    --back-rim: 0.45;
+    --back-medal: hsl(var(--surface));
+  }
+  .dark .card-back {
+    --back-fill: var(--back-soft-d);
+    --back-weave: 0.9;
+    --back-rim: 0.95;
+    --back-medal: var(--back-medal-d);
+    border-color: var(--back-edge-d);
+  }
+  .dark .card-back:not(.card-back-flat) {
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.45),
+      0 14px 30px -14px var(--back-glow),
+      0 0 0 1px rgba(255, 255, 255, 0.04),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+  .dark .card-back .card-back-medal {
+    box-shadow: 0 0 22px -4px var(--back-glow);
+  }
+  .dark .theme-locked-light .card-back,
+  .dark .card-back.theme-locked-light {
+    --back-fill: var(--back-soft-l);
+    --back-weave: 0.5;
+    --back-rim: 0.45;
+    --back-medal: hsl(var(--surface));
+    border-color: hsl(var(--border));
+    box-shadow: none;
+  }
+  /* The light shadow the component's own class gives a lying-on-top back,
+     restated because the reset above outranks that utility. */
+  .dark .theme-locked-light .card-back:not(.card-back-flat),
+  .dark .card-back.theme-locked-light:not(.card-back-flat) {
+    box-shadow: 0 1px 2px rgba(13, 22, 38, 0.10), 0 18px 34px -18px rgba(13, 22, 38, 0.42);
+  }
+  .dark .theme-locked-light .card-back .card-back-medal,
+  .dark .card-back.theme-locked-light .card-back-medal {
+    box-shadow: none;
+  }
+
+  /**
    * THE CARD FACE — a playing card's corner index, sized as a fraction of the
    * card rather than in pixels.
    *

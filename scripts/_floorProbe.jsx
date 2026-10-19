@@ -34,7 +34,7 @@ import { PROBLEMS, GENERATE_PRICE, closingFacts } from "@/lib/firstWin";
 import { LineDialog } from "@/pages/Competitions";
 import CalibrationCurve from "@/components/market/CalibrationCurve";
 import PortfolioPanel from "@/components/market/PortfolioPanel";
-import { readMarket } from "@/lib/market";
+import { readMarket, withGroupPrices } from "@/lib/market";
 import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
@@ -47,6 +47,13 @@ import PriceTick from "@/components/market/PriceTick";
 import { CATALOGUE, grantForTier } from "@/lib/credStore";
 import BottomNav from "@/components/layout/BottomNav";
 import { CardBack } from "@/components/cards/PlayingCard";
+import MovePreview from "@/components/dashboard/MovePreview";
+import SeasonStrip from "@/components/market/SeasonStrip";
+import SlateSection from "@/components/market/SlateSection";
+import SlateResults from "@/components/market/SlateResults";
+import ProbeTicker from "@/components/market/Ticker";
+import { weekKeyUTC, weekLastCall, waveOpensAt } from "@/lib/slate";
+import { Layers as ProbeLayers } from "lucide-react";
 import PrankOverlay, { prankBodyClass } from "@/components/pranks/PrankOverlay";
 import { PrankStageProvider } from "@/lib/PrankStage";
 import ChatWelcome from "@/components/ai_tools/ChatWelcome";
@@ -174,6 +181,76 @@ const quiet = readMarket({
     meta: { target: 5, thin: true },
 }, [], "me@x.com");
 
+/* ── THE SLATE ──────────────────────────────────────────────────────────────
+   Every shape it deals: a card of names with the viewer ON it (so the
+   self-only rows can be judged), a card of brackets the viewer has called,
+   a rivalry, and a Wednesday-drop binary. Dated off THIS week, so last call
+   and the drop clock always count to something real. `?lock=1` moves the
+   clock past last call to draw the locked state. */
+const WK = weekKeyUTC(new Date());
+const LOCK = new URLSearchParams(location.search).get("lock") === "1";
+const LC = new Date(LOCK ? Date.now() - 36e5 : weekLastCall(WK)).toISOString();
+const slateRow = (id, raw, positions = [], flags = {}) => ({
+    ...readMarket({
+        id, kind: "cohort", status: "open", created_date: ago(30),
+        closes_at: new Date(Date.parse(`${WK}T00:00:00Z`) + 7 * 864e5 - 1000).toISOString(),
+        ...raw, meta: { period: WK, slate: true, last_call: LC, ...raw.meta },
+    }, positions, "me@x.com"),
+    about_me: false, own_outcome: false, ...flags,
+});
+const pos = (id, who, p, h, stake = 100) =>
+    ({ id, user_name: who, user_email: `${who.toLowerCase()}@x.com`, p, stake, price_at_entry: 0.3, created_date: ago(h) });
+const LEAGUE = { group: "lt", group_title: "Who tops this week's League?", metric: "league_top", wave: 1, order: 0, self_only: true };
+const slateBoard = withGroupPrices([
+    slateRow("lt-a", { title: "Will Priyanka top this week's League?", prior: 0.33,
+        meta: { ...LEAGUE, outcome: "Priyanka", outcome_order: 0 } },
+        [pos("p1", "Ava", 0.6, 20), pos("p2", "Ben", 0.7, 9)], { about_me: true, own_outcome: false }),
+    slateRow("lt-b", { title: "Will Miles top this week's League?", prior: 0.2,
+        meta: { ...LEAGUE, outcome: "Miles", outcome_order: 1 } },
+        [pos("p3", "Cat", 0.35, 14)], { about_me: true, own_outcome: true }),
+    slateRow("lt-c", { title: "Will Sam top this week's League?", prior: 0.12,
+        meta: { ...LEAGUE, outcome: "Sam", outcome_order: 2 } }, [], { about_me: true, own_outcome: false }),
+    slateRow("lt-f", { title: "Will someone else top this week's League?", prior: 0.35, subject_email: null,
+        meta: { ...LEAGUE, outcome: "Someone else", outcome_order: 3 } },
+        [pos("p4", "Dev", 0.5, 4)], { about_me: true, own_outcome: false }),
+    ...[["Under 40h", 0.24], ["40h–55h", 0.31], ["55h–70h", 0.27], ["70h+", 0.18]].map(([label, prior], i) =>
+        slateRow(`hb-${i}`, { title: `Will the board log ${label} this week?`, prior,
+            resolves_note: "Every active person's countable minutes, added up when the week ends.",
+            meta: { group: "hb", group_title: "How many hours will the board log this week?", metric: "total_bracket",
+                wave: 1, order: 2, outcome: label, outcome_order: i } },
+            i === 1 ? [{ ...pos("me1", "Me", 0.55, 8, 50), user_email: "me@x.com" }, pos("p5", "Eli", 0.4, 3)] : [])),
+    { ...versus, meta: { ...versus.meta, period: WK, slate: true, wave: 1, order: 5, last_call: LC },
+        about_me: false, own_outcome: false },
+    slateRow("pace", { title: "Is the board on pace to out-study last week?", prior: 0.61,
+        resolves_note: "Every active person's countable minutes against last week's 52h, when the week ends.",
+        meta: { metric: "beat_last_week", wave: 2, order: 0 } }, [pos("p6", "Ava", 0.7, 2)]),
+]);
+const slateSeason = { number: 11, week: 2, weeks: 4, points: 96, calls: 23, last: { division: "analyst" } };
+const slateResults = {
+    week: "2026-10-12", pending: false, entrants: 14,
+    cards: [
+        { id: "a", title: "Who tops this week's League?", answer: "Priyanka", void: false, calls: [{ pick: "Priyanka", points: 18 }], points: 18 },
+        { id: "b", title: "How many hours will the board log this week?", answer: "55h–70h", void: false, calls: [{ pick: "40h–55h", points: -6 }], points: -6 },
+        { id: "c", title: "Who logs more hours this week — Priyanka or Sam?", answer: "Sam", void: false, calls: [{ pick: "Sam", points: 11 }], points: 11 },
+        { id: "d", title: "Will 4+ of the board study 5+ days this week?", answer: "Yes", void: false, calls: [], points: 0 },
+        { id: "e", title: "Which subject gets the most study this week?", answer: null, void: true, calls: [], points: 0 },
+        { id: "f", title: "Is the board on pace to out-study last week?", answer: "No", void: false, calls: [{ pick: "No", points: 7 }], points: 7 },
+    ],
+    podium: [
+        { place: 1, name: "Priyanka", points: 64, calls: 9, is_me: false },
+        { place: 2, name: "Me", points: 30, calls: 6, is_me: true },
+        { place: 3, name: "Ben", points: 22, calls: 8, is_me: false },
+    ],
+    me: { points: 30, calls: 6, ahead: 85 },
+};
+const tapeRows = [
+    { id: "t1", who: "Ava", side: "yes", sideWord: "yes", subject: "Will Priyanka top this week's League?", when: "2m ago" },
+    { id: "t2", who: "Ben", side: "no", sideWord: "Sam", subject: "Who logs more hours this week — Priyanka or Sam?", when: "9m ago" },
+    { id: "t3", who: "Cat", side: "yes", sideWord: "yes", subject: "Will the board log 40h–55h this week?", when: "21m ago" },
+    { id: "t4", who: "Dev", side: "no", sideWord: "no", subject: "Is the board on pace to out-study last week?", when: "1h ago" },
+    { id: "t5", who: "Eli", side: "yes", sideWord: "yes", subject: "Will Ava study 5+ days this week?", when: "2h ago" },
+];
+
 const views = {
     // ── THE TOP BAR, which is on every screen and was five filled chips ──
     // Drawable at all only because TopNav now TAKES the profile rather than
@@ -206,6 +283,21 @@ const views = {
                 </div>
             ))}
         </div>
+    ),
+    slate: () => (
+        <Room>
+            <div className="max-w-6xl mx-auto space-y-4">
+                <SeasonStrip season={slateSeason} credits={940} committed={250} />
+                <ProbeTicker rows={tapeRows} />
+                <SlateSection board={slateBoard} balance={940} busy={false} onTake={async () => {}}
+                    lastCall={LC} nextDrop={new Date(waveOpensAt(WK, 2)).toISOString()} />
+            </div>
+        </Room>
+    ),
+    slateresults: () => (
+        <Room>
+            <SlateResults results={slateResults} season={slateSeason} onClose={() => {}} />
+        </Room>
     ),
     deal: () => <Room><AceDeal /></Room>,
     take: () => (
@@ -344,6 +436,42 @@ const views = {
         <div className="min-h-screen bg-background p-8">
             <MarkEntry assessment={{ id: "1", subject_name: "Chemistry", title: "Unit 3 SAC 2", out_of: 60 }}
                 busy={false} onSave={() => {}} onSkip={() => {}} onClose={() => {}} />
+        </div>
+    ),
+
+    /* The default card back in every deck colour, on the page ground and lying
+       under another back, beside the dashboard's face-down card — the one the
+       dark-mode complaint was about ("so it doesn't look blank"). A skinned
+       back and one inside theme-locked-light are drawn to prove neither
+       changed. */
+    darkbacks: () => (
+        <div className="min-h-screen bg-background p-8 space-y-6">
+            <div className="flex flex-wrap gap-5 items-end">
+                {["#58CC02", "#3B82F6", "#FF4B4B", "#F59E0B", "#8B5CF6", undefined].map((t, i) => (
+                    <div key={i} style={{ width: 110 }}>
+                        <CardBack tone={t} skin={null} className="w-full aspect-[2.5/3.5]" />
+                    </div>
+                ))}
+                <div className="relative" style={{ width: 120, height: 160 }}>
+                    <div className="absolute" style={{ left: 0, top: 8, width: 100, transform: "rotate(-7deg)" }}>
+                        <CardBack tone="#3B82F6" skin={null} flat className="w-full aspect-[2.5/3.5]" />
+                    </div>
+                    <div className="absolute" style={{ left: 12, top: 0, width: 100 }}>
+                        <CardBack tone="#3B82F6" skin={null} className="w-full aspect-[2.5/3.5]" />
+                    </div>
+                </div>
+                <div className="theme-locked-light" style={{ width: 110 }}>
+                    <CardBack tone="#3B82F6" skin={null} className="w-full aspect-[2.5/3.5]" />
+                </div>
+                <div style={{ width: 110 }}>
+                    <CardBack skin={BACK_SKINS["back-felt"]} className="w-full aspect-[2.5/3.5]" />
+                </div>
+            </div>
+            <div className="card-soft on-table p-6 max-w-xl">
+                <MovePreview move={{ label: "Review your Chemistry cards", icon: ProbeLayers }}
+                    card={{ rank: "Q", suit: "diamond", tone: "#3B82F6" }}
+                    theme={{}} preview={null} />
+            </div>
         </div>
     ),
 

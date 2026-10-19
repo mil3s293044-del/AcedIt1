@@ -340,22 +340,36 @@ export default function AceDeal({ label = "Opening the floor…" }) {
         <div className="max-w-6xl mx-auto">
 
             {/* ── The strip: the real header, with the wait in the headline ── */}
-            <header className="flex flex-wrap items-end justify-between gap-4 mb-5">
-                <div>
-                    <p className="text-[10px] font-black uppercase tracking-widest"
-                        style={{ color: DIM }}>The floor</p>
-                    {/* Exactly where "You're holding 3 positions" lands. */}
-                    <h1 className="font-display font-black text-2xl sm:text-3xl leading-tight"
-                        style={{ color: "var(--floor-muted-2)" }}>{label}</h1>
-                </div>
-                <div className="flex items-end gap-5">
-                    <div className="space-y-1.5">
-                        <p className="text-[10px] font-black uppercase tracking-widest"
-                            style={{ color: DIM }}>Cred</p>
-                        <Bone w="76px" h={22} />
+            <header className="mb-4">
+                <p className="text-[10px] font-black uppercase tracking-widest"
+                    style={{ color: DIM }}>The floor</p>
+                {/* Exactly where "You're holding 3 positions" lands. */}
+                <h1 className="font-display font-black text-2xl sm:text-3xl leading-tight"
+                    style={{ color: "var(--floor-muted-2)" }}>{label}</h1>
+            </header>
+
+            {/* ── The season strip, at its real size: the division card, the
+                bar to the next one, and Credits on the right. The page leads
+                with skill now, so the skeleton does too. */}
+            <div className="mb-3 rounded-2xl border-2 p-3 sm:p-4 flex flex-wrap items-center gap-x-5 gap-y-3"
+                style={{ borderColor: "var(--floor-edge)", background: "var(--floor-card)" }} aria-hidden>
+                <div className="flex items-center gap-3 flex-1 basis-[16rem] min-w-0">
+                    <div className="rounded-[0.7rem] flex-shrink-0" style={{ width: 52, height: 73, background: BONE }} />
+                    <div className="flex-1 space-y-2 min-w-0">
+                        <Bone w="40%" h={10} />
+                        <Bone w="30%" h={20} />
+                        <Bone w="100%" h={6} />
                     </div>
                 </div>
-            </header>
+                <div className="space-y-1.5">
+                    <p className="text-[10px] font-black uppercase tracking-widest"
+                        style={{ color: DIM }}>Credits</p>
+                    <Bone w="76px" h={22} />
+                </div>
+            </div>
+            {/* The ticker's lane, so the board does not drop when it arrives. */}
+            <div className="mb-5 rounded-xl border-2 h-[38px]" aria-hidden
+                style={{ borderColor: "var(--floor-edge)", background: "var(--floor-card)" }} />
 
             {/* The three tabs, at their real width. */}
             <div className="flex items-center gap-1.5 mb-4" aria-hidden>

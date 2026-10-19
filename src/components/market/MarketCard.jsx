@@ -15,27 +15,35 @@
  * retention engine rather than a leaderboard. It gets its own ink and its own
  * line, and it sorts to the top of the board (see `sortBoard`).
  *
- * ─── THE PRICE IS PRINTED AS A RETURN AND DRAWN AS A LINE ───────────────────
- * A card that says "62¢" has told a sixteen-year-old nothing. "Yes pays 1.14×"
- * is a number about their own cred, and the sparkline under it is why the card
- * is worth opening: a market that has swung twenty points this week is an
- * argument, and a flat one is a question nobody has bothered with. Neither is
- * visible in a single number.
+ * ─── THE PRICE IS PRINTED AS A PERCENTAGE AND DRAWN AS A LINE ──────────────
+ * The sparkline is why the card is worth opening: a market that has swung
+ * twenty points this week is an argument, and a flat one is a question nobody
+ * has bothered with. Neither is visible in a single number.
  *
- * These figures are the CEILING for each side — what the strongest call the
- * slider allows returns if it lands — so every one of them is reachable by
- * dragging to the end. They are small, because a proper scoring rule bounded
- * by the stake cannot pay more than double; market.js explains why that is
- * structural. Printing 7.24× here, as this card briefly did, was printing a
- * figure with no relationship to money on a screen made of money.
+ * There are no odds on this card. It carried a return multiple per side and a
+ * pool figure ("300 in") — honest numbers, and together they were a betting
+ * slip. What a call is worth in credits is said once, in the commit sheet,
+ * against a commitment the student has actually chosen.
+ *
+ * ─── LAST CALL, THEN LOCKED ─────────────────────────────────────────────────
+ * The clock counts to LAST CALL, not to the close: a weekly question stops
+ * taking calls on Friday evening, before the boards give its answer away (see
+ * slate.js). After that the card stays up, locked, so the room can watch it
+ * resolve — a question that vanished at last call would look like it had been
+ * withdrawn.
+ *
+ * ─── THE COMMIT LANDS ON THE CARD ───────────────────────────────────────────
+ * The sheet shows where the room will move before the press, as a tick on this
+ * card's bar. After it, the bar moves there (PriceTick) and the call STAMPS
+ * onto the card — once, the moment it lands, never on a reload.
  *
  * ─── The crowd is drawn as PEOPLE, not just a price ─────────────────────────
  * "8 backing yes · 3 no" with names on hover. A market where you cannot see
  * who is on which side is a private bet, which is exactly what the old
  * wagering layer was and why nothing about it felt social.
  */
-import React, { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import * as Icons from "lucide-react";
 import { Clock, Lock } from "lucide-react";
 import PriceBar from "./PriceBar";
@@ -43,14 +51,15 @@ import PriceChart from "./PriceChart";
 import TakeSide from "./TakeSide";
 import { createPageUrl } from "@/utils";
 import {
-    KINDS, sideOf, YES, priceLabel, payoutFor, returns, priceHistory, sideLabels,
+    KINDS, sideOf, YES, priceLabel, payoutFor, priceHistory, sideLabels,
 } from "@/lib/market";
+import { lastCallOf, isLocked } from "@/lib/slate";
 
-function untilLabel(iso) {
-    if (!iso) return null;
-    const t = new Date(iso).getTime();
-    if (!Number.isFinite(t)) return null;                 // never the epoch
-    const ms = t - Date.now();
+/** "2d 4h" to a time, or null. Never the epoch: a missing time is no clock. */
+export function untilLabel(t) {
+    const ms0 = typeof t === "number" ? t : t ? new Date(t).getTime() : NaN;
+    if (!Number.isFinite(ms0)) return null;
+    const ms = ms0 - Date.now();
     if (ms <= 0) return "closed";
     const mins = Math.floor(ms / 60000);
     const d = Math.floor(mins / 1440), h = Math.floor((mins % 1440) / 60);
@@ -61,19 +70,74 @@ function untilLabel(iso) {
 
 const firstName = (n) => String(n || "").trim().split(/\s+/)[0] || "Someone";
 
+/**
+ * The card's clock: last call while calls are open, "locked" after it. Shared
+ * with EventCard so the two shapes of card can never count to different times.
+ */
+export function useCallClock(market) {
+    const locked = isLocked(market);
+    const lc = lastCallOf(market);
+    const left = locked ? null : untilLabel(lc);
+    return { locked, left, closing: !!left && /^\d+[mh]$/.test(left) };
+}
+
+/**
+ * True for the few seconds after YOUR call lands on a card, and never on the
+ * first paint: a stamp that played on every reload would announce an old call
+ * as news, the rule PriceTick keeps about prices.
+ */
+export function useJustCalled(call) {
+    const had = useRef(call ? call.id || true : null);
+    const [fresh, setFresh] = useState(false);
+    useEffect(() => {
+        const id = call ? call.id || true : null;
+        if (id && !had.current) {
+            setFresh(true);
+            const t = setTimeout(() => setFresh(false), 2600);
+            had.current = id;
+            return () => clearTimeout(t);
+        }
+        had.current = id;
+        return undefined;
+    }, [call]);
+    return fresh;
+}
+
+/** The stamp a call leaves on its card. */
+export function CallStamp({ show, text }) {
+    const reduce = useReducedMotion();
+    return (
+        <AnimatePresence>
+            {show && (
+                <motion.span data-call-stamp
+                    initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 1.8, rotate: -18 }}
+                    animate={reduce ? { opacity: 1 } : { opacity: 1, scale: 1, rotate: -7 }}
+                    exit={{ opacity: 0, transition: { duration: 0.4 } }}
+                    transition={reduce ? { duration: 0.15 } : { type: "spring", stiffness: 420, damping: 18 }}
+                    className="pointer-events-none absolute right-3 top-9 z-10 rounded-lg border-2
+                        border-[var(--floor-accent-ink)] bg-[var(--floor-card)] px-2.5 py-1
+                        font-display font-black text-[12px] uppercase tracking-widest
+                        text-[var(--floor-accent-ink)] shadow-lg">
+                    {text}
+                </motion.span>
+            )}
+        </AnimatePresence>
+    );
+}
+
 export default function MarketCard({ market, balance, busy, onTake, onReport }) {
     const [open, setOpen] = useState(false);
+    const [preview, setPreview] = useState(null);
     const kind = KINDS[market.kind] || KINDS.streak;
     // A head-to-head is between two people, so its sides are those two people.
     const labels = sideLabels(market);
     const KindIcon = Icons[kind.icon] || Icons.CircleDot;
-    const left = untilLabel(market.closes_at);
-    const closing = left && /^\d+[mh]$/.test(left);
+    const { locked, left, closing } = useCallClock(market);
     const mine = market.mine;
+    const justCalled = useJustCalled(mine);
     const names = (market.positions || [])
-        .filter((p) => sideOf(p.p) === YES).map((p) => firstName(p.user_name)).slice(0, 4);
+        .map((p) => firstName(p.user_name)).slice(0, 3);
 
-    const pays = returns(market.price);
     // Replayed from the positions the card already holds — no query, no stored
     // history, and it cannot disagree with the price printed beside it.
     const history = useMemo(() => priceHistory(market), [market]);
@@ -86,11 +150,12 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
     return (
         <motion.article
             layout
+            data-market-card
             // A market about YOU is marked by its border and its own line, not
             // by a different ground: tinting the panel came out a muddy olive
             // that read as a rendering fault rather than as emphasis, and the
             // room only works while every panel sits on the same ink.
-            className={`rounded-2xl border-2 p-4 transition-colors bg-[var(--floor-card)]
+            className={`relative rounded-2xl border-2 p-4 transition-colors bg-[var(--floor-card)]
                 ${market.subject_is_me
                     ? "border-[rgb(var(--floor-warn-rgb)/0.6)]"
                     : "border-[var(--floor-edge)] hover:border-[var(--floor-edge-hover)]"}`}
@@ -101,13 +166,19 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                     uppercase tracking-widest text-[var(--floor-muted-2)]">
                     <KindIcon className="w-3.5 h-3.5" /> {kind.label}
                 </span>
-                {left && (
+                {locked ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[var(--floor-muted-2)]">
+                        <Lock className="w-3 h-3" /> Locked
+                    </span>
+                ) : left && (
                     <span className={`inline-flex items-center gap-1 text-[11px] font-bold tabular-nums
                         ${closing ? "text-[var(--floor-warn-ink)]" : "text-[var(--floor-muted-2)]"}`}>
-                        <Clock className="w-3 h-3" /> {left}
+                        <Clock className="w-3 h-3" /> last call {left}
                     </span>
                 )}
             </div>
+            <CallStamp show={justCalled}
+                text={mine ? `Called · ${sideOf(mine.p) === YES ? labels.yes : labels.no}` : ""} />
 
             {/* ── The question ─────────────────────────────────────── */}
             {/* THE TITLE IS THE WAY IN, not the whole card. Making the card
@@ -131,8 +202,8 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             {market.subject_is_me && market.traders > 0 && (
                 <p className="text-[13px] font-bold text-[var(--floor-warn-ink)] mb-3 leading-snug">
                     {market.traders === 1
-                        ? `Someone has taken a position on your ${market.kind === "sac" ? "mark" : "week"}.`
-                        : `${market.traders} people are trading your `
+                        ? `Someone has called your ${market.kind === "sac" ? "mark" : "week"}.`
+                        : `${market.traders} people are calling your `
                             + `${market.kind === "sac" ? "mark" : "week"}.`}
                 </p>
             )}
@@ -142,10 +213,11 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 block, in a 62px gutter beside two payout ceilings drawn at
                 20px — which is a conditional on a call nobody has made
                 outranking the market's actual state. PriceBar is the one
-                object now: the figure, the split drawn, and what each side
-                pays under its own end. */}
+                object now: the figure, the split drawn, and who is calling
+                each end. */}
             <div className="rounded-xl bg-[var(--floor-well)] px-3 py-2.5">
-                <PriceBar price={market.price} pays={pays} labels={labels}
+                <PriceBar price={market.price} labels={labels}
+                    counts={{ yes: market.yesCount, no: market.noCount }} preview={preview}
                     change={history.change} trades={history.trades} />
 
                 {/* A MARKET WITH NO TRADES HAS NO TAPE. The compact chart draws
@@ -171,48 +243,21 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             )}
 
             {/* ── The crowd, as people ─────────────────────────────── */}
-            {/* The names grow and TRUNCATE; the volume never wraps. Without the
-                min-w-0 the names span refuses to shrink below its content and
-                pushes "1,150 in" onto a line of its own, splitting a figure
-                from its own unit. */}
-            <div className="flex items-center justify-between gap-3 mt-2.5 text-[11px]">
-                <span className="text-[var(--floor-muted-2)] font-bold min-w-0 truncate">
-                    {market.traders === 0 ? (
-                        <span className="text-[var(--floor-dim)]">No one has taken a side yet</span>
-                    ) : (
-                        <>
-                            {/* `sideLabels` EXISTS AND THIS ROW NEVER READ IT.
-                                A head-to-head between two students printed
-                                "2 yes · 0 no", which names neither of them and
-                                asks the student to work out that yes meant the
-                                first name in the title — the exact leak of the
-                                model's storage onto the floor that `sideLabels`
-                                was written to close, two lines below a call to
-                                it. Same for the position row underneath. */}
-                            <span className="text-[var(--floor-yes-ink)]">
-                                {market.yesCount} {labels.named ? labels.yes : "yes"}
-                            </span>
-                            {names.length > 0 && (
-                                <span className="text-[var(--floor-dim)]"> ({names.join(", ")}
-                                    {market.yesCount > names.length ? ", +more" : ""})</span>
-                            )}
-                            <span className="text-[var(--floor-dimmest)] mx-1.5">·</span>
-                            <span className="text-[var(--floor-no-ink)]">
-                                {market.noCount} {labels.named ? labels.no : "no"}
-                            </span>
-                            {/* THE NAMES BELONG TO THE SIDE THEY ARE ON, and
-                                trailing them off the end of both counts put
-                                "1 yes · 2 no — Ava" on screen, which reads as
-                                Ava being one of the two on no. They are yes
-                                holders; they sit against the yes count. */}
-                        </>
-                    )}
-                </span>
-                <span className="text-[var(--floor-dim)] font-bold tabular-nums flex-shrink-0
-                    whitespace-nowrap">
-                    {market.volume.toLocaleString()} in
-                </span>
-            </div>
+            {/* The counts per side are on the bar; this row is WHO. A market
+                where you cannot see who has called it is a private bet, which
+                is what the old wagering layer was. No pool figure — "300 in"
+                was a pot, and a pot is a betting word. */}
+            <p className="mt-2.5 text-[11px] font-bold text-[var(--floor-muted-2)] min-w-0 truncate">
+                {market.traders === 0
+                    ? <span className="text-[var(--floor-dim)]">No calls yet</span>
+                    : <>
+                        {names.join(", ")}
+                        {market.traders > names.length ? ` and ${market.traders - names.length} more` : ""}
+                        <span className="text-[var(--floor-dim)]">
+                            {market.traders === 1 ? " has called this" : " have called this"}
+                        </span>
+                    </>}
+            </p>
 
             {/* ── Your side ────────────────────────────────────────── */}
             {mine && (() => {
@@ -228,18 +273,17 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
                 return (
                     <div className="flex items-center justify-between gap-3 mt-3 rounded-xl
                         bg-[var(--floor-well)] px-3 py-2">
-                        <span className="text-[11px] font-bold text-[var(--floor-muted)]">
-                            You:{" "}
+                        <span className="text-[11px] font-bold text-[var(--floor-muted)] min-w-0 truncate">
+                            You called{" "}
                             <span className={isYes ? "text-[var(--floor-yes-ink)]" : "text-[var(--floor-no-ink)]"}>
-                                {/* A NAME IS NOT SHOUTED. "YES"/"NO" are the
-                                    model's two outcomes and read as labels in
-                                    caps; "PRIYANKA" is a fifteen-year-old's
-                                    name in caps. */}
+                                {/* A NAME IS NOT SHOUTED. "yes"/"no" are the
+                                    model's two outcomes; "PRIYANKA" in caps is
+                                    a fifteen-year-old's name in caps. */}
                                 {labels.named ? (isYes ? labels.yes : labels.no)
-                                    : (isYes ? "YES" : "NO")}
+                                    : (isYes ? "yes" : "no")}
                             </span>
                             <span className="text-[var(--floor-dim)]">
-                                {" "}· {mine.stake} @ {priceLabel(mine.price_at_entry)}
+                                {" "}at {priceLabel(mine.price_at_entry)} · {mine.stake} committed
                             </span>
                         </span>
                         <span className={`text-[11px] font-black tabular-nums
@@ -252,15 +296,21 @@ export default function MarketCard({ market, balance, busy, onTake, onReport }) 
             })()}
 
             {/* ── The way in ───────────────────────────────────────── */}
-            {open ? (
+            {open && !locked ? (
                 <TakeSide
                     market={market}
                     price={market.price} balance={balance} busy={busy}
                     history={history} myEntry={myEntry}
+                    onPreview={setPreview}
                     onCancel={() => setOpen(false)}
                     onTake={async (pick) => { await onTake?.(market, pick); setOpen(false); }}
                 />
-            ) : mine ? null : market.blocked ? (
+            ) : mine ? null : locked ? (
+                <p className="flex items-start gap-1.5 mt-3 text-[11px] text-[var(--floor-muted-2)] leading-snug">
+                    <Lock className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                    Calls closed before the answer could show. It settles when the week ends.
+                </p>
+            ) : market.blocked ? (
                 // A refusal SAYS WHY. A greyed-out button with no reason is the
                 // "disabled button that says nothing" paper-cut this project
                 // already fixed once on the Study page.

@@ -37,6 +37,7 @@ import PriceChart from "@/components/market/PriceChart";
 import TakeSide from "@/components/market/TakeSide";
 import Reactions from "@/components/market/Reactions";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { isLocked } from "@/lib/slate";
 import {
     KINDS, readMarket, priceHistory, priceLabel, sideOf, YES, sideLabels,
     payoutFor, markToMarket, blockReason, settlementOf,
@@ -190,8 +191,8 @@ export default function Market() {
                 {market.subject_is_me && market.traders > 0 && (
                     <p className="text-[13px] font-bold text-[var(--floor-warn-ink)] mt-1.5">
                         {market.traders === 1
-                            ? "Someone is trading this."
-                            : `${market.traders} people are trading this.`}
+                            ? "Someone has called this."
+                            : `${market.traders} people have called this.`}
                     </p>
                 )}
 
@@ -208,7 +209,7 @@ export default function Market() {
                             style={{ color: INK.dim }}>Settled</p>
                         <p className="font-display font-black text-[var(--floor-ink)] text-lg mt-0.5">
                             {market.status === "void"
-                                ? "Voided — every stake came back whole."
+                                ? "Voided — every commitment came back whole."
                                 : `It resolved ${market.outcome ? "YES" : "NO"}.`}
                         </p>
                         {market.resolution_note && (
@@ -243,10 +244,11 @@ export default function Market() {
                         <p className="text-[10px] font-black uppercase tracking-widest"
                             style={{ color: INK.dim }}>Your position</p>
                         <p className="text-[14px] font-bold mt-1" style={{ color: INK.mid }}>
+                            {"You called "}
                             <span style={{ color: sideOf(mine.p) === YES ? INK.up : INK.down }}>
-                                {sideOf(mine.p) === YES ? "YES" : "NO"}
+                                {sideOf(mine.p) === YES ? "yes" : "no"}
                             </span>
-                            {` · ${mine.stake} credits at ${priceLabel(mine.price_at_entry)}`}
+                            {` at ${priceLabel(mine.price_at_entry)} · ${mine.stake} committed`}
                         </p>
                         {market.status === "open" && mtm && (
                             <p className="text-[12px] mt-1.5 tabular-nums" style={{ color: INK.dim }}>
@@ -271,6 +273,14 @@ export default function Market() {
                                 busy={busy} history={history} myEntry={myEntry}
                                 onCancel={() => setOpen(false)} onTake={take} />
                         </div>
+                    ) : isLocked(market) ? (
+                        // Past last call: the answer is starting to show on the
+                        // boards, so calls stopped. See slate.js.
+                        <p className="flex items-start gap-1.5 text-[12px] leading-snug mt-3"
+                            style={{ color: INK.mid }}>
+                            <Lock className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                            Calls closed before the answer could show. It settles when the week ends.
+                        </p>
                     ) : blocked ? (
                         <p className="flex items-start gap-1.5 text-[12px] leading-snug mt-3"
                             style={{ color: INK.mid }}>
@@ -281,7 +291,7 @@ export default function Market() {
                             className="w-full mt-3 py-3 rounded-xl border-2 border-[var(--floor-edge-strong)]
                                 text-[var(--floor-ink)] font-display font-black text-sm
                                 hover:border-[var(--floor-accent-ink)] hover:bg-[rgb(var(--floor-accent-rgb)/0.1)] transition-colors">
-                            Take a side
+                            Take a position
                         </button>
                     )
                 )}

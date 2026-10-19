@@ -110,7 +110,11 @@ const owners = () => [...holders.keys()];
 // "quiz" is the one at the quiz table, who eats the cards you got right. The
 // launcher used to stand under him, and on a phone it stood on Next. Below
 // the reaction that plays when the marks come back, which is a celebration.
-export const ACE_ORDER = ["reacts", "premium", "onboarding", "first-win", "tour", "report", "chat", "quiz", "buddy", "intro", "roam", "launcher"];
+// "results" is the Compete floor's Sunday results, a full-screen moment that
+// draws NO Ace and claims anyway, the way "chat" does: the launcher stood over
+// its scrim in the corner, the one bright thing on a dimmed page. Ranked with
+// the other celebrations and over everything that is there by default.
+export const ACE_ORDER = ["reacts", "premium", "results", "onboarding", "first-win", "tour", "report", "chat", "quiz", "buddy", "intro", "roam", "launcher"];
 
 /** An id nobody registered loses to everything, rather than winning by accident. */
 const rank = (id) => {

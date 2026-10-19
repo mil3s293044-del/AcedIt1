@@ -125,7 +125,7 @@ check("THE DEAL DRAWS THE WHOLE FLOOR, not just the cards", () => {
     for (const region of [
         "The floor",        // the header's kicker
         "The tape",         // the 300px rail, the easiest one to forget
-        "Cred",             // the figure in the header strip
+        "Credits",          // the figure in the season strip
     ]) {
         assert.ok(deal.includes(`>${region}<`),
             `the deal no longer draws "${region}" — that region will snap in`);

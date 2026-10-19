@@ -27,9 +27,9 @@
  */
 import React, { useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Coins, Check, Lock, Sparkles, Flame, LineChart, ArrowRightLeft } from "lucide-react";
+import { CircleDot as Coins, Check, Lock, Sparkles, Flame, LineChart, ArrowRightLeft, Award } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { slotOf } from "@/lib/cosmetics";
+import { slotOf, BACK_SKINS } from "@/lib/cosmetics";
 // THE OBJECT LEADS. Every row here used to be name/blurb/price/Buy, so a gilt
 // back costing a fortnight showed a student the words "Gilt back" and three
 // card backs were three identical rows. Nothing had to be built — CardBack,
@@ -199,6 +199,49 @@ export default function CredStore({ store, busy, onBuy, onConvert, onEquip, onPr
                     })()}
                 </div>
             )}
+
+            {/* ── EARNED, NOT BOUGHT ─────────────────────────────────────
+                What a season left behind. These are never in the catalogue —
+                there is no price to print and no button that buys one — but
+                owning a thing you cannot see is the bug this shelf was rebuilt
+                to end, so whatever has been earned is shown with the same
+                Wear button as everything bought. */}
+            {(() => {
+                const earned = [...owned].filter((id) => BACK_SKINS[id]?.earned);
+                if (!earned.length) return null;
+                return (
+                    <section>
+                        <div className="flex items-baseline gap-2 mb-1">
+                            <Award className="w-3.5 h-3.5 text-[var(--floor-muted)]" aria-hidden="true" />
+                            <h3 className="font-display font-black text-[var(--floor-ink)] text-sm">Earned</h3>
+                            <span className="flex-1 h-px bg-[var(--floor-edge)]" />
+                        </div>
+                        <p className="text-[12px] text-[var(--floor-dim)] mb-2.5">
+                            Won on the season ladder. Nobody can buy these.
+                        </p>
+                        <div className="grid sm:grid-cols-2 gap-2.5">
+                            {earned.map((id) => {
+                                const worn = store.equipped?.back === id;
+                                return (
+                                    <div key={id} className="rounded-2xl p-3.5 border bg-[var(--floor-well)] border-[var(--floor-edge)]">
+                                        <StorePreview item={{ id, kind: "cosmetic" }} held={0} />
+                                        <div className="mt-3 flex items-center justify-between gap-2">
+                                            <span className="font-display font-black text-[var(--floor-ink)] text-sm">
+                                                {BACK_SKINS[id].label} back
+                                            </span>
+                                            <Button size="sm" variant={worn ? "outline" : "default"} className="font-bold"
+                                                disabled={busy}
+                                                onClick={() => onEquip?.(worn ? null : id, "back")}>
+                                                {worn ? "Take off" : "Wear"}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                );
+            })()}
 
             {GROUPS.map(([kind, heading, blurb]) => {
                 const rows = items.filter((i) => i.kind === kind);

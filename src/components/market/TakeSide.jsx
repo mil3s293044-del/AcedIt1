@@ -39,7 +39,7 @@
  * they commit rather than afterwards. The tick above the slider is where the
  * room already sits.
  *
- * Both prices are in ¢ and neither is an odds figure. An earlier version put
+ * Both prices are percentages and neither is an odds figure. An earlier version put
  * implied odds here ("the room is offering 1.61×") which was 1/price — a
  * number with no relationship to cred, next to two tiles made of cred.
  *
@@ -78,8 +78,7 @@ import PriceChart from "./PriceChart";
 import AceShuffle from "@/components/ace/AceShuffle";
 import {
     YES, NO, probFor, payoutFor, clampStake, priceLabel, sideLabels,
-    returnMultiple, bestReturn, multiplierLabel,
-    convictionRange, startingConviction,
+    convictionRange, startingConviction, sideBlockReason, priceOf,
     STAKE_MIN, STAKE_MAX,
 } from "@/lib/market";
 
@@ -106,16 +105,26 @@ const pct = (v) => Math.round(v * 100);
 
 export default function TakeSide({
     price, balance = 0, busy = false, onTake, onCancel, history = null, myEntry = null,
-    // The market itself, only so the two sides can be called what they are.
-    // A head-to-head asked "Maya or Sam?" and then offered Yes and No.
+    // The market itself, so the two sides can be called what they are (a
+    // head-to-head asked "Maya or Sam?" and then offered Yes and No), and so
+    // the side a student may not take on their own question is known here.
     market = null,
+    // Where the room would sit if this call went in, handed up so the card's
+    // bar can draw it before the commit rather than after.
+    onPreview = null,
+    // How a card of answers prices this call: the whole card moves, so only
+    // the card can say where this row lands. Absent on a grouped row, no
+    // preview is drawn rather than a figure the card would contradict.
+    priceAfter = null,
 }) {
     const labels = useMemo(() => sideLabels(market), [market]);
-    // Open on a side that can actually be backed. A market the room has run
-    // past on one side still has a call on the other, and starting on the
-    // dead one greets a student with a disabled button and no reason.
-    const [side, setSide] = useState(
-        () => (convictionRange(YES, price).tradeable ? YES : NO));
+    // NO BETTING AGAINST YOURSELF, read from the server's verdict on the row.
+    const refusal = (v) => sideBlockReason(market, v);
+    const usable = (v) => convictionRange(v, price).tradeable && !refusal(v);
+    // Open on a side that can actually be taken. Starting on a dead one —
+    // priced past, or the one against yourself — greets a student with a
+    // disabled button.
+    const [side, setSide] = useState(() => (usable(YES) ? YES : NO));
     const [held, setConviction] = useState(() => startingConviction(side, price));
     const [stake, setStake] = useState(50);
 
@@ -143,11 +152,24 @@ export default function TakeSide({
     const ifNo = useMemo(() => payoutFor(stake, p, price, false), [stake, p, price]);
     const tooMuch = stake > balance;
 
-    // What this exact call returns per cred staked — the same multiple the
-    // card advertises, now pinned to the conviction actually on the slider.
-    const backIfYes = returnMultiple(p, price, true);
-    const backIfNo = returnMultiple(p, price, false);
-    // Your price against the room's, both in ¢, which is what they are.
+    // ── THE COMMIT MOMENT, BEFORE THE COMMIT ─────────────────────────────
+    // Where the room moves to if this exact call goes in: the same blend the
+    // server prices with, over the positions already on the card plus this
+    // one. A student sees their own effect on the market before they press,
+    // which is the most competitive fact on the screen — and it is checkable,
+    // because the card's bar lands exactly there once the call is in.
+    const after = useMemo(() => {
+        const call = { p, stake: clampStake(stake) };
+        if (priceAfter) return priceAfter(call);
+        if (!market || market.meta?.group) return null;
+        return priceOf(market, [...(market.positions || []), call]);
+    }, [market, p, stake, priceAfter]);
+    React.useEffect(() => {
+        if (!onPreview) return undefined;
+        onPreview(after);
+        return () => onPreview(null);
+    }, [after, onPreview]);
+    const moved = after === null ? 0 : Math.round(after * 100) - Math.round(price * 100);
     // How far past the room the handle has travelled, in points. On a price
     // under even money the floor is the coin flip instead, so this measures
     // from the FLOOR — the thing the track actually starts at.
@@ -169,9 +191,11 @@ export default function TakeSide({
                 {[[YES, labels.yes], [NO, labels.no]].map(([v, label]) => {
                     const on = side === v;
                     // A side the room has already priced past the ceiling has
-                    // no call left on it. Disabled with the reason underneath
-                    // rather than offered and then paying nothing.
-                    const open = convictionRange(v, price).tradeable;
+                    // no call left on it, and a side against yourself is not
+                    // yours to take. Disabled with the reason underneath
+                    // rather than offered and then refused.
+                    const self = refusal(v);
+                    const open = convictionRange(v, price).tradeable && !self;
                     const tone = v === YES
                         ? (on ? "bg-[var(--floor-yes)] text-[var(--floor-on-bright)] border-[var(--floor-yes-ink)]"
                               : "border-[var(--floor-edge-strong)] text-[var(--floor-muted)] hover:border-[rgb(var(--floor-yes-rgb)/0.5)]")
@@ -184,14 +208,26 @@ export default function TakeSide({
                                 transition-colors disabled:opacity-35 disabled:cursor-not-allowed
                                 ${tone}`}>
                             {label}
+                            {/* What the ROOM thinks of this side — never an
+                                odds figure. See PriceBar's header. */}
                             <span className="block text-[10px] font-bold opacity-70 tabular-nums">
-                                {open ? `up to ${multiplierLabel(bestReturn(price, v).win)}`
-                                    : "already priced in"}
+                                {self ? "not yours to take"
+                                    : open ? `room ${priceLabel(v === YES ? price : 1 - price)}`
+                                        : "already priced in"}
                             </span>
                         </button>
                     );
                 })}
             </div>
+
+            {/* Said once, plainly, when it applies. */}
+            {(refusal(YES) || refusal(NO)) && (
+                <p className="text-[11px] text-[var(--floor-muted-2)] leading-snug">
+                    {refusal(NO) && !refusal(YES)
+                        ? "This one's about you, so the only call open to you is backing yourself."
+                        : refusal(YES)}
+                </p>
+            )}
 
             {/* ── How sure ─────────────────────────────────────────── */}
             {/* The track BEGINS where the room already is, so every position
@@ -296,12 +332,6 @@ export default function TakeSide({
                     </p>
                     <Roll value={ifYes} className={`font-display font-black text-lg
                         ${ifYes > 0 ? "text-[var(--floor-yes-ink)]" : ifYes < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted)]"}`} />
-                    {/* The multiple, beside the cred it is a multiple OF. This
-                        is the only place both appear together, which is what
-                        makes the × on the board checkable rather than a claim. */}
-                    <p className="text-[10px] font-bold tabular-nums text-[var(--floor-dim)]">
-                        {multiplierLabel(backIfYes)} back
-                    </p>
                 </div>
                 <div className="text-right">
                     <p className="text-[10px] font-bold uppercase tracking-wide text-[var(--floor-dim)]">
@@ -309,11 +339,21 @@ export default function TakeSide({
                     </p>
                     <Roll value={ifNo} className={`font-display font-black text-lg
                         ${ifNo > 0 ? "text-[var(--floor-yes-ink)]" : ifNo < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-muted)]"}`} />
-                    <p className="text-[10px] font-bold tabular-nums text-[var(--floor-dim)]">
-                        {multiplierLabel(backIfNo)} back
-                    </p>
                 </div>
             </div>
+
+            {/* ── Your effect on the room ──────────────────────────── */}
+            {after !== null && !level && (
+                <p data-call-impact className="text-[11px] text-[var(--floor-muted)] leading-snug">
+                    Your call moves the room{" "}
+                    <span className="font-bold tabular-nums text-[var(--floor-ink)]">{priceLabel(price)}</span>
+                    {" → "}
+                    <span className={`font-bold tabular-nums ${moved > 0 ? "text-[var(--floor-yes-ink)]"
+                        : moved < 0 ? "text-[var(--floor-no-ink)]" : "text-[var(--floor-ink)]"}`}>
+                        {priceLabel(after)}</span>
+                    {moved === 0 ? ", less than a point at this size." : "."}
+                </p>
+            )}
 
             <div className="flex gap-2">
                 <button type="button" onClick={onCancel}
