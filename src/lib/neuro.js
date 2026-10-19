@@ -65,19 +65,28 @@ const DUNLOSKY = {
 export const TECHNIQUE_NEURO = {
     pomodoro: {
         headline: "Focus is a resource that drains. Breaks are how it comes back.",
+        brief: "Focus is your prefrontal cortex holding one goal while the daydreaming network stays quiet.",
+        catch: "You never feel focus fading. You just quietly stop noticing things.",
+        // Which source backs which beat, 1-based into `sources`.
+        cites: { brain: [2], chart: [1], catch: [1], caveat: [1] },
+        // While the timer is on a break, these are the regions the brain shows.
+        breakRegions: ["mpfc", "pcc"],
+        breakLine: "On a break your mind wanders. That is the default mode network's turn.",
         network:
             "Holding one goal steady is your prefrontal cortex suppressing everything else that wants attention. The default mode network, the daydreaming circuit, has to stay quiet for that, and it gets harder to keep quiet the longer you sit there.",
         regions: [
-            { id: "dlpfc", tone: "primary", role: "Holds the goal in mind and blocks the competition" },
-            { id: "acc",   tone: "xp",      role: "Notices the moment you've drifted off task" },
-            { id: "mpfc",  tone: "chart-4", role: "Default mode network. Quiet when locked in, loud when mind-wandering" },
-            { id: "pcc",   tone: "chart-4", role: "The other half of that network" },
-            { id: "lc",    tone: "chart-3", role: "Noradrenaline, the arousal system vigilance runs on" },
+            { id: "dlpfc", tone: "primary", role: "Holds the goal in mind and blocks the competition", gist: "Holds the goal, blocks the rest" },
+            { id: "acc",   tone: "xp",      role: "Notices the moment you've drifted off task", gist: "Notices when you drift" },
+            { id: "mpfc",  tone: "chart-4", role: "Default mode network. Quiet when locked in, loud when mind-wandering", gist: "Daydreaming network, front half" },
+            { id: "pcc",   tone: "chart-4", role: "The other half of that network", gist: "Daydreaming network, back half" },
+            { id: "lc",    tone: "chart-3", role: "Noradrenaline, the arousal system vigilance runs on", gist: "Noradrenaline, the alertness supply" },
         ],
         chart: {
             kind: "line",
             title: "Sustained-attention accuracy over 50 minutes",
             schematic: true,
+            // The x axis is minutes on task, so a running timer can be placed on it.
+            live: "minutes",
             xLabel: "Minutes on task",
             yLabel: "Accuracy",
             yMax: 100,
@@ -101,13 +110,17 @@ export const TECHNIQUE_NEURO = {
 
     spaced_repetition: {
         headline: "Forgetting a bit before you review is what makes the review work.",
+        brief: "Each review pulls the memory back through the hippocampus and hands more of it to the cortex.",
+        catch: "Cramming feels better because it is all there today. Exam day is a different day.",
+        cites: { brain: [3], chart: [1, 2], catch: [1] },
+        live: { line: "Recall", regions: ["hippocampus", "vlpfc"] },
         network:
             "A memory isn't stored once. Every retrieval pulls it through the hippocampus again and hands a little more of it to the cortex, which is where it ends up living. Spacing gives that transfer time to happen.",
         regions: [
-            { id: "hippocampus", tone: "primary", role: "Binds the memory and replays it during consolidation" },
-            { id: "mtl",         tone: "primary", role: "Feeds the hippocampus and holds the trace early on" },
-            { id: "temporal",    tone: "chart-3", role: "Where the memory gradually ends up living" },
-            { id: "vlpfc",       tone: "xp",      role: "Does the searching when the memory isn't immediately there" },
+            { id: "hippocampus", tone: "primary", role: "Binds the memory and replays it during consolidation", gist: "Binds the memory and replays it" },
+            { id: "mtl",         tone: "primary", role: "Feeds the hippocampus and holds the trace early on", gist: "Holds the trace early on" },
+            { id: "temporal",    tone: "chart-3", role: "Where the memory gradually ends up living", gist: "Where the memory ends up living" },
+            { id: "vlpfc",       tone: "xp",      role: "Does the searching when the memory isn't immediately there", gist: "Searches when it is not there yet" },
         ],
         chart: {
             kind: "line",
@@ -123,7 +136,7 @@ export const TECHNIQUE_NEURO = {
             ],
             caption: "The classic forgetting curve, and what spacing does to it. Each review flattens the drop that follows.",
         },
-        effect: { g: 0.40, label: "spacing vs cramming", approx: true,
+        effect: { g: 0.40, label: "spacing vs cramming", approx: true, cite: 1,
             source: "Cepeda et al. (2006) meta-analysis of 254 studies" },
         feelsLike:
             "Cramming feels better because everything is right there while you're doing it. That fluency is the problem, because it's a reading of how available the material is now, not of how much you'll have on the day.",
@@ -138,13 +151,17 @@ export const TECHNIQUE_NEURO = {
 
     active_recall: {
         headline: "Pulling it out of your head changes the memory. Putting it in again doesn't.",
+        brief: "Every time you pull it out, the memory is rebuilt a little stronger. Rereading skips that step.",
+        catch: "Testing yourself feels worse than rereading. The effort is how it works.",
+        cites: { brain: [3], chart: [1], catch: [1] },
+        live: { line: "Retrieval", regions: ["hippocampus", "vlpfc"] },
         network:
             "Retrieval is not a read operation. Each time you drag something out without the notes, the trace gets rebuilt slightly stronger and slightly easier to find next time. Rereading skips that entirely.",
         regions: [
-            { id: "hippocampus", tone: "primary", role: "Reconstructs the memory each time you pull on it" },
-            { id: "vlpfc",       tone: "xp",      role: "Runs the search when it doesn't come straight away" },
-            { id: "temporal",    tone: "chart-3", role: "Holds the content being retrieved" },
-            { id: "parietal",    tone: "chart-4", role: "Signals recollection, the feeling of actually having it" },
+            { id: "hippocampus", tone: "primary", role: "Reconstructs the memory each time you pull on it", gist: "Rebuilds the memory each pull" },
+            { id: "vlpfc",       tone: "xp",      role: "Runs the search when it doesn't come straight away", gist: "Runs the search" },
+            { id: "temporal",    tone: "chart-3", role: "Holds the content being retrieved", gist: "Holds what you are retrieving" },
+            { id: "parietal",    tone: "chart-4", role: "Signals recollection, the feeling of actually having it", gist: "The feeling of actually having it" },
         ],
         chart: {
             kind: "bars",
@@ -158,7 +175,7 @@ export const TECHNIQUE_NEURO = {
             ],
             caption: "Rereading wins on the day and loses badly a week later. This crossover is the single most important graph in study science, and it's why the technique that feels worse is the one to use.",
         },
-        effect: { g: 0.50, label: "testing vs restudying", approx: true,
+        effect: { g: 0.50, label: "testing vs restudying", approx: true, cite: 2,
             source: "Rowland (2014) meta-analysis" },
         feelsLike:
             "Testing yourself feels worse than rereading, and students consistently predict it will work less well. It's one of Bjork's desirable difficulties: the effort is the mechanism, not a sign it isn't working.",
@@ -173,13 +190,17 @@ export const TECHNIQUE_NEURO = {
 
     blurting: {
         headline: "An empty page is the most honest feedback you can get.",
+        brief: "Recall with no cue is the hardest kind, so where the page stays blank is exactly where the gap is.",
+        catch: "Blurting feels like failing. Rereading would have hidden the same gap.",
+        cites: { brain: [2], chart: [1], catch: [1] },
+        live: { line: "Free recall", regions: ["hippocampus", "dlpfc"] },
         network:
             "Free recall with nothing to cue you is the hardest version of retrieval, which is what makes it the most informative. Where the page stays blank is exactly where the gap is, and unlike rereading, you can't talk yourself out of it.",
         regions: [
-            { id: "hippocampus", tone: "primary", role: "Reconstructs each item as you dig it out" },
-            { id: "vlpfc",       tone: "xp",      role: "Searches when there's no prompt to work from" },
-            { id: "dlpfc",       tone: "chart-3", role: "Tracks what you've already written and what's still missing" },
-            { id: "motor",       tone: "chart-4", role: "Writing it by hand adds a second trace to the same content" },
+            { id: "hippocampus", tone: "primary", role: "Reconstructs each item as you dig it out", gist: "Rebuilds each item as you dig" },
+            { id: "vlpfc",       tone: "xp",      role: "Searches when there's no prompt to work from", gist: "Searches with no prompt" },
+            { id: "dlpfc",       tone: "chart-3", role: "Tracks what you've already written and what's still missing", gist: "Tracks what is still missing" },
+            { id: "motor",       tone: "chart-4", role: "Writing it by hand adds a second trace to the same content", gist: "Writing adds a second trace" },
         ],
         chart: {
             kind: "bars",
@@ -205,13 +226,17 @@ export const TECHNIQUE_NEURO = {
 
     exam: {
         headline: "Practise the thing you'll actually be asked to do.",
+        brief: "Memory is picky about context. The closer practice looks to the exam, the more of it transfers.",
+        catch: "A mixed paper feels messier. Working out what kind of question it is, is the exam.",
+        cites: { brain: [2], chart: [1], catch: [1], caveat: [1] },
+        live: { line: "Retrieval on the clock", regions: ["vlpfc", "dlpfc"] },
         network:
             "Memory is picky about context. A trace laid down while reading is not the trace you need while answering a question under time pressure, which is why the closer practice looks to the real thing, the more of it transfers.",
         regions: [
-            { id: "vlpfc",       tone: "xp",      role: "Retrieval under load, with a clock running" },
-            { id: "dlpfc",       tone: "primary", role: "Planning an answer and budgeting the time" },
-            { id: "hippocampus", tone: "chart-3", role: "Pulling the content out cold" },
-            { id: "acc",         tone: "chart-4", role: "Monitors errors and time pressure, the part that settles with familiarity" },
+            { id: "vlpfc",       tone: "xp",      role: "Retrieval under load, with a clock running", gist: "Retrieval with a clock running" },
+            { id: "dlpfc",       tone: "primary", role: "Planning an answer and budgeting the time", gist: "Plans the answer, budgets time" },
+            { id: "hippocampus", tone: "chart-3", role: "Pulling the content out cold", gist: "Pulls the content out cold" },
+            { id: "acc",         tone: "chart-4", role: "Monitors errors and time pressure, the part that settles with familiarity", gist: "Time pressure, settles with practice" },
         ],
         chart: {
             kind: "bars",
@@ -239,13 +264,17 @@ export const TECHNIQUE_NEURO = {
 
     mind_map: {
         headline: "Drawing it from memory works. Drawing it from your notes doesn't.",
+        brief: "A map drawn from memory is retrieval with a picture attached. Drawn from your notes, it is copying.",
+        catch: "A map built with your notes open looks great and teaches almost nothing.",
+        cites: { brain: [1, 2], chart: [1], catch: [1], caveat: [1, 2] },
+        live: { line: "Built from memory", regions: ["hippocampus", "parietal"] },
         network:
             "Building a map is only useful while the notes are shut. Done closed-book it's a retrieval task with a picture attached; done open-book it's copying, and copying leaves almost nothing behind.",
         regions: [
-            { id: "hippocampus", tone: "primary", role: "Reconstructs each node as you place it" },
-            { id: "parietal",    tone: "chart-4", role: "Spatial layout, where things sit relative to each other" },
-            { id: "dlpfc",       tone: "chart-3", role: "Holds the structure together while you build it" },
-            { id: "temporal",    tone: "xp",      role: "Supplies the meaning of what you're connecting" },
+            { id: "hippocampus", tone: "primary", role: "Reconstructs each node as you place it", gist: "Rebuilds each node you place" },
+            { id: "parietal",    tone: "chart-4", role: "Spatial layout, where things sit relative to each other", gist: "Where things sit in space" },
+            { id: "dlpfc",       tone: "chart-3", role: "Holds the structure together while you build it", gist: "Holds the structure together" },
+            { id: "temporal",    tone: "xp",      role: "Supplies the meaning of what you're connecting", gist: "Supplies the meaning" },
         ],
         chart: {
             kind: "bars",
@@ -261,7 +290,10 @@ export const TECHNIQUE_NEURO = {
         },
         feelsLike:
             "A map built with your notes open looks fantastic and teaches you almost nothing. The good-looking version and the useful version are not the same artefact.",
-        utility: "moderate",
+        // Not rated: Dunlosky's ten techniques do not include concept mapping,
+        // and the badge reads as Dunlosky's verdict. Karpicke & Blunt are the
+        // evidence here, and the caveat says what they found.
+        utility: null,
         sources: [
             { ref: "Karpicke & Blunt (2011), Science 331(6018)", note: "Concept mapping lost to retrieval practice on every measure they tested. Figures shown are approximate." },
             { ref: "Blunt & Karpicke (2014), Journal of Educational Psychology 106(3)", note: "Mapping done as a closed-book retrieval task performed about as well as other retrieval formats, the version AcedIt implements." },

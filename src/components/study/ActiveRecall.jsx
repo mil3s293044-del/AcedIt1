@@ -28,6 +28,7 @@ import { questionsFromCards, questionsFromMap, suggestTopics, ownMaterial } from
 import SourceRow from "./SourceRow";
 import { deckCards } from "@/lib/mistakeBank";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { signalBrain } from "@/lib/brainSignal";
 
 // Static class lookups so Tailwind JIT can see every utility.
 const verdictConfig = {
@@ -556,6 +557,9 @@ ${STIMULUS_RULE_INLINE}`,
     };
 
     const handleNext = () => {
+        // Moving past an answer they WROTE is a retrieval that just happened;
+        // skipping a blank one is not, and pulses nothing.
+        if (String(userAnswers[currentQuestionIndex] || "").trim()) signalBrain("active_recall", "retrieve");
         if (currentQuestionIndex < questions.length - 1) setCurrentQuestionIndex(prev => prev + 1);
         else setPhase("review");
     };

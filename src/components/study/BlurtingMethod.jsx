@@ -22,6 +22,7 @@ import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { fmtDate } from "@/lib/safeDate";
 import { deckCards } from "@/lib/mistakeBank";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { signalBrain } from "@/lib/brainSignal";
 
 // Static class lookup for AI score pill — Tailwind JIT cannot see interpolated tokens.
 const SCORE_PILL = {
@@ -743,7 +744,13 @@ Reference Study Design requirements in your feedback.`,
                             ref={textareaRef}
                             placeholder="Start writing... every detail counts. Key terms, dates, processes, examples — get it all out."
                             value={blurtedText}
-                            onChange={e => setBlurtedText(e.target.value)}
+                            onChange={e => {
+                                const next = e.target.value;
+                                // A word finished is a recall finished. The card
+                                // throttles, so a fast typist is one pulse, not forty.
+                                if (next.length > blurtedText.length && /\s$/.test(next)) signalBrain("blurting", "recall");
+                                setBlurtedText(next);
+                            }}
                             className="w-full min-h-64 resize-none border-2 border-border focus:border-xp rounded-2xl p-4 text-base bg-surface placeholder:text-muted-foreground/60 transition-colors leading-relaxed"
                         />
                     </div>

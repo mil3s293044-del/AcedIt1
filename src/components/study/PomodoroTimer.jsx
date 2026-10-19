@@ -138,6 +138,12 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
         const globalTimerState = {
             isActive: hasBeenStarted && (isRunning || timeLeft > 0),
             timeLeft,
+            // The block's whole length, so the science card can place the
+            // student on its attention curve. Elapsed is derived from this and
+            // timeLeft; without it there is nothing honest to place.
+            total: (isBreak
+                ? (isLongBreak(session - 1) ? settings.longBreak : settings.shortBreak)
+                : settings.workTime) * 60,
             isRunning,
             isBreak,
             session,
@@ -148,7 +154,8 @@ export default function PomodoroTimer({ onSessionComplete, userSubjects: initial
 
         localStorage.setItem('globalTimerState', JSON.stringify(globalTimerState));
         window.dispatchEvent(new CustomEvent('timerStateChanged', { detail: globalTimerState }));
-    }, [hasBeenStarted, isRunning, timeLeft, isBreak, session, selectedSubject, topic]);
+    }, [hasBeenStarted, isRunning, timeLeft, isBreak, session, selectedSubject, topic,
+        settings.workTime, settings.shortBreak, settings.longBreak, isLongBreak]);
 
     // Load user subjects on mount
     useEffect(() => {

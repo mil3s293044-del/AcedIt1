@@ -40,6 +40,7 @@ import { cardMastery, isCardDue } from "@/lib/mastery";
 import { isNew, isReady, tally } from "@/lib/due";
 import { deckCards } from "@/lib/mistakeBank";
 import { calculateNextReview as sm2Next, formatIntervalShort as sm2Interval, reviewPatch, RATINGS } from "@/lib/sm2";
+import { signalBrain } from "@/lib/brainSignal";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
@@ -718,6 +719,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     const handleRateCard = async (quality) => {
         if (isRating) return;
         setIsRating(true);
+        // A rating is a recall that just happened: the science card pulses it.
+        signalBrain("spaced_repetition", "recall");
         setLastGrade(quality);
         const card = reviewCards[currentCardIndex];
         const updates = calculateNextReview(quality, card);
