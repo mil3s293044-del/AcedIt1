@@ -1,6 +1,7 @@
 import React from 'react';
 import { InlineMath, BlockMath } from 'react-katex';
 import 'katex/dist/katex.min.css';
+import { cleanText } from '@/lib/questionText';
 
 // Parse a string into segments: plain text, inline \(...\) or $...$, display \[...\] or $$...$$
 export function processLatexContent(text) {
@@ -58,7 +59,9 @@ export function LatexBlock({ children }) {
 // Main reusable MathText component: renders a string with mixed text and LaTeX
 export default function MathText({ children, className = '' }) {
     if (!children) return null;
-    const segments = processLatexContent(children.toString());
+    // Repaired first: see questionText.js. A literal `\n` here is the two
+    // characters a model wrote where a line break belonged.
+    const segments = processLatexContent(cleanText(children));
     return (
         <span className={className}>
             {segments.map((seg, i) => {

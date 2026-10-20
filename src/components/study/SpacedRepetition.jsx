@@ -15,6 +15,8 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 import AISkeleton from "../shared/AISkeleton";
+import MarkdownMath from "@/components/shared/MarkdownMath";
+import MathText from "@/components/shared/LatexRenderer";
 import {
     Plus, Play, Edit, Trash2, Share2, Check, X, Sparkles,
     Brain, AlertTriangle, Search, Clock,
@@ -872,9 +874,9 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                     ) : null}
                     front={(
                         <>
-                            <p className="text-lg sm:text-xl font-semibold text-foreground leading-snug">
+                            <MarkdownMath className="text-lg sm:text-xl font-semibold text-foreground leading-snug">
                                 {currentCard.question}
-                            </p>
+                            </MarkdownMath>
                             {currentCard.question_image && (
                                 <img src={currentCard.question_image} alt="Question"
                                     className="max-w-full rounded-xl border border-border" />
@@ -885,13 +887,13 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         <span className="absolute inset-0 flex flex-col gap-3 px-5 pt-11 pb-11">
                             <span className="block text-xs text-muted-foreground leading-snug flex-shrink-0
                                 border-b border-border pb-2.5">
-                                {currentCard.question}
+                                <MathText>{currentCard.question}</MathText>
                             </span>
                             <span className="block relative flex-1 min-h-0">
                                 <span tabIndex={0} className="block h-full overflow-y-auto">
-                                    <span className="block text-base sm:text-lg text-foreground leading-relaxed">
+                                    <MarkdownMath className="block text-base sm:text-lg text-foreground leading-relaxed">
                                         {currentCard.answer}
-                                    </span>
+                                    </MarkdownMath>
                                     {currentCard.answer_image && (
                                         <img src={currentCard.answer_image} alt="Answer"
                                             className="max-w-full rounded-xl mt-3 border border-border" />
@@ -1068,8 +1070,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                             ) : (
                                 <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1 min-w-0">
-                                        <p className="font-medium text-foreground text-sm">{card.question}</p>
-                                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2">{card.answer}</p>
+                                        <p className="font-medium text-foreground text-sm"><MathText>{card.question}</MathText></p>
+                                        <p className="text-sm text-muted-foreground mt-1 line-clamp-2"><MathText>{card.answer}</MathText></p>
                                         <div className="flex gap-1.5 mt-2 flex-wrap">
                                             <span className="pill bg-secondary text-muted-foreground">{card.total_reviews || 0} reviews</span>
                                             {card.is_weak_spot && <span className="pill bg-streak/15 text-streak">Weak Spot</span>}
@@ -1494,8 +1496,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                 <p className="text-sm font-semibold text-muted-foreground mb-1">{generatedFlashcards.length} generated cards</p>
                                 {generatedFlashcards.map((card, i) => (
                                     <div key={i} className="bg-surface rounded-xl p-3.5 border border-border">
-                                        <p className="font-medium text-sm text-foreground mb-1">{card.question}</p>
-                                        <p className="text-xs text-muted-foreground">{card.answer}</p>
+                                        <p className="font-medium text-sm text-foreground mb-1"><MathText>{card.question}</MathText></p>
+                                        <p className="text-xs text-muted-foreground"><MathText>{card.answer}</MathText></p>
                                     </div>
                                 ))}
                             </div>

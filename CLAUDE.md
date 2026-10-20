@@ -1023,6 +1023,76 @@ questions, which is the worse error. Nothing is stripped — a paper two
 questions short is worse than one odd question — but the generate toast SAYS
 how many, because the student is the only one who can press generate again.
 
+## A question is repaired once and printed through maths, everywhere
+
+**"These weird lines of symbols came up."** A Chemistry question reached a
+student as `…$4.18\ \text{J g}^{-1}\ ^{\circ}\text{C}^{-1}$…(1 mark)\n(b)
+Calculate…`. Two faults, neither the student's:
+
+- **THE TWO CHARACTERS `\` `n` WHERE A LINE BREAK BELONGED.** A model writing
+  JSON doubles every LaTeX backslash, and while doing that it doubles the
+  newline escape too, so `\\n` parses to a backslash and an `n`. Every part of
+  the question ran together with a literal "\n" between them, on every surface,
+  including the ones that render maths.
+- **SURFACES THAT PRINT THE TEXT RAW.** Revision Mode, Active Recall, the
+  flashcard faces and lists, the audit pile, the AI history, the quiz editor
+  preview and the mind-map gap prompts put question strings straight into a
+  `<p>`, so `$\text{kJ mol}^{-1}$` arrived as exactly that.
+
+**`cleanText` (`src/lib/questionText.js`) IS THE REPAIR, AND IT RUNS AT THE
+RENDERER.** MarkdownMath and MathText both call it, and so does
+`normaliseQuestion`, so no printer has to remember. A `\n` whose letter run is
+a real command (`\neq`, `\nabla`, `\nu`, `\not`) stays a command; TeX's own
+`\\` is left alone; code is never touched, because an Algorithmics question can
+be ABOUT `\n`. The other direction of the same confusion is repaired too: a
+model that did NOT double a backslash produces valid JSON that parses `\text`
+to a tab then "ext", `\frac` to a form feed, `\beta` to a backspace. Inside
+maths a control character followed by the rest of a WHOLE command name is
+restored — whole, because command names are maximal letter runs. A line break
+is restored only in INLINE maths: display maths is written on its own lines,
+and `$$` then a break then `u = v_0 + at` is a physics student's initial
+velocity, not `\nu`. Idempotent, which is what lets three layers run it.
+
+**MARKDOWNMATH DRAWS A SINGLE LINE BREAK AS A BREAK** (`remarkSoftBreaks`, a
+few lines rather than a dependency). CommonMark folds a lone line ending into a
+space, so a repaired five-part question still read as one paragraph. Every
+MarkdownMath call site renders model text, none renders hard-wrapped app copy,
+which is what makes it safe to turn on everywhere.
+
+**A FULL STOP AFTER A SHORT FORMULA STAYS WITH IT** (`rehypeGluePunctuation`).
+KaTeX draws inline-blocks, a line may break after one, and Chrome takes that
+break even past a word joiner (tried first), so a stem ended with a lone "." on
+the next line. The pair goes in a `nowrap` span ONLY under `GLUE_MAX` visible
+characters, because a long equation that cannot wrap overflows a phone.
+
+**PARTS WRITTEN INTO THE STEM ARE LIFTED AT GENERATION, NEVER AT READ.**
+`liftInlineParts` turns "(a) … (1 mark)\n(b) … (2 marks)" into a real
+multipart question in both quiz generators, before anything is saved. It
+REFUSES rather than guesses: every part must end with its own allocation,
+labels must run a, b, c in order (so a chemistry answer's "(g)" state symbol
+cannot become part g), there must be a stem, and a model answer must split into
+the same labels or be empty. Never at read: a stored question's answer is keyed
+by its bare index, and splitting it would read every attempt back unanswered.
+Old questions get the line breaks and keep their shape.
+
+**REVISION MODE SAT A MULTIPART QUESTION AS ITS STEM ALONE**, "answer the
+following" with nothing following and a model answer of "". `questionAsText`
+(quizSchema.js) is one question as one block: stem, then each part with its
+allocation, an MCQ part with its options. **AND IT MARKED ACTIVE RECALL AGAINST
+THE STUDENT'S OWN ANSWER**: `session.answers` is what the student wrote, and it
+was printed under "Model Answer" and handed to the marker as the key. The
+marker's real model answers are in `ai_feedback`; without one the marker judges
+on accuracy.
+
+`questionText.test.mjs` holds the repair, the lift, the renderers' wiring and a
+scan of every `.jsx` for a model-written field printed as a bare child, with
+two named exemptions asserted to still exist. 31 injections, every one biting
+against a green baseline; the one that was silent at first was the guard's
+fault (the quote repair had two copies and the fixture only reached one), and
+the copies are one helper now. Draw it with `scripts/_floorProbe.jsx?v=qtext`,
+and the real Revision Mode, quiz player and flashcard faces through the network
+harness with the complaint's string as a fixture.
+
 ## Where numbers disagreed, and the five places they still did
 
 **"Can you check the whole site for other places where numbers disagree."** The
@@ -8886,6 +8956,11 @@ student looking free in the nav, the planner and the companion.
   ONE count of what can be sat now. `dayOf` is why `.filter(isDue)` is safe;
   the scan is why nothing counts a pile with `isDue` alone. Draw the deck faces
   with `scripts/_floorProbe.jsx?v=decks` — only a screenshot caught the arity bug
+- `src/lib/questionText.js` + `questionText.test.mjs` — what a model wrote,
+  made readable once: `cleanText` (run by MarkdownMath, MathText and
+  `normaliseQuestion`), `liftInlineParts` (parts written into a stem, lifted at
+  generation only), and the scan that no question or answer is printed raw.
+  Draw it with `scripts/_floorProbe.jsx?v=qtext`
 - `src/lib/quizSchema.js` + `quizSchema.test.mjs`,
   `src/components/quizzes/SourcePanel.jsx` — a question may only refer to
   material it carries: the `stimulus` field, the one rule all four generators

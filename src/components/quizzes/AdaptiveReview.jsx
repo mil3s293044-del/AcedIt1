@@ -179,7 +179,7 @@ Give ONE short, directed hint (2-3 sentences max) that steers them toward the ri
                     </div>
 
                     <div className="p-6 space-y-5">
-                        <div className="text-lg font-semibold text-foreground leading-relaxed"><MathText>{current.question.question}</MathText></div>
+                        <MarkdownMath className="text-lg font-semibold text-foreground leading-relaxed">{current.question.question}</MarkdownMath>
 
                         {current.question.type === 'mcq' ? (
                             <div className="space-y-2.5">

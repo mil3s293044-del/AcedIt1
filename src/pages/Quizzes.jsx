@@ -47,10 +47,12 @@ import { FEATURES, canUseFeature } from "@/lib/tierAccess";
 
 import QuizDeck from "@/components/cards/QuizDeck";
 import { quizDeckStats, quizzingSummary, effectiveScore, RECENT_WINDOW } from "@/lib/quizDeck";
+import { cleanQuestion, liftInlineParts } from "@/lib/questionText";
 import { normaliseQuestions, formatGeneratedParts, referencesMissingSource, normaliseStimulus,
     STIMULUS_RULE, STIMULUS_SCHEMA, DEFAULT_SHORT_MARKS } from "@/lib/quizSchema";
 import QuizPlayer from "../components/quizzes/QuizPlayer";
 import MarkdownMath from "@/components/shared/MarkdownMath";
+import MathText from "@/components/shared/LatexRenderer";
 import PreSit from "@/components/quizzes/PreSit";
 import SitScreen from "@/components/shared/SitScreen";
 import { nextSit } from "@/lib/quizSit";
@@ -601,7 +603,11 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             }
 
             // Format and validate questions — enforce type constraints
-            const formattedQuestions = response.questions
+            // Repaired and, where the model wrote the parts into the stem as
+            // prose, LIFTED into real parts — before anything below reads it.
+            // See questionText.js: a five-part question saved as one short
+            // answer has one box and one mark for all five.
+            const formattedQuestions = response.questions.map((q) => liftInlineParts(cleanQuestion(q)))
                 .map(q => {
                     // A question that came back with real parts is left alone.
                     // Forcing it to "mcq" would strand the parts on a shape
@@ -922,9 +928,14 @@ Return valid JSON only.`,
             // Sort questions: MCQ first, then short answer. Skipped for an
             // extended-response paper, where there are no loose MCQs to hoist
             // and the running order is the order the paper was written in.
-            const sortedQuestions = wasMultipart ? response.questions : response.questions.sort((a, b) => {
-                const aIsMcq = a.type === 'mcq' || a.type !== 'short_answer';
-                const bIsMcq = b.type === 'mcq' || b.type !== 'short_answer';
+            // Repaired, and parts written into a stem lifted, exactly as the
+            // main generator does it — two answers here is how one of them
+            // starts saving questions the other would have fixed.
+            const generated = response.questions.map((q) => liftInlineParts(cleanQuestion(q)));
+            const hasParts = (q) => Array.isArray(q.parts) && q.parts.length > 0;
+            const sortedQuestions = wasMultipart ? generated : generated.sort((a, b) => {
+                const aIsMcq = a.type === 'mcq' || (a.type !== 'short_answer' && !hasParts(a));
+                const bIsMcq = b.type === 'mcq' || (b.type !== 'short_answer' && !hasParts(b));
                 if (aIsMcq && !bIsMcq) return -1;
                 if (!aIsMcq && bIsMcq) return 1;
                 return 0;
@@ -1804,7 +1815,7 @@ Return valid JSON only.`,
                                                     <div className="flex items-start justify-between">
                                                         <div className="flex-1">
                                                             <span className="pill bg-chart-3/10 text-chart-3 mb-2">{q.type === "mcq" ? "Multiple Choice" : "Short Answer"}</span>
-                                                            <p className="text-sm font-medium mt-2">{idx + 1}. {q.question}</p>
+                                                            <p className="text-sm font-medium mt-2">{idx + 1}. <MathText>{q.question}</MathText></p>
                                                         </div>
                                                         <Button
                                                             variant="ghost"

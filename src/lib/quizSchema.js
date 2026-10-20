@@ -27,6 +27,8 @@
  * genuinely multi-part questions use the suffixed form.
  */
 
+import { cleanText, cleanQuestion } from "./questionText.js";
+
 /**
  * Marks a part is worth when it does not say. MCQs are one mark, always.
  *
@@ -99,11 +101,11 @@ function normalisePart(raw, i, total, qIndex) {
 export function normaliseStimulus(raw) {
     if (!raw) return null;
     if (typeof raw === "string") {
-        const content = raw.trim();
+        const content = cleanText(raw).trim();
         return content ? { label: "", content } : null;
     }
     if (typeof raw !== "object") return null;
-    const content = String(raw.content ?? raw.text ?? raw.source ?? "").trim();
+    const content = cleanText(raw.content ?? raw.text ?? raw.source ?? "").trim();
     if (!content) return null;
     return { label: String(raw.label ?? raw.title ?? "").trim(), content };
 }
@@ -116,7 +118,10 @@ export function normaliseStimulus(raw) {
  * parts without special-casing either.
  */
 export function normaliseQuestion(raw, qIndex = 0) {
-    const q = raw && typeof raw === "object" ? raw : {};
+    // What the model wrote, made readable — a literal `\n` between parts, a
+    // LaTeX escape a JSON parse ate. Cleaned, NEVER split: see questionText.js
+    // on why a stored question keeps its shape.
+    const q = raw && typeof raw === "object" ? cleanQuestion(raw) : {};
     const rawParts = Array.isArray(q.parts) ? q.parts.filter(isPart) : [];
     const stimulus = normaliseStimulus(q.stimulus);
 
@@ -154,6 +159,40 @@ export function stimulusText(question) {
     const st = normaliseStimulus(question?.stimulus);
     if (!st) return "";
     return `[${st.label || "Source material"}]\n${st.content}`;
+}
+
+/**
+ * One question as ONE block of text, for a surface that has a single answer
+ * box — Exam Mode pulls questions out of quizzes and sits each as one open
+ * answer. It used to take `q.question`, which on a multipart question is the
+ * STEM ALONE: "Using the data above, answer the following" with nothing
+ * following, and a model answer of "" to mark against.
+ *
+ * Parts are printed the way a paper prints them — label, prompt, allocation —
+ * each on its own line, so the renderer's line breaks lay them out. A part
+ * that is multiple choice carries its options, or it cannot be answered.
+ */
+export function questionAsText(raw, qIndex = 0) {
+    const q = normaliseQuestion(raw, qIndex);
+    if (!q.multipart) {
+        return { text: q.stem, modelAnswer: q.parts[0]?.model_answer || "", marks: q.marks };
+    }
+    const lines = q.parts.map((p) => {
+        const allocation = `(${p.marks} mark${p.marks === 1 ? "" : "s"})`;
+        const options = p.type === "mcq" && Array.isArray(p.options)
+            ? `\n${p.options.map((o, i) => `${String.fromCharCode(65 + i)}. ${o}`).join("\n")}`
+            : "";
+        return `(${p.label}) ${p.prompt} ${allocation}${options}`;
+    });
+    const answers = q.parts.map((p) => {
+        const answer = p.type === "mcq" ? (p.options?.[p.correct_answer] ?? "") : p.model_answer;
+        return answer ? `(${p.label}) ${answer}` : "";
+    }).filter(Boolean);
+    return {
+        text: [q.stem, lines.join("\n")].filter(Boolean).join("\n\n"),
+        modelAnswer: answers.join("\n"),
+        marks: q.marks,
+    };
 }
 
 /** Every question in a quiz, normalised. Returns [] for anything unreadable. */

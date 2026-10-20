@@ -12,7 +12,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useBusy, BUSY } from "@/lib/LiveContext";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { deckCards } from "@/lib/mistakeBank";
-import { normaliseStimulus } from "@/lib/quizSchema";
+import { normaliseStimulus, questionAsText } from "@/lib/quizSchema";
+import MarkdownMath from "@/components/shared/MarkdownMath";
+import MathText from "@/components/shared/LatexRenderer";
 // ONE DENOMINATOR FOR THE WHOLE RESULTS SCREEN. An unmarked written answer is
 // PENDING — neither right nor wrong — and the headline has always divided by
 // `total - pending` while the By Subject bars and the weak-topic list divided
@@ -187,7 +189,11 @@ export default function ExamMode({ userSubjects }) {
 
       (quizzes || []).forEach((quiz) => {
         (quiz.questions || []).forEach((q, i) => {
-          if (!q.question) return;
+          // A multipart question goes in WHOLE: stem, then each part with its
+          // allocation. `q.question` alone is the stem, which put "answer the
+          // following" on the paper with nothing following it.
+          const whole = questionAsText(q, i);
+          if (!whole.text.trim()) return;
           // The SOURCE comes with the question. This screen pulls questions out
           // of quizzes the student already has, so a stimulus question would
           // arrive here stripped of its extract — still saying "Using Source A"
@@ -196,15 +202,23 @@ export default function ExamMode({ userSubjects }) {
           if (q.type === "mcq" && q.options?.length > 0) {
             questions.push({ id: `qz_${quiz.id}_${i}`, type: "mcq", question: q.question, stimulus, options: q.options, correctIndex: q.correct_answer, modelAnswer: q.explanation || q.options?.[q.correct_answer] || "", subject: quiz.subject || "General", topic: quiz.title || "General", source: "Quizzes" });
           } else {
-            questions.push({ id: `qz_${quiz.id}_${i}`, type: "open", question: q.question, stimulus, modelAnswer: q.model_answer || "", subject: quiz.subject || "General", topic: quiz.title || "General", source: "Quizzes" });
+            questions.push({ id: `qz_${quiz.id}_${i}`, type: "open", question: whole.text, stimulus, modelAnswer: whole.modelAnswer, subject: quiz.subject || "General", topic: quiz.title || "General", source: "Quizzes" });
           }
         });
       });
 
       (arSessions || []).forEach((session) => {
+        // `answers` on a session is what the STUDENT wrote. It was used as the
+        // model answer — printed under "Model Answer" and handed to the marker
+        // as the standard — so a wrong answer from last week became the key
+        // this week's was marked against. The marker's own model answers are
+        // in `ai_feedback`; without them the marker judges on accuracy.
+        let marked = [];
+        try { marked = session.ai_feedback ? JSON.parse(session.ai_feedback) : []; } catch { marked = []; }
         (session.questions || []).forEach((q, i) => {
           if (!q) return;
-          questions.push({ id: `ar_${session.id}_${i}`, type: "open", question: q, modelAnswer: session.answers?.[i] || "", subject: session.subject_name || "General", topic: session.topic || "General", source: "Active Recall" });
+          const modelAnswer = Array.isArray(marked) ? (marked[i]?.model_answer || "") : "";
+          questions.push({ id: `ar_${session.id}_${i}`, type: "open", question: q, modelAnswer, subject: session.subject_name || "General", topic: session.topic || "General", source: "Active Recall" });
         });
       });
 
@@ -794,7 +808,7 @@ Return exactly ${openQs.length} results, in order.`,
 
                         <div className="p-6 sm:p-8 space-y-6">
                             <SourcePanel stimulus={q?.stimulus} />
-                            <p className="text-xl sm:text-2xl font-semibold text-foreground leading-relaxed">{q?.question}</p>
+                            <MarkdownMath className="text-xl sm:text-2xl font-semibold text-foreground leading-relaxed">{q?.question}</MarkdownMath>
 
                             {q?.type === "mcq" &&
               <div className="space-y-3">
@@ -808,7 +822,7 @@ Return exactly ${openQs.length} results, in order.`,
                                                 <span className={`w-9 h-9 rounded-xl flex items-center justify-center text-sm font-black flex-shrink-0 transition-all ${sel ? "bg-surface/20 text-white" : "bg-secondary text-muted-foreground group-hover:bg-streak/10 group-hover:text-streak"}`}>
                                                     {String.fromCharCode(65 + i)}
                                                 </span>
-                                                <span className="flex-1">{opt}</span>
+                                                <span className="flex-1"><MathText>{opt}</MathText></span>
                                                 {sel && <Check className="w-4 h-4 flex-shrink-0" />}
                                             </motion.button>);
 
@@ -1101,16 +1115,16 @@ Return exactly ${openQs.length} results, in order.`,
                                                 <span className="text-muted-foreground/50">· {eq.topic}</span>
                                             </div>
                                             <SourcePanel stimulus={eq.stimulus} />
-                                            <p className="font-semibold text-foreground text-sm mb-3 leading-relaxed">{eq.question}</p>
+                                            <MarkdownMath className="font-semibold text-foreground text-sm mb-3 leading-relaxed">{eq.question}</MarkdownMath>
 
                                             {isMCQ &&
                       <div className="space-y-1.5">
                                                     {eq.options.map((opt, oi) =>
                         <div key={oi} className={`text-xs px-3 py-2 rounded-xl font-medium ${oi === eq.correctIndex ? "bg-primary/10 text-primary border border-primary/20" : oi === a.selectedIndex && oi !== eq.correctIndex ? "bg-streak/10 text-streak border border-streak/20" : "text-muted-foreground"}`}>
-                                                            <span className="font-bold mr-2">{oi === eq.correctIndex ? "✓" : oi === a.selectedIndex ? "✗" : String.fromCharCode(65 + oi) + "."}</span>{opt}
+                                                            <span className="font-bold mr-2">{oi === eq.correctIndex ? "✓" : oi === a.selectedIndex ? "✗" : String.fromCharCode(65 + oi) + "."}</span><MathText>{opt}</MathText>
                                                         </div>
                         )}
-                                                    {eq.modelAnswer && <p className="text-xs text-muted-foreground mt-2 pl-2 border-l-2 border-chart-4/40 italic">{eq.modelAnswer}</p>}
+                                                    {eq.modelAnswer && <MarkdownMath className="text-xs text-muted-foreground mt-2 pl-2 border-l-2 border-chart-4/40 italic">{eq.modelAnswer}</MarkdownMath>}
                                                 </div>
                       }
 
@@ -1127,7 +1141,7 @@ Return exactly ${openQs.length} results, in order.`,
                                                     {eq.modelAnswer &&
                         <div className="bg-chart-4/5 rounded-xl p-3 border border-chart-4/20">
                                                             <p className="text-xs text-chart-4 mb-1 font-semibold uppercase tracking-wide">Model Answer</p>
-                                                            <p className="text-sm text-foreground">{eq.modelAnswer}</p>
+                                                            <MarkdownMath className="text-sm text-foreground">{eq.modelAnswer}</MarkdownMath>
                                                         </div>
                         }
                                                     {a.aiVerdict &&
@@ -1135,7 +1149,7 @@ Return exactly ${openQs.length} results, in order.`,
                                                             <p className={`text-xs mb-1 font-semibold uppercase tracking-wide flex items-center gap-1.5 ${AI_VERDICT_CLASSES[a.aiVerdict].text}`}>
                                                                 <Sparkles className="w-3 h-3" /> Examiner: {AI_VERDICT_CLASSES[a.aiVerdict].label}
                                                             </p>
-                                                            <p className="text-sm text-foreground">{a.aiFeedback}</p>
+                                                            <MarkdownMath className="text-sm text-foreground">{a.aiFeedback}</MarkdownMath>
                                                         </div>
                         }
                                                     <div className="flex gap-2">

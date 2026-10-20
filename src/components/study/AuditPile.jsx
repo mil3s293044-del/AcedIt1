@@ -24,6 +24,7 @@ import { ChevronDown, Check, Clock3, RotateCcw, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { colorFor } from "@/components/cards/cardIdentity";
 import { cardState } from "@/lib/due";
+import MathText from "@/components/shared/LatexRenderer";
 
 /** How many individual cards a topic will list before it asks you to scroll. */
 const CARD_PREVIEW = 40;
@@ -140,7 +141,7 @@ function CardRow({ card, today, onKnown, onRestore, busy }) {
                 title={style.label} />
             <div className="flex-1 min-w-0">
                 <p className={`text-sm leading-snug ${isKnown ? "text-muted-foreground line-through" : "text-foreground"}`}>
-                    {card.question}
+                    <MathText>{card.question}</MathText>
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                     {style.label}
