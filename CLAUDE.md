@@ -5769,6 +5769,163 @@ the old unit and were repointed rather than loosened.
 rewrites history, which is the rule `sideLabels` already keeps about yes and no:
 only the LABEL moves, and every position already taken still reads back.
 
+## Compete: one slate, a season ladder, and no betting against yourself
+
+**"Keep improving Compete — its idea, animations and rewards. A hallmark of the
+ultra-competitive, but no insider trading and no extreme gambling
+connotations."** The floor was a board of private facts ranked by nothing, so a
+week had no ending and a good forecaster had nowhere to be seen being good.
+`src/lib/slate.js` is the model, imported by `server.mjs`;
+`slate.test.mjs` holds it (51 checks, 42 injections, every one biting).
+
+### The slate: the same questions for everybody
+
+A short card of questions the whole room calls, the way a footy-tipping comp
+hands every entrant the same round. Answering the same questions is what makes
+it a COMPETITION: two students who called one slate can be compared, so a week
+has a podium. Two moves give it more questions without a flood:
+
+- **A CARD CAN HOLD SEVERAL ANSWERS** (`EventCard`). "Who tops this week's
+  League?" is one card with three names and "someone else". Each answer is its
+  own binary market (`meta.group`), so pricing, payout and settlement are the
+  ones every question already uses.
+- **TWO DROPS** (`WAVES`): Monday opens the slate, Wednesday adds what only a
+  half-played week can ask ("on pace to beat last week?", "Wednesday's League
+  leader: still on top Sunday?").
+
+What is on it: the League (front-runners, last week's winner holding on, the
+Wednesday leader), cohort pace (hours as four brackets cut at the room's own
+quartiles, the most-studied subject, half the board on five days), the two most
+even head-to-heads, and SAC season ("4 people have a Methods assessment coming
+up. Will 3+ study Methods before Friday?").
+
+**EVERY SLATE ROW IS A `cohort` MARKET UNDERNEATH**, distinguished by
+`meta.metric`, so no migration was needed — the kind constraint from 0037
+already allows it. The slate never counts against the floor's `BOARD_TARGET`
+(`pickBoard` takes it out first), and the featured strip is gone: two answers
+to "questions the whole room can argue about" on one screen.
+
+### A card of answers is priced as ONE card
+
+Priced one row at a time, a card read 53% + 27% + 12% + 42% = 134%, which any
+student who adds it up reads as broken. `groupPrices` reads every call as a
+view of the WHOLE card — its probability for that answer, the rest shared
+across the others in proportion to where they opened — and blends those with
+the opening prices, so the card always sums to exactly 100% and calling one
+name up pulls the others down. **Only the price is pooled**: a call is still
+scored on its own row by the same proper rule. The server scores a call against
+the pooled price (`takePosition`), the board prices through `withGroupPrices`,
+the single-market page is handed `group_price`, and the commit preview moves
+the whole card.
+
+### Insider trading: two holes, both closed on the server
+
+- **NO BETTING AGAINST YOURSELF** (`sideBlockReason`). A student could take NO
+  on their own study week and then not study — the oldest insider trade there
+  is. On any question your own study decides you may only back yourself; on a
+  card of names that includes yours, only your own row. `selfRole` reads the
+  raw row (with `meta.emails`, the names on the card) and the payload carries
+  only `about_me` / `own_outcome`, computed BEFORE `publicMeta` strips the
+  names. The commit sheet greys the refused side with the reason.
+- **LAST CALL BEFORE THE ANSWER IS VISIBLE** (`lastCallOf`). A weekly question
+  traded until Sunday night, by which time the League, Ranked and every group's
+  week had published most of its answer — a near-certainty bought at a stale
+  price. Weekly questions lock at Friday 08:00 UTC (6pm Melbourne in winter,
+  7pm in summer), prep two days short of its due date, a SAC at its own close.
+  It derives from `meta.period` when a row has no `meta.last_call`, so it
+  reached every open market the day it shipped. The card says "last call 2d 4h"
+  and then "Locked", and stays up so the room can watch it resolve.
+
+And **early calls count for more** (`earlyWeight`, 1 at the open down to 0.5 at
+last call) — on the LADDER only. The weight is fixed at the moment of the call,
+so it changes nothing about which answer is the honest one to give.
+
+### The ladder ranks skill, never credits
+
+A **read point** is the improvement on the room's own forecast at the price you
+called it — the payout's own `skill`, before the stake multiplies it — times
+the early weight. So committing more cannot buy a division, and agreeing with
+the room earns exactly nothing. Seasons are four weeks counted from
+`SEASON_EPOCH` (a Monday); a call counts toward its question's own week
+(`pointsWeek`), never the week it lazily settled in.
+
+**Five divisions, and each is a card**: Rookie (10), Scout (J), Analyst (Q),
+Strategist (K), Oracle (A). An Ace is earned, so nobody starts near it. The
+names are a forecaster's; the test refuses shark/whale/roller/punter.
+`SeasonStrip` leads the floor with the division — a balance that leads is a
+bankroll — and credits come second.
+
+**A season leaves something behind**, written once per season on the student's
+own next read (`settleSeasonAward`, keyed on the season index): from Analyst up
+the division, and from Oracle the `back-oracle` card back, added to what they
+own and shown on the store's **Earned** shelf. Earned only: it is in
+`BACK_SKINS` with `earned: true` and the test asserts it is never in the store's
+catalogue.
+
+### Sunday: the slate turns over
+
+`SlateResults`, once per device per week (`slateResultsDue`, blocked storage
+counts as seen), marked seen on arrival. The cards turn over one at a time with
+each answer, your call and its points; then the podium deals through the board
+kit's own `CardPodium`; then your line — read points, how many you finished
+ahead of (a band, never a position), your division. **The slate's rows are
+kept out of the per-market `SettlementReveal`**, or a student sat through eleven
+settlement cards and then the results screen saying it again. It claims the Ace
+stage as `"results"` and draws no Ace: the launcher stood over its scrim.
+
+### The anti-gambling pass
+
+- **No odds anywhere.** `1.34×` under each side and `0.71× back` under each
+  outcome were honest ceilings and still a betting slip. Each end of the bar now
+  says who is calling it; what a call is worth in credits is said once, in the
+  commit sheet, against a commitment the student chose. The test scans every
+  floor file for `multiplierLabel`, `returns(` and a printed `×`.
+- **No pool, no amounts.** "300 in" was a pot. The tape, the ticker and the chart
+  readout name the CALL ("Ava called yes"), never what it cost.
+- **The vocabulary is finished**: Credits, Committed, Make your call, "called",
+  targets rather than lines, and a neutral glyph where the coins were.
+
+### The animation is the market
+
+- **The commit moment.** Before the press, the sheet shows where your call
+  moves the room ("42% → 45%") and the card's bar draws it as a tick. After it,
+  the bar moves there and the call STAMPS onto the card — once, never on a reload
+  (`useJustCalled` seeds from the first paint).
+- **The live floor.** A ticker of calls runs under the season strip (a CSS
+  animation, so no renders; pauses on hover; still under reduced motion), and a
+  price bar flares where it landed when somebody else calls (`floor-price-pulse`,
+  keyed to a CHANGE, never to arrival).
+- **`AceDeal` draws the new regions**: the season strip and the ticker's lane,
+  or the board drops when they arrive.
+
+### The card back in the dark
+
+The default `CardBack` drew the deck colour at 16% over `--surface`, which on
+dark is navy a few points off the page — the dashboard's face-down card read as
+blank. It publishes its colour at several strengths (`--back-*`) and
+`.card-back` in index.css switches them by theme: twice the colour on the
+ground, weave and rim, a medallion lit from its centre, and a glow in the deck's
+own colour, because a black shadow on a near-black page is no shadow. Only the
+DERIVED back: a bought skin is literal ink, a caller's own palette (the floor)
+has already chosen, and a back inside `.theme-locked-light` keeps white stock.
+`scripts/_floorProbe.jsx?v=darkbacks` draws every deck colour, a lying-under
+back, a locked-light one and a skin.
+
+### Not verified here, and two things to know
+
+None of this ran against the real database (no service key in the container).
+The server boots, every column it names passes `dbColumns.test.mjs`, and the
+real page was drawn through the network harness. **The League questions need
+`LEAGUES_SCALE_MODE === "global"`** (one table to top); tiered mode mints none.
+**And the slate only names and counts students `mayBeMarketSubject` allows**,
+which is adults and opted-in students, so on a mostly under-18 roster it will be
+thin until the policy on aggregate questions is decided — the same roster rule
+every other minted market already follows, left as it was on purpose.
+
+Draw it with `scripts/_floorProbe.jsx?v=slate` (add `&lock=1` for the locked
+state) and `?v=slateresults`, both themes, 390 and reduced motion; and the real
+`/Competitions` through the network harness, which now stubs `getMarkets`.
+
 ## Age, consent, and the policies the product did not implement
 
 **The Privacy Policy and Terms have promised guardian consent for months.**
@@ -8838,6 +8995,11 @@ student looking free in the nav, the planner and the companion.
   Draw it with `scripts/_floorProbe.jsx?v=tools`, which carries the locked and
   empty states, and which wraps the welcome in `<Console>` because its tokens
   are blank outside the room
+- `src/lib/slate.js` + `slate.test.mjs`, `src/components/market/SlateSection.jsx`,
+  `EventCard.jsx`, `SeasonStrip.jsx`, `SlateResults.jsx`, `Ticker.jsx` — the
+  week's shared slate (two drops, cards of answers priced together), last call,
+  read points, the four-week season ladder of card divisions, the Sunday
+  results, and the self-only rule (`selfRole` / `sideBlockReason` in market.js)
 - `src/components/market/StorePreview.jsx` — the thing you are about to buy,
   drawn with the component that draws it when it is worn. A crest at both the
   size you choose it and the size you wear it; the prank Preview plays through

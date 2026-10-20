@@ -53,7 +53,18 @@ import {
   pickBoard, BOARD_TARGET,
   markPercent, priorForLine,
   YES as MKT_YES, NO as MKT_NO, CRED_WEEKLY_GRANT, CRED_BALANCE_CAP,
+  selfRole as marketSelfRole, sideBlockReason as marketSideBlock, groupPrices,
 } from "./src/lib/market.js";
+// The slate, the clock and the ladder — the same module the floor reads, so
+// last call, the drops and the division thresholds cannot disagree between the
+// screen and the server that enforces them.
+import {
+  weekKeyUTC, weekLastCall, lastCallOf as marketLastCall, wavesDue as slateWavesDue,
+  waveOpensAt, readPoints, seasonOf, pointsWeek, seasonAward,
+  contenderPriors, pacePrior, bracketsFrom, inBracket, subjectMinutes,
+  subjectKey, sacSeasonGroups, slateTable, aheadOf, slateOf, SUBJECT_MIN_PEOPLE,
+  SEASON_WEEKS,
+} from "./src/lib/slate.js";
 import { ACHIEVEMENTS, ACHIEVEMENT_BY_CODE, evaluate as evaluateAchievement }
   from "./src/lib/achievements.js";
 // The same feature map the UI reads. Ace used to be told nothing about
@@ -9319,24 +9330,29 @@ async function boardQuizScores(email, attempts) {
  * Aggregate queries, not per-member ones: three reads plus one quiz lookup for
  * the whole group, however many are in it.
  */
-async function leagueStandingRows(members = [], weekStartStr, now = new Date()) {
+async function leagueStandingRows(members = [], weekStartStr, now = new Date(), weekEndStr = null) {
   const emails = members.map(m => m.user_email).filter(Boolean);
   if (!emails.length) return [];
 
+  // `weekEndStr` bounds a week that has FINISHED. The live board only ever
+  // asks about the current week, where "from Monday on" is the same thing as
+  // "this week" — but a slate question settling last week's League on a
+  // Tuesday would otherwise count Monday and Tuesday of the week after.
+  const upTo = (q) => (weekEndStr ? q.lte('date', weekEndStr) : q);
   const [pRes, sessRes, techRes, quizRes] = await Promise.all([
     supabaseAdmin.from('user_profiles')
       // `extra` carries `league_award` — last week's finish, which is what a
       // crest beside a name is. One select rather than a second query per row.
       .select('created_by, username, full_name, streak_days, total_xp, extra').in('created_by', emails),
-    supabaseAdmin.from('study_sessions')
+    upTo(supabaseAdmin.from('study_sessions')
       .select('created_by, duration_minutes, date, created_date, extra')
-      .in('created_by', emails).gte('date', weekStartStr),
-    supabaseAdmin.from('study_techniques')
+      .in('created_by', emails).gte('date', weekStartStr)),
+    upTo(supabaseAdmin.from('study_techniques')
       .select('created_by, session_duration, date, created_date, extra')
-      .in('created_by', emails).gte('date', weekStartStr),
-    supabaseAdmin.from('quiz_attempts')
+      .in('created_by', emails).gte('date', weekStartStr)),
+    upTo(supabaseAdmin.from('quiz_attempts')
       .select('created_by, quiz_id, score, adjusted_score, date, created_date, extra')
-      .in('created_by', emails).gte('date', weekStartStr),
+      .in('created_by', emails).gte('date', weekStartStr)),
   ]);
   const byEmail = Object.fromEntries((pRes.data || []).map(p => [p.created_by, p]));
 
@@ -10244,12 +10260,10 @@ const MARKET_MIN_OBS = 3;
 const MARKET_HISTORY_WEEKS = 10;
 
 /** Monday of the week containing `d`, as a date key. */
-function marketWeekKey(d = new Date()) {
-  const x = new Date(d);
-  const day = x.getUTCDay();
-  x.setUTCDate(x.getUTCDate() - ((day + 6) % 7));
-  return x.toISOString().slice(0, 10);
-}
+// The slate's week, not a second copy of it: last call and the drops are
+// counted from this Monday, and two definitions of one Monday is the mirror
+// this codebase keeps deleting.
+const marketWeekKey = weekKeyUTC;
 
 /** Sunday 23:59:59 UTC of the week containing `d`. */
 function marketWeekClose(weekKey) {
@@ -10586,6 +10600,17 @@ async function mintWeeklyMarkets(members, now = new Date()) {
 
   // ── Head to head ────────────────────────────────────────────────────────
   const { pairs, solos } = pairUpRoom(live, per, week);
+  // THE CLOSEST RIVALRIES GO ON THE SLATE: the pairs whose records are most
+  // alike, which are the ones nobody can call without thinking. A pair with
+  // too little history to compare is never "close" — it is unknown.
+  const gap = ([a, b]) => Math.abs((per[a.email]?.hours ?? 0.5) - (per[b.email]?.hours ?? 0.5));
+  const rivalries = new Set(pairs
+    .filter(([a, b]) => !thin(a.email) && !thin(b.email))
+    .sort((x, y) => gap(x) - gap(y))
+    .slice(0, SLATE_RIVALRIES)
+    .map(([a, b]) => pairRef(a.email, b.email)));
+  const rivalryOrder = [...rivalries];
+  const lastCallIso = new Date(weekLastCall(week)).toISOString();
   for (const [a, b] of pairs) {
     const ref = `vs:${pairRef(a.email, b.email)}`;
     if (!wanted("versus", a.email, week, ref)) continue;
@@ -10601,6 +10626,10 @@ async function mintWeeklyMarkets(members, now = new Date()) {
       meta: {
         period: week, ref, names: [an, bn], emails: [a.email, b.email],
         thin: thin(a.email) || thin(b.email),
+        ...(rivalries.has(pairRef(a.email, b.email)) ? {
+          slate: true, wave: 1, order: 5 + rivalryOrder.indexOf(pairRef(a.email, b.email)),
+          last_call: lastCallIso,
+        } : {}),
       },
     });
   }
@@ -10659,6 +10688,7 @@ async function mintWeeklyMarkets(members, now = new Date()) {
         meta: {
           period: week, ref, metric: "half_days", target, day_target: dayTarget,
           roster, thin: hits.length < MARKET_MIN_OBS,
+          slate: true, wave: 1, order: 4, last_call: lastCallIso,
         },
       });
     }
@@ -10667,7 +10697,9 @@ async function mintWeeklyMarkets(members, now = new Date()) {
     // mean, or one cram week before a SAC block sets the bar for the term —
     // the lesson WeekPace already records about a student's own baseline.
     const totals = pastWeeks.map(([, m]) => sliceOf(m, (v) => v.minutes)).filter((t) => t > 0);
-    if (totals.length >= MARKET_MIN_OBS) {
+    // Once there is enough history for the slate's four brackets this is the
+    // same question asked twice, so it stands down for them.
+    if (totals.length >= MARKET_MIN_OBS && !bracketsFrom(totals)) {
       const sorted = [...totals].sort((x, y) => x - y);
       const median = sorted[Math.floor(sorted.length / 2)];
       const target = Math.max(60, Math.round(median / 60) * 60);
@@ -10679,7 +10711,10 @@ async function mintWeeklyMarkets(members, now = new Date()) {
           title: `Will the board log ${Math.round(target / 60)}+ hours between them this week?`,
           resolves_note: "Every active person's countable minutes, added up on Sunday night.",
           prior: totals.filter((t) => t >= target).length / totals.length,
-          meta: { period: week, ref, metric: "total_minutes", target, roster, thin: false },
+          meta: {
+            period: week, ref, metric: "total_minutes", target, roster, thin: false,
+            slate: true, wave: 1, order: 2, last_call: lastCallIso,
+          },
         });
       }
     }
@@ -10707,13 +10742,23 @@ async function mintWeeklyMarkets(members, now = new Date()) {
           title: `Will anyone log ${Math.round(pick.target / 60)}+ hours this week?`,
           resolves_note: "The single biggest countable week on the board, whoever it turns out to be.",
           prior: pick.prior,
-          meta: { period: week, ref, target: pick.target, roster, thin: pick.thin },
+          meta: {
+            period: week, ref, target: pick.target, roster, thin: pick.thin,
+            slate: true, wave: 1, order: 9, last_call: lastCallIso,
+          },
         });
       }
     }
   }
 
   rows.push(...await mintPrepLines(live, per, week, now, wanted));
+  try {
+    rows.push(...await mintSlate({ members, roster, byWeek, week, now, wanted, base }));
+  } catch (e) {
+    // The slate is a card on top of the floor; a query it depends on failing
+    // must not cost the floor its week.
+    console.warn("[markets] slate mint failed:", e?.message || e);
+  }
 
   // ─── THE BOARD HAS A SIZE, AND IT IS ABOUT TRADERS ────────────────────
   // Minting makes one question per active student, so the board grew with the
@@ -10724,7 +10769,10 @@ async function mintWeeklyMarkets(members, now = new Date()) {
   // ROTATES the rest weekly so every student still gets a turn on the floor.
   // See src/lib/market.js — it is pure and tested because it decides who
   // appears on a social board.
-  const picked = pickBoard(rows, { weekKey: week, existing: (existing || []).length });
+  // The slate does not count against the floor's size — on the way in here
+  // (pickBoard) or in what is already open.
+  const openFloor = (existing || []).filter((r) => !r.meta?.slate).length;
+  const picked = pickBoard(rows, { weekKey: week, existing: openFloor });
   if (!picked.length) return 0;
   // Conflict on the dedupe index is the expected outcome of a race, not an
   // error worth failing a board load over.
@@ -10811,6 +10859,311 @@ async function mintPrepLines(live, per, week, now, wanted) {
       },
     });
     if (rows.length >= MARKET_PREP_MAX) break;
+  }
+  return rows;
+}
+
+// ─── The slate ──────────────────────────────────────────────────────────────
+//
+// The week's shared card: the same questions for everybody, so a week can have
+// a podium. Minted in two drops (Monday, Wednesday) through the same `wanted`
+// dedupe as everything else, so a second visit is a no-op and a student who
+// first opens the floor on Thursday still gets both drops. Every row is a
+// `cohort` market underneath — a card of several answers is several binary
+// markets sharing `meta.group` — so pricing, payout and settlement are the
+// ones every other question uses. See src/lib/slate.js.
+
+/** How many front-runners a "who tops the League" card names. */
+const SLATE_CONTENDERS = 3;
+/** Head-to-heads lifted onto the slate: the most even ones. */
+const SLATE_RIVALRIES = 2;
+/** SAC-season questions at most. */
+const SLATE_SAC_MAX = 2;
+/** A League question needs a League worth asking about. */
+const SLATE_LEAGUE_MIN = 4;
+/** What "another subject" opens at on the top-subject card. */
+const SLATE_SUBJECT_FIELD = 0.2;
+
+const lowerEmail = (e) => String(e || "").toLowerCase();
+const dayAfter = (key, n) =>
+  new Date(Date.parse(`${key}T00:00:00Z`) + n * 24 * 3600e3).toISOString().slice(0, 10);
+
+/**
+ * The League table for one week, best first. Bounded to the week, so a table
+ * read on Tuesday about last week counts last week and nothing after it.
+ * Global mode only: in tiered mode "the League" is several tables, and a
+ * question about which of them anybody tops has no single answer.
+ */
+async function leagueTableFor(week, now = new Date()) {
+  if (LEAGUES_SCALE_MODE !== "global") return [];
+  const { data: mems, error } = await supabaseAdmin.from("league_memberships")
+    .select("user_email, weekly_xp, is_anonymous").eq("week_start", week).limit(1000);
+  if (error || !mems?.length) return [];
+  const end = weekEndKey(week);
+  const endAt = new Date(`${end}T23:59:59Z`);
+  const scored = await leagueStandingRows(mems, week, now < endAt ? now : endAt, end);
+  return scored.map((x) => ({
+    email: lowerEmail(x.m.user_email),
+    score: Number(x.cs?.total) || 0,
+    anonymous: !!x.m.is_anonymous,
+  }));
+}
+
+/** Study rows with their SUBJECT, for the questions that are about one. */
+async function marketSubjectRows(emails, from, to) {
+  const list = (Array.isArray(emails) ? emails : [emails]).filter(Boolean);
+  if (!list.length) return [];
+  const [sess, tech] = await Promise.all([
+    supabaseAdmin.from("study_sessions")
+      .select("created_by, duration_minutes, date, created_date, extra, subject")
+      .in("created_by", list).gte("date", from).lte("date", to),
+    supabaseAdmin.from("study_techniques")
+      .select("created_by, session_duration, date, created_date, extra, subject")
+      .in("created_by", list).gte("date", from).lte("date", to),
+  ]);
+  const out = [];
+  (sess.data || []).forEach((r) =>
+    out.push({ ...studyRowFor(r, "duration_minutes"), email: r.created_by, subject: r.subject }));
+  (tech.data || []).forEach((r) =>
+    out.push({ ...studyRowFor(r, "session_duration"), email: r.created_by, subject: r.subject }));
+  return out;
+}
+
+/** Countable minutes per subject over a week, every person-day capped whole. */
+async function subjectWeek(emails, week, at) {
+  const rows = await marketSubjectRows(emails, week, weekEndKey(week));
+  return subjectMinutes(rows, (list) => countableStudyMinutes(list, at));
+}
+
+/**
+ * Mint the drops that are due. Returns rows for `mintWeeklyMarkets` to insert
+ * alongside the floor's own, so one insert carries the lot.
+ *
+ * WHO MAY BE NAMED is decided twice and both are required: `members` arrives
+ * already filtered through `mayBeMarketSubject` (no minor is a subject by
+ * default), and a student who has chosen to be anonymous on the boards is
+ * never written onto a card of names — the League table would otherwise
+ * publish, as a question, exactly the placing they asked it to hide.
+ */
+async function mintSlate({ members, roster, byWeek, week, now, wanted, base }) {
+  const rows = [];
+  const due = slateWavesDue(now.getTime(), week);
+  if (!due.length || !roster.length) return rows;
+
+  const lastCall = new Date(weekLastCall(week)).toISOString();
+  const slateMeta = (wave, order, extra = {}) => ({
+    period: week, slate: true, wave, order, last_call: lastCall, ...extra,
+  });
+  const byEmail = new Map(members.map((m) => [lowerEmail(m.email), m]));
+  const eligible = (email) => {
+    const m = byEmail.get(lowerEmail(email));
+    return m && !m.anonymous ? m : null;
+  };
+  const lastWeek = dayAfter(week, -7);
+  const lastWeekEnd = new Date(`${weekEndKey(lastWeek)}T23:59:59Z`);
+  const rosterTotal = (wk) => {
+    const m = byWeek.get(wk);
+    if (!m) return 0;
+    let n = 0;
+    roster.forEach((e) => { n += m.get(e)?.minutes || 0; });
+    return n;
+  };
+
+  // ════ Monday ════════════════════════════════════════════════════════════
+  if (due.includes(1)) {
+    const opens = new Date(waveOpensAt(week, 1)).toISOString();
+
+    // ── Who tops the League, and does last week's winner hold on ────────
+    const table = await leagueTableFor(lastWeek, now);
+    if (table.length >= SLATE_LEAGUE_MIN) {
+      const named = table.filter((t) => !t.anonymous && eligible(t.email)).slice(0, SLATE_CONTENDERS);
+      if (named.length >= 2) {
+        const { contenders, field } = contenderPriors(named);
+        const group = `league-top:${week}`;
+        const groupTitle = "Who tops this week's League?";
+        const emails = named.map((c) => c.email);
+        contenders.forEach((c, i) => {
+          const m = eligible(c.email);
+          const first = firstNameOf(m.name, m.email);
+          const ref = `top:${pairRef(c.email, group)}`;
+          if (!wanted("cohort", m.email, week, ref)) return;
+          rows.push({
+            ...base, kind: "cohort", opens_at: opens,
+            subject_email: m.email, subject_name: m.name || null,
+            title: `Will ${first} top this week's League?`,
+            resolves_note: "On the League's own table when the week ends.",
+            prior: c.prior,
+            meta: slateMeta(1, 0, {
+              ref, metric: "league_top", group, group_title: groupTitle,
+              outcome: first, outcome_order: i, self_only: true, emails,
+            }),
+          });
+        });
+        if (wanted("cohort", MARKET_BOARD, week, "top:field")) {
+          rows.push({
+            ...base, kind: "cohort", opens_at: opens,
+            subject_email: MARKET_BOARD, subject_name: null,
+            title: "Will someone else top this week's League?",
+            resolves_note: "Anybody but the names above, on the League's own table when the week ends.",
+            prior: field,
+            meta: slateMeta(1, 0, {
+              ref: "top:field", metric: "league_top", group, group_title: groupTitle,
+              outcome: "Someone else", outcome_order: named.length, self_only: true, emails,
+            }),
+          });
+        }
+      }
+      const champ = table[0];
+      const holder = champ && !champ.anonymous ? eligible(champ.email) : null;
+      if (holder && wanted("cohort", holder.email, week, "hold")) {
+        const first = firstNameOf(holder.name, holder.email);
+        rows.push({
+          ...base, kind: "cohort", opens_at: opens,
+          subject_email: holder.email, subject_name: holder.name || null,
+          title: `${first} won last week's League. Top 3 again this week?`,
+          resolves_note: "On the League's own table when the week ends.",
+          prior: 0.5,
+          meta: slateMeta(1, 1, {
+            ref: "hold", metric: "league_hold", self_only: true, emails: [holder.email], thin: true,
+          }),
+        });
+      }
+    }
+
+    // ── How many hours will the board log, as four brackets ─────────────
+    const pastTotals = [...byWeek.keys()].filter((wk) => wk !== week).map(rosterTotal);
+    const brackets = roster.length >= 4 ? bracketsFrom(pastTotals) : null;
+    if (brackets) {
+      const group = `hours-bracket:${week}`;
+      brackets.forEach((b, i) => {
+        const ref = `bracket-${i}`;
+        if (!wanted("cohort", MARKET_BOARD, week, ref)) return;
+        rows.push({
+          ...base, kind: "cohort", opens_at: opens,
+          subject_email: MARKET_BOARD, subject_name: null,
+          title: `Will the board log ${b.label.replace(/^Under/, "under")} this week?`,
+          resolves_note: "Every active person's countable minutes, added up when the week ends.",
+          prior: b.prior,
+          meta: slateMeta(1, 2, {
+            ref, metric: "total_bracket", lo: b.lo, hi: b.hi, group,
+            group_title: "How many hours will the board log this week?",
+            outcome: b.label, outcome_order: i, roster,
+          }),
+        });
+      });
+    }
+
+    // ── Which subject gets the most study ────────────────────────────────
+    // Only subjects several people study are named — see SUBJECT_MIN_PEOPLE.
+    const lastBy = await subjectWeek(roster, lastWeek, lastWeekEnd);
+    const top = [...lastBy.values()]
+      .filter((x) => x.minutes > 0 && x.people >= SUBJECT_MIN_PEOPLE)
+      .sort((a, b) => b.minutes - a.minutes).slice(0, 3);
+    if (top.length >= 2) {
+      const group = `top-subject:${week}`;
+      const groupTitle = "Which subject gets the most study this week?";
+      const total = top.reduce((sum, x) => sum + x.minutes, 0);
+      const keys = top.map((x) => x.key);
+      top.forEach((t, i) => {
+        const ref = `subject:${t.key.slice(0, 40)}`;
+        if (!wanted("cohort", MARKET_BOARD, week, ref)) return;
+        rows.push({
+          ...base, kind: "cohort", opens_at: opens,
+          subject_email: MARKET_BOARD, subject_name: null,
+          title: `Will ${t.label} get the most study time this week?`,
+          resolves_note: "Countable minutes per subject across the board, when the week ends.",
+          prior: Math.min(0.7, Math.max(0.05, (1 - SLATE_SUBJECT_FIELD) * (t.minutes / total))),
+          meta: slateMeta(1, 3, {
+            ref, metric: "top_subject", subject_key: t.key, subject_keys: keys, group,
+            group_title: groupTitle, outcome: t.label, outcome_order: i, roster,
+          }),
+        });
+      });
+      if (wanted("cohort", MARKET_BOARD, week, "subject:field")) {
+        rows.push({
+          ...base, kind: "cohort", opens_at: opens,
+          subject_email: MARKET_BOARD, subject_name: null,
+          title: "Will another subject get the most study time this week?",
+          resolves_note: "Countable minutes per subject across the board, when the week ends.",
+          prior: SLATE_SUBJECT_FIELD,
+          meta: slateMeta(1, 3, {
+            ref: "subject:field", metric: "top_subject", subject_key: null, subject_keys: keys,
+            group, group_title: groupTitle, outcome: "Another subject", outcome_order: top.length, roster,
+          }),
+        });
+      }
+    }
+
+    // ── SAC season: a class, never a handful of names ───────────────────
+    const from = dayAfter(now.toISOString().slice(0, 10), 3);
+    const to = dayAfter(now.toISOString().slice(0, 10), 21);
+    const { data: sacs } = await supabaseAdmin.from("subject_assessments")
+      .select("created_by, subject_name, due_date, is_completed")
+      .in("created_by", roster).gte("due_date", from).lte("due_date", to)
+      .eq("is_completed", false).limit(500);
+    sacSeasonGroups(sacs || []).slice(0, SLATE_SAC_MAX).forEach((g, i) => {
+      const n = g.emails.length;
+      const target = Math.max(2, Math.ceil(n * 0.6));
+      const ref = `sac-season:${g.key.slice(0, 40)}`;
+      if (!wanted("cohort", MARKET_BOARD, week, ref)) return;
+      rows.push({
+        ...base, kind: "cohort", opens_at: opens,
+        subject_email: MARKET_BOARD, subject_name: null,
+        title: `${n} people have a ${g.label} assessment coming up. Will ${target}+ of them study ${g.label} before Friday?`,
+        resolves_note: `Counted from study logged against ${g.label}, Monday to Friday.`,
+        prior: 0.5,
+        meta: slateMeta(1, 7 + i, {
+          ref, metric: "sac_prep", subject_key: g.key, subject_label: g.label,
+          target, roster: g.emails, thin: true,
+        }),
+      });
+    });
+  }
+
+  // ════ Wednesday ═════════════════════════════════════════════════════════
+  if (due.includes(2)) {
+    const opens = new Date(waveOpensAt(week, 2)).toISOString();
+
+    // ── On pace to beat last week? Priced off Monday and Tuesday ─────────
+    const lastTotal = rosterTotal(lastWeek);
+    if (roster.length >= 4 && lastTotal > 0 && wanted("cohort", MARKET_BOARD, week, "pace")) {
+      const [thisRows, lastRows] = await Promise.all([
+        marketRowsBetween(roster, week, dayAfter(week, 1)),
+        marketRowsBetween(roster, lastWeek, dayAfter(lastWeek, 1)),
+      ]);
+      const lastTue = new Date(`${dayAfter(lastWeek, 1)}T23:59:59Z`);
+      let soFar = 0;
+      let lastSoFar = 0;
+      thisRows.forEach((r) => { soFar += countableStudyMinutes(r, now); });
+      lastRows.forEach((r) => { lastSoFar += countableStudyMinutes(r, lastTue); });
+      rows.push({
+        ...base, kind: "cohort", opens_at: opens,
+        subject_email: MARKET_BOARD, subject_name: null,
+        title: "Is the board on pace to out-study last week?",
+        resolves_note: `Every active person's countable minutes against last week's ${Math.round(lastTotal / 60)}h, when the week ends.`,
+        prior: pacePrior(soFar, lastSoFar),
+        meta: slateMeta(2, 0, { ref: "pace", metric: "beat_last_week", target: lastTotal, roster }),
+      });
+    }
+
+    // ── Wednesday's League leader: still there on Sunday? ───────────────
+    const nowTable = await leagueTableFor(week, now);
+    const lead = nowTable[0];
+    const leader = nowTable.length >= SLATE_LEAGUE_MIN && lead && lead.score > 0 && !lead.anonymous
+      ? eligible(lead.email) : null;
+    if (leader && wanted("cohort", leader.email, week, "lead")) {
+      const first = firstNameOf(leader.name, leader.email);
+      rows.push({
+        ...base, kind: "cohort", opens_at: opens,
+        subject_email: leader.email, subject_name: leader.name || null,
+        title: `${first} leads the League on Wednesday. Still on top come Sunday?`,
+        resolves_note: "On the League's own table when the week ends.",
+        prior: 0.5,
+        meta: slateMeta(2, 1, {
+          ref: "lead", metric: "league_lead", self_only: true, emails: [leader.email], thin: true,
+        }),
+      });
+    }
   }
   return rows;
 }
@@ -10919,11 +11272,60 @@ async function resolveMarketOutcome(market, now = new Date()) {
   // who is "active" at settlement would change the denominator after every
   // position was taken against the old one, which is the repricing this
   // codebase refuses everywhere else.
+  // ── The League, on the slate ────────────────────────────────────────────
+  // Read off the League's own table for the week, bounded to it. A week with
+  // no table at all asked a question nobody could answer, so it voids.
+  if (market.kind === "cohort" && ["league_top", "league_hold", "league_lead"].includes(meta.metric)) {
+    if (!past) return null;
+    if (!meta.period) return null;
+    const table = await leagueTableFor(meta.period, now);
+    if (!table.length) return "void";
+    const winner = table[0].email;
+    const subject = lowerEmail(market.subject_email);
+    if (meta.metric === "league_top") {
+      if (subject === MARKET_BOARD) return !(meta.emails || []).map(lowerEmail).includes(winner);
+      return winner === subject;
+    }
+    if (meta.metric === "league_hold") return table.slice(0, 3).some((t) => t.email === subject);
+    return winner === subject;
+  }
+
   if (market.kind === "cohort" || market.kind === "longshot") {
     if (!past) return null;
     const roster = Array.isArray(meta.roster) ? meta.roster : [];
     if (!roster.length || !meta.period) return null;
+
+    // ── SAC season: studied the subject before Friday ─────────────────────
+    if (meta.metric === "sac_prep") {
+      const rows = await marketSubjectRows(roster, meta.period, dayAfter(meta.period, 4));
+      const studied = new Set(rows
+        .filter((r) => r.minutes > 0 && subjectKey(r.subject) === meta.subject_key)
+        .map((r) => lowerEmail(r.email)));
+      return studied.size >= Number(meta.target || 0);
+    }
+    // ── The subject that got the most study. A dead heat voids. ──────────
+    if (meta.metric === "top_subject") {
+      const by = await subjectWeek(roster, meta.period,
+        new Date(`${weekEndKey(meta.period)}T23:59:59Z`));
+      const ranked = [...by.values()].sort((a, b) => b.minutes - a.minutes);
+      if (!ranked.length) return "void";
+      if (ranked[1] && ranked[1].minutes === ranked[0].minutes) return "void";
+      const top = ranked[0].key;
+      if (meta.subject_key) return top === meta.subject_key;
+      return !(meta.subject_keys || []).includes(top);
+    }
+
     const by = await marketWeekByUser(roster, meta.period);
+    if (meta.metric === "total_bracket") {
+      let total = 0;
+      by.forEach((v) => { total += v.minutes; });
+      return inBracket(total, { lo: Number(meta.lo) || 0, hi: meta.hi === null || meta.hi === undefined ? null : Number(meta.hi) });
+    }
+    if (meta.metric === "beat_last_week") {
+      let total = 0;
+      by.forEach((v) => { total += v.minutes; });
+      return total >= Number(meta.target || 0);
+    }
 
     if (market.kind === "longshot") {
       let best = 0;
@@ -11076,6 +11478,127 @@ async function creditCred(email, amount, won = 0) {
   }).eq("id", p.id);
 }
 
+// ─── The season ladder ──────────────────────────────────────────────────────
+
+/**
+ * Read points for one student over one season, off positions already on file.
+ * A position is fetched from three weeks before the season starts because a
+ * prep or SAC question can be called long before it settles; which season it
+ * COUNTS toward is its question's own week (`pointsWeek`).
+ */
+async function seasonStanding(email, season) {
+  const since = new Date(Date.parse(`${season.start}T00:00:00Z`) - 21 * 24 * 3600e3).toISOString();
+  const { data: pos, error } = await supabaseAdmin.from("market_positions")
+    .select("p, price_at_entry, created_date, market_id, settled_at")
+    .eq("user_email", email).gte("created_date", since).limit(1000);
+  if (error) throw error;
+  const settled = (pos || []).filter((p) => p.settled_at);
+  if (!settled.length) return { points: 0, calls: 0 };
+  const ids = [...new Set(settled.map((p) => p.market_id))];
+  const { data: mk, error: mErr } = await supabaseAdmin.from("markets")
+    .select("id, kind, status, outcome, meta, created_date, opens_at, closes_at, resolved_at")
+    .in("id", ids);
+  if (mErr) throw mErr;
+  const byId = new Map((mk || []).map((m) => [m.id, m]));
+  const weeks = new Set(season.weeks);
+  let points = 0;
+  let calls = 0;
+  for (const p of settled) {
+    const m = byId.get(p.market_id);
+    if (!m || !weeks.has(pointsWeek(m))) continue;
+    const r = readPoints(p, m);
+    if (r === null) continue;
+    points += r;
+    calls += 1;
+  }
+  return { points, calls };
+}
+
+/**
+ * What last season left behind, written ONCE per season: the division reached,
+ * and from Oracle the card back that goes with it (added to what they own, so
+ * the store's own equip path wears it). Keyed on the season index, so a second
+ * read is a no-op and nothing has to be reset when the next season starts.
+ */
+async function settleSeasonAward(profile, current) {
+  const prev = seasonOf(new Date(Date.parse(`${current.start}T00:00:00Z`) - 24 * 3600e3));
+  const had = profile?.extra?.season_award;
+  if (had && had.season === prev.index) return had;
+  const email = profile.created_by || profile.user_email;
+  const standing = await seasonStanding(email, prev);
+  const won = seasonAward(standing.points);
+  const award = {
+    season: prev.index, number: prev.number,
+    division: won?.division || null, points: standing.points, calls: standing.calls,
+  };
+  const extra = { ...(profile.extra || {}), season_award: award };
+  const owned = Array.isArray(extra.cred_owned) ? extra.cred_owned : [];
+  if (won?.back && !owned.includes(won.back)) extra.cred_owned = [...owned, won.back];
+  const { error } = await supabaseAdmin.from("user_profiles").update({ extra }).eq("id", profile.id);
+  if (error) console.warn("[season] award write failed:", error.message);
+  return award;
+}
+
+/**
+ * Last week's slate, settled: every card's answer, your call on it, and the
+ * three best reads in the room. NULL when there was no slate; `pending` while
+ * any of it is still open, because a podium drawn before the last question
+ * settles is a podium that can change under the people standing on it.
+ *
+ * Names only, never addresses — the same rule the tape keeps.
+ */
+async function slateResultsFor(email, week) {
+  const { data: mk, error } = await supabaseAdmin.from("markets").select("*")
+    .eq("meta->>period", week).eq("meta->>slate", "true").limit(80);
+  if (error || !mk?.length) return null;
+  if (mk.some((m) => m.status === "open")) return { week, pending: true };
+  const { data: pos } = await supabaseAdmin.from("market_positions")
+    .select("market_id, user_email, user_name, p, price_at_entry, created_date")
+    .in("market_id", mk.map((m) => m.id));
+  const byId = new Map(mk.map((m) => [m.id, m]));
+  const scored = (pos || []).map((p) => ({
+    email: p.user_email, name: p.user_name || null, market_id: p.market_id, p: Number(p.p),
+    points: readPoints(p, byId.get(p.market_id)),
+  }));
+  const table = slateTable(scored);
+  const me = lowerEmail(email);
+  const mine = table.find((r) => lowerEmail(r.email) === me) || null;
+  const myCalls = new Map(scored.filter((x) => lowerEmail(x.email) === me).map((x) => [x.market_id, x]));
+  const label = (m, yes) => {
+    const names = m.meta?.names;
+    if (m.kind === "versus" && Array.isArray(names) && names.length === 2) return yes ? names[0] : names[1];
+    return yes ? "Yes" : "No";
+  };
+  const cards = slateOf(mk).map((e) => {
+    const voided = e.rows.every((r) => r.status === "void");
+    const answer = voided ? null : e.kind === "group"
+      ? (e.rows.find((r) => r.status === "resolved" && r.outcome === true)?.meta?.outcome || null)
+      : label(e.rows[0], e.rows[0].outcome === true);
+    const calls = e.rows.map((r) => {
+      const c = myCalls.get(r.id);
+      if (!c) return null;
+      const yes = c.p >= 0.5;
+      return {
+        pick: e.kind === "group" ? `${yes ? "" : "Not "}${r.meta?.outcome || ""}`.trim() : label(r, yes),
+        points: c.points,
+      };
+    }).filter(Boolean);
+    return {
+      id: e.id, title: e.title, answer, void: voided, calls,
+      points: calls.reduce((sum, c) => sum + (Number(c.points) || 0), 0),
+    };
+  });
+  const others = table.filter((r) => lowerEmail(r.email) !== me).map((r) => r.points);
+  return {
+    week, pending: false, cards, entrants: table.length,
+    podium: table.filter((r) => r.points > 0).slice(0, 3).map((r, i) => ({
+      place: i + 1, name: firstNameOf(r.name, "") || "Someone", points: r.points, calls: r.calls,
+      is_me: lowerEmail(r.email) === me,
+    })),
+    me: mine ? { points: mine.points, calls: mine.calls, ahead: aheadOf(mine.points, others) } : null,
+  };
+}
+
 // ─── The board ──────────────────────────────────────────────────────────────
 
 app.post("/local-ai/fn/getMarkets", async (req, res) => {
@@ -11106,10 +11629,12 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
     // that exists but is hidden has still published the question to the tape,
     // the settlement and everyone who was already holding a position.
     const { data: roster } = await supabaseAdmin.from("user_profiles")
-      .select("created_by, username, full_name, extra")
+      .select("created_by, username, full_name, extra, is_anonymous_on_leaderboard, league_anonymous_default")
       .not("created_by", "is", null).limit(200);
     const members = (roster || []).map((r) => ({
       email: r.created_by, name: r.username || r.full_name || null, extra: r.extra || {},
+      // A student hidden on the boards is never written onto a card of names.
+      anonymous: !!(r.is_anonymous_on_leaderboard || r.league_anonymous_default),
     })).filter((m) => m.email && mayBeMarketSubject(m));
 
     await mintWeeklyMarkets(members);
@@ -11178,6 +11703,11 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
         .filter(Boolean).map((x) => String(x).toLowerCase());
       return {
         ...m,
+        // Whether this question is about you and whether this row is yours,
+        // decided off the RAW row: the names on a card of contenders are in
+        // `meta.emails`, which `publicMeta` is about to strip. The client reads
+        // these two booleans and never the addresses behind them.
+        ...marketSelfRole(m, user.email),
         meta: publicMeta(meta),
         subject_name: m.subject_name || nameOf[m.subject_email] || null,
         subject_is_me: involved.includes(me),
@@ -11202,13 +11732,43 @@ app.post("/local-ai/fn/getMarkets", async (req, res) => {
     const open = (openRes.data || []).map(shape);
     const recent = (recentRes.data || []).map(shape);
 
+    // ── The season and last week's slate ─────────────────────────────────
+    // Both are derived from positions already on file, so nothing about the
+    // ladder is stored except what a FINISHED season left behind. A failure
+    // here costs the header its division, never the board its markets.
+    const week = marketWeekKey();
+    let season = null;
+    let slateResults = null;
+    try {
+      const now = new Date();
+      const current = seasonOf(now);
+      const standing = await seasonStanding(user.email, current);
+      const award = await settleSeasonAward(profile, current);
+      season = {
+        number: current.number, index: current.index, week: current.week, weeks: SEASON_WEEKS,
+        ends_at: new Date(current.endsAt).toISOString(),
+        points: standing.points, calls: standing.calls,
+        last: award,
+      };
+      slateResults = await slateResultsFor(user.email, dayAfter(week, -7));
+    } catch (e) {
+      console.warn("[getMarkets] season/slate read failed:", e?.message || e);
+    }
+
     return res.json({
       available: true,
       me: { ...creditSummary(profile), email: user.email },
       markets: open,
       recent,
       swept: swept.settled,
-      week: marketWeekKey(),
+      week,
+      last_call: new Date(weekLastCall(week)).toISOString(),
+      next_drop: (() => {
+        const t = waveOpensAt(week, 2);
+        return t && Date.now() < t ? new Date(t).toISOString() : null;
+      })(),
+      season,
+      slate_results: slateResults,
     });
   } catch (err) {
     console.error("[getMarkets] error:", err);
@@ -13015,12 +13575,33 @@ app.post("/local-ai/fn/getMarket", async (req, res) => {
     const publicMeta = Object.fromEntries(Object.entries(meta)
       .filter(([k]) => !PRIVATE_META.has(k) && !/email/i.test(k)));
 
+    // One answer on a card of several is priced with its siblings (see
+    // groupPrices), and this page shows the row alone — so it is handed the
+    // card's figure rather than computing a different one from half the data.
+    let groupPrice = null;
+    if (market.meta?.group) {
+      const { data: sibs } = await supabaseAdmin.from("markets")
+        .select("id, prior").eq("meta->>group", market.meta.group).limit(12);
+      const ids = (sibs || []).map((m) => m.id);
+      if (ids.length > 1) {
+        const { data: sibPos } = await supabaseAdmin.from("market_positions")
+          .select("market_id, p, stake").in("market_id", ids);
+        groupPrice = groupPrices((sibs || []).map((m) => ({
+          id: m.id, prior: m.prior,
+          positions: (sibPos || []).filter((x) => x.market_id === m.id),
+        }))).get(market.id) ?? null;
+      }
+    }
+
     const profile = await loadUserProfile(user.email);
     return res.json({
       available: true,
       me: profile ? creditSummary(profile) : null,
       market: {
         ...market,
+        group_price: groupPrice,
+        // Off the raw row, before the names it reads are stripped. Same as the board.
+        ...marketSelfRole(market, user.email),
         meta: publicMeta,
         subject_name: market.subject_name || nameOf[market.subject_email] || null,
         subject_is_me: involved.includes(me),
@@ -13066,6 +13647,16 @@ app.post("/local-ai/fn/takePosition", async (req, res) => {
     if (market.closes_at && new Date(market.closes_at) <= new Date()) {
       return res.status(400).json({ error: "That market has closed." });
     }
+    // ── LAST CALL. A weekly question's answer leaks onto the League, Ranked
+    // and every group's week as the days go by, so it stops taking calls on
+    // Friday evening — before the board gives the answer away, not when the
+    // week ends. The same function draws the countdown on the card.
+    const lastCall = marketLastCall(market);
+    if (lastCall != null && Date.now() >= lastCall) {
+      return res.status(400).json({
+        error: "Last call has passed on this one. It locks before the answer shows, and results land when the week ends.",
+      });
+    }
 
     // ── THE ONE RULE, enforced on the server where it cannot be edited out of
     // a bundle. src/lib/market.js states it once; this is the only place it is
@@ -13083,10 +13674,17 @@ app.post("/local-ai/fn/takePosition", async (req, res) => {
     }, user.email);
     if (blocked) return res.status(403).json({ error: blocked });
 
+    // ── NO BETTING AGAINST YOURSELF. On a question your own study decides, the
+    // only call open to you is for yourself — a NO on your own week, followed
+    // by not studying, is the oldest insider trade there is. Checked against
+    // the RAW row, which still carries the names on a card of contenders.
+    const sideBlocked = marketSideBlock(market, side === MKT_NO ? MKT_NO : MKT_YES, user.email);
+    if (sideBlocked) return res.status(403).json({ error: sideBlocked });
+
     const { data: already } = await supabaseAdmin.from("market_positions")
       .select("id").eq("market_id", market_id).eq("user_email", user.email).limit(1);
     if (already?.length) {
-      return res.status(409).json({ error: "You've already taken a side on this one." });
+      return res.status(409).json({ error: "You've already called this one." });
     }
 
     const amount = marketStake(stake);
@@ -13098,7 +13696,25 @@ app.post("/local-ai/fn/takePosition", async (req, res) => {
     // about base rates.
     const { data: existing } = await supabaseAdmin
       .from("market_positions").select("p, stake").eq("market_id", market_id);
-    const price = marketPrice(market, existing || []);
+    let price = marketPrice(market, existing || []);
+    // A card of answers is priced TOGETHER (groupPrices), so the price this
+    // call is scored against is this row's share of the whole card — the
+    // figure the student was looking at, not the row priced as if alone.
+    if (market.meta?.group) {
+      const { data: sibs } = await supabaseAdmin.from("markets")
+        .select("id, prior").eq("meta->>group", market.meta.group).limit(12);
+      const ids = (sibs || []).map((m) => m.id);
+      if (ids.length > 1) {
+        const { data: sibPos } = await supabaseAdmin.from("market_positions")
+          .select("market_id, p, stake").in("market_id", ids);
+        const card = (sibs || []).map((m) => ({
+          id: m.id, prior: m.prior,
+          positions: (sibPos || []).filter((x) => x.market_id === m.id),
+        }));
+        const pooled = groupPrices(card).get(market.id);
+        if (Number.isFinite(pooled)) price = pooled;
+      }
+    }
 
     const { data: prof, error: pErr } = await supabaseAdmin.from("user_profiles")
       .select("id, cred_balance, username, full_name").eq("created_by", user.email).maybeSingle();
@@ -13110,7 +13726,7 @@ app.post("/local-ai/fn/takePosition", async (req, res) => {
 
     const held = Math.max(0, Number(prof.cred_balance) || 0);
     if (held < amount) {
-      return res.status(400).json({ error: "Not enough cred for that stake.", held });
+      return res.status(400).json({ error: "Not enough credits for that.", held });
     }
 
     // ── ESCROW. `awardXP` only adds, so a losing position could not be charged

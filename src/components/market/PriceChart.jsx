@@ -8,12 +8,13 @@
  * disagreeing with it in the right direction is the entire game — so the
  * history is not decoration here, it is the case for taking a side.
  *
- * ─── IT PLOTS THE PRICE AND PRINTS THE RETURN ───────────────────────────────
+ * ─── IT PLOTS THE PRICE AND PRINTS WHAT THE ROOM THINKS OF EACH SIDE ───────
  * The line is the price on a linear axis, because that is the quantity with a
- * meaningful scale; the return each side pays is printed large beside it,
- * because that is the quantity made of the student's own cred. They are not
- * the same number and the chart must not imply they are — the header figures
- * move with the line but they are bounded in [0, 2] while the line runs 0–100.
+ * meaningful scale. The header used to print a return multiple per side
+ * ("Yes pays 1.38×") — an honest ceiling, and still the shape of a betting
+ * slip on a floor that is a forecasting competition. It prints the room's
+ * reading of each side now, which is the same line read from both ends. What a
+ * call is worth in credits is said once, in the sheet where one is made.
  *
  * ONE LINE, NOT TWO. NO is 100 − YES by construction, so a YES line and a NO
  * line are one line and its own reflection. Drawing both is drawing the same
@@ -46,7 +47,7 @@
  * so there are no design tokens in this file and that is deliberate.
  */
 import React, { useMemo, useState } from "react";
-import { priceLabel, returns, YES } from "@/lib/market";
+import { priceLabel, YES } from "@/lib/market";
 
 /* The floor's palette, literal because the room does not follow the theme. */
 const INK = {
@@ -125,7 +126,8 @@ export default function PriceChart({
         : change > 0 ? INK.up : change < 0 ? INK.down : INK.flat;
     const trades = pts.filter((p) => p.kind === "trade");
     const shown = picked ?? trades[trades.length - 1] ?? null;
-    const pays = returns(history.last);
+    const yesPct = priceLabel(history.last);
+    const noPct = priceLabel(1 - history.last);
 
     /* ── The sparkline: a shape, no furniture ───────────────────────────── */
     if (compact) {
@@ -162,26 +164,26 @@ export default function PriceChart({
     /* ── The full chart ─────────────────────────────────────────────────── */
     return (
         <div>
-            {/* The reading, in the units people read odds in. */}
+            {/* The reading: how sure the room is of each side. */}
             {header && (
             <div className="flex items-end justify-between gap-3 mb-2">
                 <div className="flex items-end gap-3">
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wide"
-                            style={{ color: INK.dim }}>{labels.yes} pays</p>
+                            style={{ color: INK.dim }}>{labels.yes}</p>
                         <p className="font-display font-black text-2xl leading-none tabular-nums"
-                            style={{ color: INK.up }}>{pays.yesLabel}</p>
+                            style={{ color: INK.up }}>{yesPct}</p>
                     </div>
                     <div>
                         <p className="text-[10px] font-bold uppercase tracking-wide"
-                            style={{ color: INK.dim }}>{labels.no} pays</p>
+                            style={{ color: INK.dim }}>{labels.no}</p>
                         <p className="font-display font-black text-2xl leading-none tabular-nums"
-                            style={{ color: INK.down }}>{pays.noLabel}</p>
+                            style={{ color: INK.down }}>{noPct}</p>
                     </div>
                 </div>
                 <div className="text-right">
-                    <p className="font-display font-black text-lg leading-none tabular-nums"
-                        style={{ color: INK.bright }}>{priceLabel(history.last)}</p>
+                    {/* The two figures to the left ARE the price read from
+                        both ends, so it is not printed a third time here. */}
                     <p className="text-[11px] font-bold tabular-nums mt-0.5" style={{ color: ink }}>
                         {change > 0 ? "▲" : change < 0 ? "▼" : "■"} {Math.abs(change)}
                         <span className="font-medium" style={{ color: INK.dim }}> from open</span>
@@ -266,19 +268,22 @@ export default function PriceChart({
             {/* ── The readout. On the page, never over the chart. ────────── */}
             <p className="text-[11px] mt-2 leading-snug min-h-[1.5em]" style={{ color: INK.mid }}>
                 {history.trades === 0 ? (
-                    <>No one has taken a side yet — the line is the house&apos;s opening call,
-                        and the first position is what starts it.</>
+                    <>No calls yet. The line is where the question opened, and the first
+                        call is what starts it moving.</>
                 ) : shown ? (
                     <>
                         <span className="font-bold" style={{ color: shown.is_me ? INK.mine : INK.bright }}>
                             {shown.is_me ? "You" : (shown.by || "Someone")}
                         </span>
-                        {" took "}
+                        {" called "}
                         <span className="font-bold"
                             style={{ color: shown.side === YES ? INK.up : INK.down }}>
                             {shown.side === YES ? "yes" : "no"}
                         </span>
-                        {` with ${shown.stake.toLocaleString()} credits · `}
+                        {/* What it moved, never what it cost — the tape's rule:
+                            a list of who put how much on what is a betting
+                            shop's window. */}
+                        {" · "}
                         <span className="tabular-nums">
                             {shown.delta > 0 ? "+" : ""}{shown.delta} to {priceLabel(shown.price)}
                         </span>

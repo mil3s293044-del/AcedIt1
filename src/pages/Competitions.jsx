@@ -29,9 +29,12 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import LiveNumber from "@/components/shared/LiveNumber";
 import CredStore from "@/components/market/CredStore";
-import { TrendingUp, Coins, Plus, X } from "lucide-react";
+import { TrendingUp, Plus, X } from "lucide-react";
+import SeasonStrip from "@/components/market/SeasonStrip";
+import SlateSection from "@/components/market/SlateSection";
+import SlateResults from "@/components/market/SlateResults";
+import Ticker from "@/components/market/Ticker";
 import AceDeal from "@/components/market/AceDeal";
 import { base44 } from "@/api/base44Client";
 import { useLiveTick } from "@/lib/LiveContext";
@@ -43,10 +46,11 @@ import Room from "@/components/market/Room";
 import SettlementReveal from "@/components/market/SettlementReveal";
 import AceShuffle from "@/components/ace/AceShuffle";
 import {
-    readMarket, sortBoard, isOpen, sideOf, YES, KINDS, featuredOf, inRoom, roomsFor, ROOMS,
-    unseenSettlements, markSettlementsSeen,
+    readMarket, sortBoard, isOpen, sideOf, YES, KINDS, inRoom, roomsFor, ROOMS,
+    unseenSettlements, markSettlementsSeen, sideLabel, withGroupPrices,
     markPercent, priorForLine, priceLabel, MARK_MIN_OBS, selfLine, selfRecord,
 } from "@/lib/market";
+import { isSlate, slateResultsDue, markSlateResultsSeen } from "@/lib/slate";
 
 /** A SAC's date, the way a planner prints one. */
 const sacDate = (iso) => {
@@ -85,11 +89,17 @@ function buildTape(markets = [], recent = []) {
     for (const m of markets) {
         for (const pos of m.positions || []) {
             if (!ago(pos.created_date)) continue;
+            // A CALL, NEVER A STAKE. The amount used to trail every line, and a
+            // scrolling list of who put how much on what is a betting shop's
+            // window. What somebody thinks is the interesting part.
+            const isYes = sideOf(pos.p) === YES;
+            const word = sideLabel(m, isYes);
             rows.push({
                 id: `pos:${pos.id}`, at: pos.created_date,
                 who: firstName(pos.user_name), side: sideOf(pos.p),
-                text: `backed ${sideOf(pos.p) === YES ? "YES" : "NO"} on`,
-                subject: m.title, stake: pos.stake,
+                sideWord: word === "Yes" || word === "No" ? word.toLowerCase() : word,
+                text: `called ${word === "Yes" || word === "No" ? word.toLowerCase() : word} on`,
+                subject: m.title, when: ago(pos.created_date),
             });
         }
     }
@@ -127,7 +137,7 @@ function Tape({ rows }) {
     if (!rows.length) {
         return (
             <p className="text-[13px] text-[var(--floor-dim)] px-1">
-                Nothing has happened yet this week. Take a side and you'll be the first line on it.
+                Nothing has happened yet this week. Make a call and you'll be the first one on it.
             </p>
         );
     }
@@ -150,7 +160,6 @@ function Tape({ rows }) {
                         {r.who && <span className="font-bold text-[var(--floor-ink)]">{r.who} </span>}
                         <span className="text-[var(--floor-muted-2)]">{r.text} </span>
                         <span className="text-[var(--floor-muted)]">{r.subject}</span>
-                        {r.stake ? <span className="text-[var(--floor-dim)]"> · {r.stake}</span> : null}
                     </p>
                     <span className="text-[10px] text-[var(--floor-dimmest)] flex-shrink-0 tabular-nums">
                         {fresh.has(r.id) ? "just now" : ago(r.at)}
@@ -255,7 +264,7 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                     motivating stated than hidden: being read by the room is
                     the draw, not the payout you are giving up. */}
                 <p className="text-[12px] text-[var(--floor-muted-2)] leading-snug mb-4">
-                    You state the line and everyone else trades it. You can&apos;t back your own — you
+                    You set the target and everyone else calls it. You can&apos;t back your own — you
                     enter the mark — but you&apos;ll see exactly who believes you.
                 </p>
 
@@ -309,7 +318,7 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                             <>
                                 <div>
                                     <label className="text-[11px] font-bold uppercase tracking-wide text-[var(--floor-muted-2)]">
-                                        The line — you&apos;ll score at least
+                                        Your target — you&apos;ll score at least
                                     </label>
                                     <div className="flex items-center gap-3 mt-1">
                                         <input type="range" min="40" max="100" value={target}
@@ -351,7 +360,7 @@ export function LineDialog({ onClose, onOpen, busy, taken, email }) {
                             className="w-full py-2.5 rounded-xl bg-[var(--floor-solid)] text-[var(--floor-on-solid)]
                                 font-display font-black text-sm disabled:opacity-40 inline-flex
                                 items-center justify-center gap-2 hover:bg-white transition-colors">
-                            {busy && <AceShuffle size="sm" />} Open the line
+                            {busy && <AceShuffle size="sm" />} Set the target
                         </button>
                     </div>
                 )}
@@ -524,14 +533,19 @@ export default function Competitions() {
         const rows = (data?.markets || [])
             .map((m) => readMarket(m, m.positions || [], me.email))
             .filter((m) => isOpen(m));
-        return sortBoard(rows, me.email);
+        // A card of answers is priced as one card, so its prices add to 100.
+        return sortBoard(withGroupPrices(rows), me.email);
     }, [data, me.email]);
 
     // The room narrows first, then the kind chips narrow within it — so the
     // chips only ever offer kinds that are actually in the room you are in.
+    // The open floor is everything that is NOT the slate: the slate is its own
+    // card above it, and counting its rows into the rooms and the kind chips
+    // would offer a "The board" chip that filters to nothing below.
+    const floorBoard = useMemo(() => board.filter((m) => !isSlate(m)), [board]);
     const roomed = useMemo(
-        () => board.filter((m) => inRoom(m, room, me.email)),
-        [board, room, me.email]);
+        () => floorBoard.filter((m) => inRoom(m, room, me.email)),
+        [floorBoard, room, me.email]);
 
     const shown = useMemo(
         () => (filter === "all" ? roomed : roomed.filter((m) => m.kind === filter)),
@@ -542,7 +556,7 @@ export default function Competitions() {
     // A room is OFFERED only once it holds something. A student with no
     // friends yet never meets an empty Friends tab on their first visit —
     // a tab that is always empty teaches that the feature is broken.
-    const { rooms, counts } = useMemo(() => roomsFor(board, me.email), [board, me.email]);
+    const { rooms, counts } = useMemo(() => roomsFor(floorBoard, me.email), [floorBoard, me.email]);
 
     // A room that empties underneath you (the last friend's question closed)
     // must not strand the view on a tab that no longer exists.
@@ -561,14 +575,11 @@ export default function Competitions() {
     // for one ranking, and chopping that into a featured strip and a remainder
     // breaks the very order they requested — the lesson Browse's sections
     // record about sorting.
-    const featured = useMemo(
-        () => (filter === "all" ? featuredOf(roomed, me.email, 4) : []),
-        [roomed, me.email, filter]);
-    const rest = useMemo(() => {
-        if (!featured.length) return shown;
-        const up = new Set(featured.map((m) => m.id));
-        return shown.filter((m) => !up.has(m.id));
-    }, [shown, featured]);
+    // THE SLATE REPLACED THE FEATURED STRIP. Both were "the questions the
+    // whole room can argue about", and two answers to that on one screen is
+    // the paper-cut this page keeps having to remove. The slate is the shared
+    // card; everything below it is the open floor.
+    const rest = shown;
 
     const book = useMemo(() => board.filter((m) => m.mine), [board]);
 
@@ -583,8 +594,18 @@ export default function Competitions() {
     // Derived from rows already loaded — nothing new is stored, so the reveal
     // cannot disagree with the tape line for the same result. The seen-set
     // lives in the model, not here.
+    // The slate settles as ONE result on Sunday (SlateResults), so its rows
+    // are kept out of the per-market reveal — or a student would sit through
+    // eleven settlement cards and then the results screen saying it again.
     const reveals = useMemo(
-        () => unseenSettlements(settledBoard, me.email), [settledBoard, me.email]);
+        () => unseenSettlements(settledBoard.filter((m) => !isSlate(m)), me.email),
+        [settledBoard, me.email]);
+
+    // ── Sunday ─────────────────────────────────────────────────────────
+    const [resultsOpen, setResultsOpen] = useState(false);
+    useEffect(() => {
+        if (slateResultsDue(data?.slate_results)) setResultsOpen(true);
+    }, [data?.slate_results]);
 
     // One place a market is opened from, because two would drift: the board
     // card and the book row must land on the same screen or a student learns
@@ -637,7 +658,7 @@ export default function Competitions() {
             setLineOpen(false);
             await load();
         } catch (e) {
-            setError(e?.message || "Couldn't open that line.");
+            setError(e?.message || "Couldn't set that target.");
         }
         setBusy(false);
     };
@@ -686,51 +707,26 @@ export default function Competitions() {
             <div className="max-w-6xl mx-auto">
 
                 {/* ── The strip: who you are on this floor ──────────── */}
-                <header className="flex flex-wrap items-end justify-between gap-4 mb-5">
-                    <div>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
-                            The floor
-                        </p>
-                        <h1 className="font-display font-black text-[var(--floor-ink)] text-2xl sm:text-3xl leading-tight">
-                            {book.length > 0
-                                ? `You're holding ${book.length} ${book.length === 1 ? "position" : "positions"}`
-                                : "Read the room, take a side"}
-                        </h1>
-                    </div>
-                    <div className="flex items-end gap-5">
-                        <div>
-                            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
-                                Cred
-                            </p>
-                            <p className="font-display font-black text-[var(--floor-warn-ink)] text-2xl tabular-nums
-                                inline-flex items-center gap-1.5">
-                                <Coins className="w-4 h-4" />
-                                {/* It ROLLS. Cred moves for two reasons — the
-                                    Monday grant and your own calls — and a
-                                    figure that jumps between paints cannot tell
-                                    them apart. Counting makes the change the
-                                    thing you notice rather than the number. */}
-                                <LiveNumber value={me.cred ?? 0} showDelta={false} />
-                            </p>
-                        </div>
-                        {atStake > 0 && (
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
-                                    At stake
-                                </p>
-                                {/* The mark-to-market figure used to sit here as a
-                                    small signed number beside this one, and "100
-                                    -1" read as a subtraction rather than as two
-                                    facts. What a student can act on is per
-                                    position — "+17 if right" — and that is
-                                    already on the card. */}
-                                <p className="font-display font-black text-[var(--floor-ink)] text-2xl tabular-nums">
-                                    {atStake.toLocaleString()}
-                                </p>
-                            </div>
-                        )}
-                    </div>
+                <header className="mb-4">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[var(--floor-dim)]">
+                        The floor
+                    </p>
+                    <h1 className="font-display font-black text-[var(--floor-ink)] text-2xl sm:text-3xl leading-tight">
+                        {book.length > 0
+                            ? `You're holding ${book.length} ${book.length === 1 ? "position" : "positions"}`
+                            : "Read the room, make your call"}
+                    </h1>
                 </header>
+
+                {/* ── SKILL LEADS, CREDITS FOLLOW ─────────────────────
+                    The division, the bar to the next one, then credits and
+                    what is committed. See SeasonStrip. */}
+                <div className="mb-3">
+                    <SeasonStrip season={data?.season} credits={me.cred ?? 0} committed={atStake} />
+                </div>
+                <div className="mb-5">
+                    <Ticker rows={tape} />
+                </div>
 
                 {error && (
                     <div className="mb-4 rounded-xl border-2 border-[rgb(var(--floor-no-rgb)/0.4)] bg-[rgb(var(--floor-no-rgb)/0.1)]
@@ -761,7 +757,12 @@ export default function Competitions() {
                 <div className="grid lg:grid-cols-[minmax(0,1fr)_300px] gap-6 items-start">
 
                     {/* ── THE BOARD ────────────────────────────────── */}
-                    <div className="min-w-0">
+                    <div className="min-w-0 space-y-6">
+                        <SlateSection board={board} balance={me.cred ?? 0} busy={busy}
+                            onTake={take} onReport={report}
+                            lastCall={data?.last_call} nextDrop={data?.next_drop} />
+                        <div>
+                        <BoardHeading label="The open floor" note="questions about people, open all week" />
                         {/* ── WHICH ROOM ───────────────────────────────
                             A view of one floor, never a floor of its own:
                             every room lists markets from the same pool at the
@@ -805,13 +806,13 @@ export default function Competitions() {
                             </button>
                         </div>
 
-                        {shown.length === 0 ? (
+                        {rest.length === 0 ? (
                             <div className="rounded-2xl border-2 border-[var(--floor-edge)] bg-[var(--floor-card)] p-8 text-center">
                                 <p className="text-sm text-[var(--floor-muted-2)]">
                                     {filter !== "all"
                                         ? "Nothing of that kind is open here. Try another filter."
                                         : room === ROOMS.all.id
-                                            ? "No open questions right now. New ones are minted every Monday."
+                                            ? "Nothing else is open right now. New questions are minted every Monday."
                                             // Naming the room matters: "nothing open" on a
                                             // floor that plainly has questions on it reads
                                             // as broken rather than as filtered.
@@ -819,40 +820,16 @@ export default function Competitions() {
                                 </p>
                             </div>
                         ) : (
-                            <div className="space-y-5">
-                                {featured.length > 0 && (
-                                    <section>
-                                        <BoardHeading label="Featured"
-                                            note="questions the whole room can call" />
-                                        <motion.div layout className="grid sm:grid-cols-2 gap-3">
-                                            <AnimatePresence initial={false}>
-                                                {featured.map((m) => (
-                                                    <MarketCard key={m.id} market={m} balance={me.cred ?? 0}
-                                                        busy={busy} onTake={take} onReport={report} />
-                                                ))}
-                                            </AnimatePresence>
-                                        </motion.div>
-                                    </section>
-                                )}
-
-                                {rest.length > 0 && (
-                                    <section>
-                                        {featured.length > 0 && (
-                                            <BoardHeading label="The floor"
-                                                note={`${rest.length} open`} />
-                                        )}
-                                        <motion.div layout className="grid sm:grid-cols-2 gap-3">
-                                            <AnimatePresence initial={false}>
-                                                {rest.map((m) => (
-                                                    <MarketCard key={m.id} market={m} balance={me.cred ?? 0}
-                                                        busy={busy} onTake={take} onReport={report} />
-                                                ))}
-                                            </AnimatePresence>
-                                        </motion.div>
-                                    </section>
-                                )}
-                            </div>
+                            <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-start">
+                                <AnimatePresence initial={false}>
+                                    {rest.map((m) => (
+                                        <MarketCard key={m.id} market={m} balance={me.cred ?? 0}
+                                            busy={busy} onTake={take} onReport={report} />
+                                    ))}
+                                </AnimatePresence>
+                            </motion.div>
                         )}
+                        </div>
                     </div>
 
                     {/* ── THE TAPE ─────────────────────────────────── */}
@@ -877,7 +854,7 @@ export default function Competitions() {
                         {myLines.length > 0 && (
                             <section className="rounded-2xl border-2 border-[rgb(var(--floor-warn-rgb)/0.25)] bg-[var(--floor-card)] p-4">
                                 <h2 className="text-[10px] font-black uppercase tracking-widest
-                                    text-[var(--floor-dim)] mb-2.5">Your lines</h2>
+                                    text-[var(--floor-dim)] mb-2.5">Your targets</h2>
                                 <div className="space-y-2.5">
                                     {myLines.map((l) => (
                                         <div key={l.id}>
@@ -889,9 +866,9 @@ export default function Competitions() {
                                             </p>
                                             <p className="text-[11px] text-[var(--floor-dim)] tabular-nums">
                                                 {l.traders === 0
-                                                    ? "nobody's taken a side yet"
-                                                    : `${l.traders} trading · room ${l.room}% · `
-                                                        + `${l.backed} backing, ${l.faded} fading`}
+                                                    ? "nobody's called it yet"
+                                                    : `${l.traders} calling · room ${l.room}% · `
+                                                        + `${l.backed} backing you, ${l.faded} against`}
                                                 {l.actual !== null && ` · you got ${l.actual}%`}
                                             </p>
                                         </div>
@@ -904,7 +881,7 @@ export default function Competitions() {
                                         border-t border-[var(--floor-edge)] leading-snug">
                                         You&apos;ve called {record.closed} and cleared {record.cleared}
                                         {record.drift !== null && (record.drift >= 0
-                                            ? `, usually beating your own line by ${record.drift}.`
+                                            ? `, usually beating your own target by ${record.drift}.`
                                             : `, usually landing ${Math.abs(record.drift)} under it.`)}
                                     </p>
                                 )}
@@ -923,7 +900,7 @@ export default function Competitions() {
                                             </span>
                                             <span className={`text-[11px] font-black tabular-nums flex-shrink-0
                                                 ${sideOf(m.mine.p) === YES ? "text-[var(--floor-yes-ink)]" : "text-[var(--floor-no-ink)]"}`}>
-                                                {sideOf(m.mine.p) === YES ? "YES" : "NO"} {m.mine.stake}
+                                                {sideOf(m.mine.p) === YES ? "yes" : "no"} · {m.mine.stake}
                                             </span>
                                         </div>
                                     ))}
@@ -951,6 +928,12 @@ export default function Competitions() {
             {/* Everything else on this page pays out visibly; the one place
                 with a real result was a line on the tape. */}
             <SettlementReveal items={reveals} onSeen={markSettlementsSeen} />
+            <AnimatePresence>
+                {resultsOpen && (
+                    <SlateResults results={data?.slate_results} season={data?.season}
+                        onSeen={markSlateResultsSeen} onClose={() => setResultsOpen(false)} />
+                )}
+            </AnimatePresence>
         </Room>
     );
 }

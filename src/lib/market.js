@@ -105,6 +105,79 @@ export function priceOf(market, positions = []) {
 }
 
 /**
+ * A CARD OF ANSWERS IS PRICED TOGETHER, so its prices add to 100%.
+ *
+ * "Who tops the League?" is four answers and exactly one of them happens.
+ * Priced one at a time, every call for a favourite pushed that row up and left
+ * the others where they were, so a card read 53% + 27% + 12% + 42% — a market
+ * that thinks there is a 134% chance of somebody winning, which any student
+ * who adds it up reads as broken.
+ *
+ * So a call on one answer is read as a view of the WHOLE card: the
+ * probability it gives that answer, and the rest shared across the others in
+ * proportion to where they opened. The card's price is the stake-weighted
+ * blend of those views with the opening prices (`PRIOR_WEIGHT`, as for any
+ * market), which sums to exactly 1 by construction — every view does. Calling
+ * Priyanka up pulls Sam and Miles down, which is what a race looks like.
+ *
+ * Only the PRICE is pooled. A call is still scored on its own row, against
+ * that row's price at entry, by the same proper rule as every other question:
+ * the share given to the other answers is an assumption about the crowd, never
+ * a position the student holds.
+ *
+ * `rows` are the card's answers: { id, prior, positions: [{ p, stake }] }.
+ */
+export function groupPrices(rows = []) {
+    const list = rows.filter(Boolean);
+    const out = new Map();
+    if (!list.length) return out;
+    const raw = list.map((r) => clampP(r.prior ?? 0.5));
+    const total = raw.reduce((a, b) => a + b, 0);
+    const base = total > 0 ? raw.map((x) => x / total) : raw.map(() => 1 / list.length);
+    const num = base.map((b) => b * PRIOR_WEIGHT);
+    let den = PRIOR_WEIGHT;
+    list.forEach((row, j) => {
+        const others = base.reduce((a, b, k) => (k === j ? a : a + b), 0);
+        for (const pos of row.positions || []) {
+            const stake = Math.max(0, Number(pos?.stake) || 0);
+            if (!stake) continue;
+            const p = clampP(pos.p);
+            den += stake;
+            list.forEach((_, k) => {
+                if (k === j) num[k] += stake * p;
+                else if (others > 0) num[k] += stake * (1 - p) * (base[k] / others);
+                else num[k] += stake * (1 - p) / Math.max(1, list.length - 1);
+            });
+        }
+    });
+    list.forEach((row, k) => out.set(row.id, clampP(num[k] / den)));
+    return out;
+}
+
+/**
+ * The board's markets with every card of answers priced together. Rows with
+ * no `meta.group` pass through untouched; a grouped row has its price, its
+ * label and its tone recomputed from the whole card.
+ */
+export function withGroupPrices(markets = []) {
+    const groups = new Map();
+    for (const m of markets) {
+        const g = m?.meta?.group;
+        if (!g) continue;
+        if (!groups.has(g)) groups.set(g, []);
+        groups.get(g).push(m);
+    }
+    if (!groups.size) return markets;
+    const priced = new Map();
+    groups.forEach((rows) => groupPrices(rows).forEach((v, id) => priced.set(id, v)));
+    return markets.map((m) => {
+        if (!priced.has(m.id)) return m;
+        const price = priced.get(m.id);
+        return { ...m, price, priceLabel: priceLabel(price), tone: priceTone(price, m.prior ?? 0.5) };
+    });
+}
+
+/**
  * "71%" — the price, printed as what it actually is.
  *
  * IT WAS "71¢", AND THE CENT WAS BOTH THE GAMBLING WORD AND THE WRONG ONE.
@@ -600,6 +673,76 @@ export function blockReason(market, email) {
 
 export const canTakePosition = (market, email) => blockReason(market, email) === null;
 
+// ─── No betting against yourself ────────────────────────────────────────────
+
+/**
+ * THE KINDS A PERSON'S OWN STUDY DECIDES. `sac` is not here because its
+ * subject may hold nothing at all (`selfResolving`), and `versus` is not here
+ * because both people in it are blocked outright (`in_contest`).
+ */
+const SELF_DECIDED = new Set(["streak", "hours", "quiz", "prep"]);
+
+/**
+ * Whether a market is about you, and whether THIS row is the answer that is you.
+ *
+ * Two shapes reach it: a solo question ("Will Maya study 5+ days?") whose
+ * subject is you, and a slate card of names ("Who tops the League?") where
+ * `meta.self_only` marks every row and `meta.emails` lists the names on it.
+ * On the second, every row is about you, but only your own row is yours.
+ *
+ * The server calls this with the raw row, which still carries `meta.emails`;
+ * the client never sees those addresses, so it reads `about_me` and
+ * `own_outcome` off the payload, which the server computed with this.
+ */
+export function selfRole(market, email) {
+    const none = { about_me: false, own_outcome: false };
+    if (!market) return none;
+    // The payload's verdict needs no address — the client never has the names.
+    if (typeof market.about_me === "boolean") {
+        return { about_me: market.about_me, own_outcome: !!market.own_outcome };
+    }
+    const me = String(email || "").toLowerCase();
+    if (!me) return none;
+    const subject = String(market.subject_email || "").toLowerCase();
+    if (SELF_DECIDED.has(market.kind)) {
+        return { about_me: subject === me, own_outcome: subject === me };
+    }
+    if (market.meta?.self_only) {
+        const names = (Array.isArray(market.meta.emails) ? market.meta.emails : [])
+            .map((e) => String(e || "").toLowerCase());
+        const inIt = names.includes(me) || subject === me;
+        return { about_me: inIt, own_outcome: inIt && subject === me };
+    }
+    return none;
+}
+
+/**
+ * NO BETTING AGAINST YOURSELF.
+ *
+ * `blockReason` stops the people who DECIDE a market from holding it. It let a
+ * student hold a market about their own study log, deliberately, because
+ * backing yourself to study five days and then doing it is the product
+ * working. It did not ask WHICH WAY — so a student could take NO on their own
+ * week and then simply not study, which pays them for the opposite of what
+ * the app exists to cause. That is the oldest insider trade there is: a
+ * player betting on their own loss.
+ *
+ * So on a question your own study decides, the only call open to you is FOR
+ * yourself. On a card of names that includes yours, the only row open to you
+ * is your own — a call on a rival winning is a call on you not winning.
+ *
+ * Returns null when the side is allowed, or the reason it is not.
+ */
+export function sideBlockReason(market, side, email = null) {
+    const role = selfRole(market, email);
+    if (!role.about_me) return null;
+    if (!role.own_outcome) {
+        return "Your name is on this card, so the only call you can make is on yourself.";
+    }
+    if (side === NO) return "No betting against yourself. You can back yourself here, never the other way.";
+    return null;
+}
+
 // ─── Reading a market ───────────────────────────────────────────────────────
 
 /**
@@ -610,7 +753,12 @@ export const canTakePosition = (market, email) => blockReason(market, email) ===
 export function readMarket(market, positions = [], email = null) {
     const mine = positions.find((p) => String(p.user_email || "").toLowerCase()
         === String(email || "").toLowerCase()) || null;
-    const price = priceOf(market, positions);
+    // A row on a card of answers may arrive already priced with its siblings
+    // (the single-market page has the row and not the card); otherwise the
+    // board re-prices the card as a whole with `withGroupPrices`.
+    const pooled = market?.group_price;
+    const price = pooled !== null && pooled !== undefined && Number.isFinite(Number(pooled))
+        ? clampP(pooled) : priceOf(market, positions);
     const yes = positions.filter((p) => sideOf(p.p) === YES);
     const no = positions.filter((p) => sideOf(p.p) === NO);
     const volume = positions.reduce((s, p) => s + (Number(p.stake) || 0), 0);
@@ -697,6 +845,7 @@ export function heatOf(market, now = Date.now()) {
 export function featuredOf(markets = [], email = null, limit = 4) {
     const me = String(email || "").toLowerCase();
     const pool = markets.filter((m) => KINDS[m.kind]?.featured
+        && !m.meta?.slate
         && String(m.subject_email || "").toLowerCase() !== me
         && !m.subject_is_me
         && isOpen(m));
@@ -822,10 +971,21 @@ const evenness = (m) => Math.abs((Number(m?.prior) || 0.5) - 0.5);
  * of thing that is invisible until a student notices they are never on it.
  */
 export function pickBoard(candidates = [], { target = BOARD_TARGET, weekKey = "", existing = 0 } = {}) {
-    const rows = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
+    const all = Array.isArray(candidates) ? candidates.filter(Boolean) : [];
+    // THE SLATE IS NOT THE FLOOR. It is a fixed card everybody calls, its rows
+    // are answers on a few cards rather than questions in their own right, and
+    // counting four names on one "who tops the League" card as four of the
+    // floor's twenty would squeeze out the students the floor rotates through.
+    // So it always makes it, and none of it counts against the target.
+    const slate = all.filter((m) => m.meta?.slate);
+    const rows = all.filter((m) => !m.meta?.slate);
     const special = rows.filter((m) => COHORT_KINDS.has(m.kind) || m.kind === "prep");
     const people = rows.filter((m) => !COHORT_KINDS.has(m.kind) && m.kind !== "prep");
+    const floor = pickFloor(special, people, { target, weekKey, existing });
+    return [...slate, ...floor];
+}
 
+function pickFloor(special, people, { target, weekKey, existing }) {
     // What is already open counts against the target: the cap is on the BOARD,
     // not on one minting run, or a second visit doubles it.
     const room = Math.max(0, target - Math.max(0, existing) - special.length);

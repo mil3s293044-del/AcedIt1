@@ -52,6 +52,14 @@ export const BACK_SKINS = {
         id: "back-gilt", label: "Gilt",
         ground: "#4A3613", ink: "#D9A82C", medallion: "#4A3613", pip: "#F7E7B8",
     },
+    // EARNED, NOT SOLD. A season finished in the Oracle division leaves this
+    // behind (`seasonAward` in slate.js); it is not in the store's catalogue
+    // and `slate.test.mjs` asserts it never is. Drawn here so the equip path
+    // and every surface that draws a back already know it.
+    "back-oracle": {
+        id: "back-oracle", label: "Oracle",
+        ground: "#1B1035", ink: "#B794F6", medallion: "#1B1035", pip: "#F3E8FF", earned: true,
+    },
 };
 
 /** The skin a profile is wearing, or null for the default subject-toned back. */

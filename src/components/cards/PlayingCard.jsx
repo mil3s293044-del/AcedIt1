@@ -389,6 +389,27 @@ export function CardBack({
 
     const ink = inkProp || (skin ? skin.ink : (alpha(tone, 0.9) || "hsl(var(--primary))"));
     const soft = softProp || (skin ? skin.ground : (alpha(tone, 0.16) || "hsl(var(--primary) / 0.16)"));
+    // ── IN THE DARK THE DEFAULT BACK WAS A BLANK ─────────────────────────────
+    // The ground is the deck colour at 16% over `--surface`, and on dark that
+    // surface is navy a few points off the page — so the back drew as a faint
+    // rim around nothing, which is what "Tap to see the first one" sat under
+    // on the dashboard. The ground, the weave, the rim and the medallion all
+    // need more of the deck's colour on dark, and a black shadow gives no
+    // elevation on a near-black page, so it glows in its own colour instead.
+    // Published as custom properties and SWITCHED IN CSS (`.card-back` in
+    // index.css), because the theme is a class on <html> and a value chosen
+    // here at render would not follow a theme change. Only the DERIVED back:
+    // a bought skin is literal ink in both themes on purpose, and a caller
+    // handing in its own palette (the floor) has already chosen for both.
+    const derived = !skin && !inkProp && !softProp;
+    const toneOr = (a) => alpha(tone, a) || `hsl(var(--primary) / ${a})`;
+    const backVars = derived ? {
+        "--back-soft-l": soft,
+        "--back-soft-d": toneOr(0.34),
+        "--back-edge-d": toneOr(0.62),
+        "--back-glow": toneOr(0.42),
+        "--back-medal-d": `radial-gradient(circle at 50% 36%, ${toneOr(0.55)} 0%, hsl(var(--surface)) 74%)`,
+    } : null;
     // The lattice is a <pattern>, and a pattern is referenced BY ID. Two decks
     // with different subject colours on one screen would both resolve to
     // whichever back mounted first, so every back gets its own id. React's
@@ -398,9 +419,10 @@ export function CardBack({
         <div
             className={`relative rounded-[0.9rem] border overflow-hidden
                 ${skin ? "" : "bg-surface border-border"}
+                ${derived ? `card-back${flat ? " card-back-flat" : ""}` : ""}
                 ${flat ? "" : "shadow-[0_1px_2px_rgba(13,22,38,0.10),0_18px_34px_-18px_rgba(13,22,38,0.42)]"}
                 ${className}`}
-            style={skin ? { background: skin.ground, borderColor: skin.ink, ...style } : style}
+            style={skin ? { background: skin.ground, borderColor: skin.ink, ...style } : { ...backVars, ...style }}
             aria-hidden="true"
             {...rest}
         >
@@ -418,18 +440,22 @@ export function CardBack({
                 <defs>
                     <pattern id={pid} width="8" height="8" patternUnits="userSpaceOnUse">
                         <path d="M0 8 L8 0 M-2 2 L2 -2 M6 10 L10 6" stroke={ink}
-                            strokeWidth="1" strokeOpacity="0.5" fill="none" />
+                            strokeWidth="1" strokeOpacity="0.5" fill="none"
+                            style={derived ? { strokeOpacity: "var(--back-weave)" } : undefined} />
                     </pattern>
                 </defs>
-                <rect width="100%" height="100%" rx="7" fill={soft} />
+                <rect width="100%" height="100%" rx="7" fill={soft}
+                    style={derived ? { fill: "var(--back-fill)" } : undefined} />
                 <rect width="100%" height="100%" rx="7" fill={`url(#${pid})`} />
                 <rect x="1" y="1" width="calc(100% - 2px)" height="calc(100% - 2px)" rx="6.5"
-                    fill="none" stroke={ink} strokeOpacity="0.45" strokeWidth="1.5" />
+                    fill="none" stroke={ink} strokeOpacity="0.45" strokeWidth="1.5"
+                    style={derived ? { strokeOpacity: "var(--back-rim)" } : undefined} />
             </svg>
             {/* The medallion. Something has to sit in the middle or the back
                 reads as wallpaper rather than as the back of THIS deck. */}
             <span className="absolute inset-0 grid place-items-center">
-                <span className="grid place-items-center rounded-full aspect-square border-2"
+                <span className={`grid place-items-center rounded-full aspect-square border-2
+                    ${derived ? "card-back-medal" : ""}`}
                     style={{
                         width: medallion,
                         borderColor: ink,
@@ -437,7 +463,8 @@ export function CardBack({
                         // caller supplying its own palette: "hsl(var(--surface))"
                         // is an APP token and would show the app's cream through
                         // a room that has deliberately left it.
-                        backgroundColor: skin ? skin.medallion : (softProp || "hsl(var(--surface))"),
+                        background: skin ? skin.medallion
+                            : derived ? "var(--back-medal)" : (softProp || "hsl(var(--surface))"),
                     }}>
                     {/* A skin paints its own pip: `fill-foreground` is near-white
                         on dark and near-black on light, and a bought back has
