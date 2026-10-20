@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import useStreamedText from "@/lib/useStreamedText";
+import { cleanText } from "@/lib/questionText";
 
 // Render a string that may contain markdown (lists, bold, headings, GFM tables)
 // and LaTeX math segments wrapped in $...$ or $$...$$.
@@ -14,6 +15,38 @@ import useStreamedText from "@/lib/useStreamedText";
 //   • remark-gfm enables GitHub Flavored Markdown — tables, strikethrough,
 //     task lists, autolinks. Without this, AI-generated tables show up as raw
 //     pipe-and-dash text in the page.
+//   • remarkSoftBreaks draws a single line break as a break. A model writes
+//     "(a) … (1 mark)\n(b) …" meaning two lines, and CommonMark folds a lone
+//     line ending into a space, so a five-part question read as one paragraph.
+//   • Everything is run through `cleanText` first (questionText.js): a model
+//     that doubled its newline escape along with its LaTeX backslashes wrote
+//     the two characters `\n`, and a student saw them.
+
+/**
+ * A soft line ending inside a paragraph becomes a hard break. Written here
+ * rather than added as `remark-breaks`, which is twenty lines and a dependency.
+ * Only TEXT is split: maths, inline code and code blocks are other node types,
+ * so a line break inside them is untouched.
+ */
+function remarkSoftBreaks() {
+    const walk = (node) => {
+        if (!Array.isArray(node.children)) return;
+        const next = [];
+        for (const child of node.children) {
+            if (child.type === "text" && child.value.includes("\n")) {
+                child.value.split("\n").forEach((piece, i) => {
+                    if (i > 0) next.push({ type: "break" });
+                    if (piece) next.push({ type: "text", value: piece });
+                });
+            } else {
+                walk(child);
+                next.push(child);
+            }
+        }
+        node.children = next;
+    };
+    return (tree) => walk(tree);
+}
 
 const MD_COMPONENTS = {
     p:   ({ node: _node, ...props }) => <p   className="mb-2 last:mb-0 leading-relaxed" {...props} />,
@@ -48,8 +81,50 @@ const MD_COMPONENTS = {
     td: ({ node: _node, ...props }) => <td className="px-3 py-2 text-foreground border-b border-border" {...props} />,
 };
 
+/**
+ * A full stop after inline maths may not wrap onto a line of its own. KaTeX
+ * draws a formula as inline-blocks, a line may break after an inline-block, and
+ * Chrome takes that break even past a word joiner — so "…is
+ * $29.6\ \text{kJ g}^{-1}$." ended a question stem with a lone "." on the
+ * next line. The formula and the punctuation go in one `nowrap` span.
+ *
+ * ONLY A SHORT FORMULA. `nowrap` makes the pair unbreakable, and a long inline
+ * equation that cannot wrap is an overflow on a phone — far worse than a
+ * stray full stop. A unit or a value (the case this is for) is well under
+ * `GLUE_MAX` visible characters; anything longer keeps its line breaks.
+ */
+const GLUE_MAX = 24;
+const LEADING_PUNCT = /^[.,;:!?)\]]+/;
+const classes = (n) => (n?.type === "element" ? n.properties?.className || [] : []);
+const visibleText = (n) => {
+    if (n.type === "text") return n.value;
+    // The MathML copy is for screen readers, and is not what takes up the line.
+    if (classes(n).includes("katex-mathml")) return "";
+    return (n.children || []).map(visibleText).join("");
+};
+function rehypeGluePunctuation() {
+    const walk = (node) => {
+        if (!Array.isArray(node.children)) return;
+        node.children = node.children.map((child, i) => {
+            if (!classes(child).includes("katex")) { walk(child); return child; }
+            const next = node.children[i + 1];
+            const punct = next?.type === "text" && next.value.match(LEADING_PUNCT);
+            if (!punct || visibleText(child).length > GLUE_MAX) return child;
+            next.value = next.value.slice(punct[0].length);
+            return {
+                type: "element", tagName: "span",
+                properties: { className: ["whitespace-nowrap"] },
+                children: [child, { type: "text", value: punct[0] }],
+            };
+        });
+    };
+    return (tree) => walk(tree);
+}
+
 export default function MarkdownMath({ children, className = "", isStreaming = false }) {
-    const target = children ? children.toString() : "";
+    // Cleaned BEFORE streaming, so a chunk boundary can never show a repair
+    // half-made.
+    const target = cleanText(children);
     // When streaming, smooth bursty network deliveries into a steady typewriter
     // feel. When not streaming, the hook flushes the full text immediately, so
     // saved/static content renders as-is with no animation cost.
@@ -58,8 +133,8 @@ export default function MarkdownMath({ children, className = "", isStreaming = f
     return (
         <div className={`prose-none break-words ${className}`}>
             <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkMath]}
-                rehypePlugins={[rehypeKatex]}
+                remarkPlugins={[remarkGfm, remarkMath, remarkSoftBreaks]}
+                rehypePlugins={[rehypeKatex, rehypeGluePunctuation]}
                 components={MD_COMPONENTS}
             >
                 {visible}

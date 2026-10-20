@@ -61,6 +61,10 @@ import Console from "@/components/ai_tools/Console";
 import { CHAT_TOOLS } from "@/components/ai_tools/chatTools";
 import { labelForTool } from "@/lib/toolLabels";
 import QuestionPanel from "@/components/mistakes/QuestionPanel";
+import MarkdownMath from "@/components/shared/MarkdownMath";
+import MathText from "@/components/shared/LatexRenderer";
+import MultipartQuestion from "@/components/quizzes/MultipartQuestion";
+import { liftInlineParts } from "@/lib/questionText";
 import { toolBrief } from "@/lib/toolBrief";
 import { recentChats, toolUsage } from "@/lib/aiChats";
 
@@ -2258,6 +2262,40 @@ views.hand = () => (
             <ScoredHand hand={HAND_DONE} total={handTotal(HAND_DONE)} suit="club" elapsed="9:12"
                 turn={{ first: false, from: "9", to: "Q", turned: true }} previousBest={68} />
             <ScoredHand hand={HAND_LONG} total={handTotal(HAND_LONG)} suit="diamond" elapsed="41:05" />
+        </div>
+    </div>
+);
+
+/* ── ?v=qtext — a question exactly as a student reported it ─────────────────
+ *
+ * "These weird lines of symbols came up": a Chemistry question stored with
+ * single-backslash LaTeX and the two characters `\n` between its parts. Drawn
+ * four ways — as the quiz player prints a stored question, as the generator
+ * now saves it (lifted into five real parts), as a one-line list row, and with
+ * the escapes a single-escaping model loses.
+ */
+const QTEXT = String.raw`A student burns ethanol in a spirit burner beneath a metal can containing 100 g of water. The mass of ethanol burned is 1.85 g, and the temperature of the water increases from 20.0 °C to 40.0 °C. The specific heat capacity of water is $4.18\ \text{J g}^{-1}\ ^{\circ}\text{C}^{-1}$. The value for the energy released by the complete combustion of ethanol is $29.6\ \text{kJ g}^{-1}$.\n(a) Write a balanced equation for the complete combustion of ethanol, $\text{C}_2\text{H}_5\text{OH}$. (1 mark)\n(b) Calculate the energy transferred to the water, in kJ, using $q = mc\Delta T$. (2 marks)\n(c) Hence determine the experimental enthalpy change of combustion of ethanol, in $\text{kJ mol}^{-1}$, including the correct sign. Give your answer to 3 significant figures. (3 marks)\n(d) Calculate the percentage of the expected energy per gram that was transferred to the water. (2 marks)\n(e) Evaluate the statement: 'The value in part (d) shows that only this percentage of the ethanol underwent combustion.' In your response, identify two sources of systematic error that would make the experimental value too low and state one modification to the apparatus that would address each. (4 marks)`;
+const QLIFTED = normaliseQuestion(liftInlineParts({ type: "short_answer", question: QTEXT, marks: 5 }), 0);
+const QEATEN = "The specific heat capacity is $4.18\\ \text{J g}^{-1}$ and $\frac{q}{n} = \\Delta H$, with $\beta$ and $\nu$.";
+views.qtext = () => (
+    <div className="min-h-screen bg-background p-4 sm:p-6">
+        <div className="max-w-2xl mx-auto space-y-6">
+            <section data-probe="stored" className="rounded-2xl bg-surface border-2 border-border p-4">
+                <p className="stat-label text-muted-foreground mb-2">Stored as written, in the quiz player</p>
+                <MarkdownMath className="text-base text-foreground leading-relaxed">{QTEXT}</MarkdownMath>
+            </section>
+            <section data-probe="lifted">
+                <p className="stat-label text-muted-foreground mb-2">As the generator saves it now</p>
+                <MultipartQuestion question={QLIFTED} answers={{}} onAnswer={() => {}} subject="Chemistry" />
+            </section>
+            <section data-probe="row" className="rounded-2xl bg-surface border-2 border-border p-4">
+                <p className="stat-label text-muted-foreground mb-2">A list row</p>
+                <p className="text-sm text-muted-foreground line-clamp-2"><MathText>{QTEXT}</MathText></p>
+            </section>
+            <section data-probe="eaten" className="rounded-2xl bg-surface border-2 border-border p-4">
+                <p className="stat-label text-muted-foreground mb-2">Escapes a parse ate</p>
+                <MarkdownMath className="text-base text-foreground">{QEATEN}</MarkdownMath>
+            </section>
         </div>
     </div>
 );

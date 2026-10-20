@@ -55,6 +55,7 @@ import AceTip from "@/components/ace/AceTip";
 import AceShuffle from "@/components/ace/AceShuffle";
 import AceSpot from "@/components/ace/AceSpot";
 import { signalBrain } from "@/lib/brainSignal";
+import MathText from "@/components/shared/LatexRenderer";
 
 const TYPE_ICON = {
     idea: Lightbulb, cause: Zap, effect: Target, step: ListOrdered,
@@ -150,7 +151,7 @@ function GapReview({ review, onClose, onAddNode }) {
                     <div className="space-y-2">
                         {missing.map((m, i) => (
                             <div key={i} className="rounded-lg border border-border p-2.5">
-                                <p className="text-xs font-bold text-foreground leading-snug">{m.prompt}</p>
+                                <p className="text-xs font-bold text-foreground leading-snug"><MathText>{m.prompt}</MathText></p>
                                 {m.hint && <p className="text-[11px] text-muted-foreground mt-0.5">Hint: {m.hint}</p>}
                                 <button onClick={() => onAddNode(m.prompt)}
                                     className="text-[11px] font-bold text-map hover:underline mt-1.5">

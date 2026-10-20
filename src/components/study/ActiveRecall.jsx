@@ -9,7 +9,8 @@ import { Field, Segmented } from "@/components/shared/SetupControls";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Brain, Play, Clock, CheckCircle, Upload, Wand2, Maximize, ArrowRight, ArrowLeft, RotateCcw, X, FolderOpen, Trash2, Sparkles, ChevronDown, ChevronUp, Zap } from "lucide-react";
 import { format } from "date-fns";
-import ReactMarkdown from 'react-markdown';
+import MarkdownMath from "@/components/shared/MarkdownMath";
+import MathText from "@/components/shared/LatexRenderer";
 import { useToast } from "@/components/ui/use-toast";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, uploadAll, STUDY_ACCEPT } from "@/lib/pickFiles";
@@ -19,6 +20,7 @@ import { aceDone } from "@/components/ace/AceReacts";
 import { FEATURES, checkLiveTier } from "@/lib/tierAccess";
 import { getExaminerPrompt } from "@/lib/subjectExaminerPrompts";
 import { STIMULUS_RULE_INLINE } from "@/lib/quizSchema";
+import { cleanText } from "@/lib/questionText";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import { fmtDate } from "@/lib/safeDate";
 import { CONFIDENCE } from "@/lib/calibration";
@@ -100,7 +102,9 @@ function QuestionCard({ question, index, total, answer, onAnswerChange, onNext, 
                     <div className="w-8 h-8 rounded-xl bg-chart-4 text-white flex items-center justify-center text-sm font-bold flex-shrink-0 mt-0.5">
                         {index + 1}
                     </div>
-                    <p className="text-lg font-medium text-foreground leading-relaxed">{question}</p>
+                    {/* Through the maths renderer: a Chemistry question here
+                        printed `$\text{kJ mol}^{-1}$` as exactly that. */}
+                    <MarkdownMath className="flex-1 min-w-0 text-lg font-medium text-foreground leading-relaxed">{question}</MarkdownMath>
                 </div>
             </motion.div>
 
@@ -184,7 +188,7 @@ function ReviewItem({ question, answer, result, index }) {
                     {index + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                    <p className="font-medium text-foreground leading-snug">{question}</p>
+                    <MarkdownMath className="font-medium text-foreground leading-snug">{question}</MarkdownMath>
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-1">
                         {answer || <em>No answer provided</em>}
                     </p>
@@ -222,13 +226,13 @@ function ReviewItem({ question, answer, result, index }) {
                                         <Sparkles className={`w-4 h-4 ${cfg.text}`} />
                                         <span className={`text-sm font-semibold ${cfg.text}`}>AI Feedback</span>
                                     </div>
-                                    <p className="text-sm text-foreground">{result.feedback}</p>
+                                    <MarkdownMath className="text-sm text-foreground">{result.feedback}</MarkdownMath>
                                     {result.model_answer && (
                                         <div className="bg-surface rounded-lg p-3 border border-border">
                                             <p className="text-xs font-semibold text-muted-foreground mb-1.5">Model Answer</p>
-                                            <ReactMarkdown className="text-sm text-foreground prose prose-sm max-w-none">
+                                            <MarkdownMath className="text-sm text-foreground">
                                                 {result.model_answer}
-                                            </ReactMarkdown>
+                                            </MarkdownMath>
                                         </div>
                                     )}
                                 </div>
@@ -482,7 +486,10 @@ ${STIMULUS_RULE_INLINE}`,
                 }
             });
             if (response?.questions?.length > 0) {
-                setQuestions(response.questions.map(q => q.question));
+                // Repaired as it arrives (questionText.js): a model that doubled
+                // its newline escape wrote the two characters `\n` between the
+                // parts of a question, and this list is stored as written.
+                setQuestions(response.questions.map((q) => cleanText(q.question)));
                 setUserAnswers(new Array(response.questions.length).fill(""));
                 toast({ title: `${response.questions.length} questions generated!`, description: "Ready to start your session." });
             }
@@ -919,7 +926,7 @@ For each answer:
                         </div>
                         <div className="space-y-1">
                             {questions.slice(0, 3).map((q, i) => (
-                                <p key={i} className="text-xs text-chart-4 truncate">• {q}</p>
+                                <p key={i} className="text-xs text-chart-4 truncate">• <MathText>{q}</MathText></p>
                             ))}
                             {questions.length > 3 && <p className="text-xs text-chart-4/60">+ {questions.length - 3} more...</p>}
                         </div>
@@ -1257,7 +1264,7 @@ For each answer:
                                 <div key={index} className="border border-border rounded-2xl p-4 space-y-3">
                                     <div className="flex items-start gap-3">
                                         <span className="w-6 h-6 rounded-lg bg-chart-4/15 text-chart-4 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{index + 1}</span>
-                                        <p className="font-medium text-foreground text-sm">{question}</p>
+                                        <MarkdownMath className="flex-1 min-w-0 font-medium text-foreground text-sm">{question}</MarkdownMath>
                                     </div>
                                     <div className="bg-secondary/50 rounded-xl p-3 text-sm text-foreground border border-border ml-9">
                                         {selectedHistorySession.answers?.[index] || <em className="text-muted-foreground/60">No answer provided</em>}
@@ -1271,7 +1278,7 @@ For each answer:
                                             return (
                                                 <div className={`ml-9 rounded-xl p-3 border ${cfg.border} ${cfg.bg}`}>
                                                     <span className={`pill ${cfg.bg} ${cfg.text} border ${cfg.border}`}>{f.verdict}</span>
-                                                    <p className="text-sm text-foreground mt-2">{f.feedback}</p>
+                                                    <MarkdownMath className="text-sm text-foreground mt-2">{f.feedback}</MarkdownMath>
                                                 </div>
                                             );
                                         } catch { return null; }

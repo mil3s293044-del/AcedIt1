@@ -32,6 +32,7 @@ import { Link } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import AceShuffle from "@/components/ace/AceShuffle";
 import { subjectColor } from "@/components/cards/cardIdentity";
+import MarkdownMath from "@/components/shared/MarkdownMath";
 
 const toolIcons = {
     essay_planner: Book,
@@ -443,11 +444,14 @@ export default function AIToolsHistory() {
                         {viewingResult?.tool_type === 'question_generator' ? (
                             <div className="space-y-4">
                                 {JSON.parse(viewingResult.content).map((item, index) => (
-                                    <Card key={index} className="border-2 border-purple-100">
+                                    <Card key={index} className="border-2 border-border">
                                         <CardContent className="p-4">
-                                            <p className="font-semibold text-foreground mb-2">Q{index + 1}: {item.question}</p>
-                                            <div className="mt-2 p-3 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg border border-purple-100">
-                                                <p className="text-sm font-medium text-muted-foreground">{item.answer}</p>
+                                            <div className="flex gap-1.5 font-semibold text-foreground mb-2">
+                                                <span className="flex-shrink-0">Q{index + 1}:</span>
+                                                <MarkdownMath className="flex-1 min-w-0">{item.question}</MarkdownMath>
+                                            </div>
+                                            <div className="mt-2 p-3 bg-secondary/50 rounded-lg border border-border">
+                                                <MarkdownMath className="text-sm font-medium text-muted-foreground">{item.answer}</MarkdownMath>
                                             </div>
                                         </CardContent>
                                     </Card>
