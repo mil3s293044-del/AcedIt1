@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
@@ -62,6 +62,8 @@ import { PaperFields, EmphasisFields } from "@/components/quizzes/QuizSetupField
 import { QUESTION_KINDS } from "@/lib/quizSetup";
 import { MINUTES_PER_MARK, paperShape, markRule, stimulusAsk } from "@/lib/quizSetup";
 import { commandTermRule } from "@/lib/subjectExaminerPrompts";
+import { startJob, getJobs, useJobs, useJobView, adoptJob } from "@/lib/jobStore";
+import { runningIn, laneOf } from "@/lib/aiJobs";
 
 // ─── Coach voice helpers (chill + motivational) ──────────────────────────────
 function getCoachLine({ name, hour, totalQuizzes, recentAttempts, avgScore, lowScore }) {
@@ -145,8 +147,30 @@ export default function Quizzes() {
     const [pendingQuiz, setPendingQuiz] = useState(null);   // shown in mode picker
     const [quizMode, setQuizMode] = useState("standard");
     const [quizTimeLimitMs, setQuizTimeLimitMs] = useState(null);
-    const [isGenerating, setIsGenerating] = useState(false);
     const [showAIDialog, setShowAIDialog] = useState(false);
+    // A quiz being made is a JOB (aiJobs.js), owned by no page, so leaving
+    // here mid-generate does not lose track of it. The page only READS it: the
+    // button, the skeleton and the dialog all follow the one running job.
+    //
+    // The dialog's skeleton IS a quiz job's progress while it is open, so the
+    // floating card stands down for it, and a quiz finishing in front of the
+    // student lands the way it always did — on whichever mount of this page is
+    // showing it, which after a round trip is not the one that started it.
+    const jobs = useJobs();
+    const quizJob = useJobView("quiz", {
+        show: (j) => showAIDialog && j.kind === "quiz",
+        onSettled: (job) => settleQuizJob(job),
+    });
+    const isGenerating = !!quizJob;
+    // The skeleton replaces the form in the same scroll box, which keeps the
+    // form's scroll position — on a phone the student pressed Make at the
+    // bottom of a long form, so the counted line landed above the visible
+    // area. A new job starts at the top.
+    const aiDialogBody = useRef(null);
+    const dialogJobId = quizJob?.kind === "quiz" ? quizJob.id : null;
+    useEffect(() => {
+        if (dialogJobId) aiDialogBody.current?.scrollTo?.({ top: 0 });
+    }, [dialogJobId]);
     const [isManualCreate, setIsManualCreate] = useState(false);
     const [uploadedFiles, setUploadedFiles] = useState([]);
     // A chapter of a stored book — kept apart from `uploadedFiles` because it
@@ -234,6 +258,53 @@ export default function Quizzes() {
         setQuizTimeLimitMs(null);
         setIsPlaying(true);
     }, [searchParams, quizzes, isPlaying, setSearchParams]);
+
+    /**
+     * A QUIZ FINISHED SOMEWHERE ELSE IS ON THE SHELF WHEN YOU GET BACK.
+     *
+     * The generator saved it, but this mount may have read the shelf before
+     * that happened — a student who left mid-generate and came back saw no new
+     * quiz and pressed generate again. A ready job in the quiz lane re-reads
+     * the shelf quietly (no page loader over what they are looking at).
+     */
+    const readyQuizJobs = jobs.filter((j) => j.status === "ready" && laneOf(j.kind) === "quiz").map((j) => j.id).join(",");
+    useEffect(() => {
+        if (!readyQuizJobs || !user?.email) return;
+        base44.entities.Quiz.filter({ created_by: user.email })
+            .then((rows) => setQuizzes(rows || []))
+            .catch(() => { /* the shelf it already has stays up */ });
+    }, [readyQuizJobs, user?.email]);
+
+    /**
+     * `?open=<quizId>` is where the floating card's Open lands: the table
+     * before a sit for the quiz it made, never straight into the player — the
+     * student chooses practice or a timed SAC there, the same as from the
+     * shelf. Taking it also takes the job off the card.
+     *
+     * A quiz not on the shelf yet gets ONE re-read (the shelf may have been
+     * read before the save); after that the param is dropped like `?play=`.
+     */
+    const openRetried = useRef(false);
+    useEffect(() => {
+        const id = searchParams.get("open");
+        if (!id || isLoading || isPlaying) return;
+        const target = quizzes.find((q) => q.id === id);
+        if (!target && !openRetried.current && user?.email) {
+            openRetried.current = true;
+            base44.entities.Quiz.filter({ created_by: user.email })
+                .then((rows) => setQuizzes(rows || []))
+                .catch(() => setQuizzes((prev) => [...prev]));
+            return;
+        }
+        openRetried.current = false;
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("open");
+            return next;
+        }, { replace: true });
+        adoptJob("quiz", user?.email);
+        if (target) setPendingQuiz(target);
+    }, [searchParams, quizzes, isLoading, isPlaying, user?.email, setSearchParams]);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -385,7 +456,9 @@ export default function Quizzes() {
             return;
         }
 
-        if (isGenerating) return;
+        // Read the store, not the render: a double-press lands before React
+        // has re-rendered with the first job in it.
+        if (runningIn(getJobs(), "quiz")) return;
 
         // Tier gate — block immediately if the user has hit the cap, so we don't
         // burn the upload + spin a loader for a request that's about to 429.
@@ -404,11 +477,25 @@ export default function Quizzes() {
         // Keep the dialog open — the skeleton renders inside it. We close
         // the dialog on the success path below so the user lands on the new
         // quiz; on error we leave it open so they can adjust and retry.
-        setIsGenerating(true);
+        //
+        // It is a JOB from here, so a student who leaves mid-generate is
+        // followed by a card that fills as each question is written. The
+        // total is what they asked for; the model may write fewer, and the
+        // card says the real number once it is done.
+        const quizTitle = effectiveSubject + (aiSettings.topic ? ' - ' + aiSettings.topic : '') + (aiSettings.quiz_style !== 'standard' ? ' (' + aiSettings.quiz_style.replace('_', ' ') + ')' : '');
+        const job = startJob({
+            kind: "quiz",
+            title: /quiz/i.test(quizTitle) ? quizTitle : `${quizTitle} quiz`,
+            email: user?.email,
+            total: aiSettings.num_questions,
+            files: uploadedFiles.length,
+            openTo: "/Quizzes",
+        });
 
         try {
             // Upload all files (per-file error isolation — one failure doesn't kill all)
-            const uploadResults = await Promise.allSettled(uploadedFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => ({ file_url: r.file_url, name: f.name, ext: f.name.split('.').pop()?.toLowerCase() }))));
+            const uploadResults = await Promise.allSettled(uploadedFiles.map(f => base44.integrations.Core.UploadFile({ file: f }).then(r => { job.fileDone(); return { file_url: r.file_url, name: f.name, ext: f.name.split('.').pop()?.toLowerCase() }; })));
+            job.stage("read");
             const uploadedUrls = uploadResults.filter(r => r.status === 'fulfilled').map(r => r.value);
             // Only a failure when there was something to upload. A generate
             // from a book chapter alone has no files by design, and this used
@@ -596,7 +683,8 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                     },
                     required: ["questions"]
                 }
-            });
+            }, { onProgress: job.progress });
+            job.stage("finish");
 
             if (!response?.questions?.length) {
                 throw new Error("AI didn't generate questions. Try a different file or fewer questions.");
@@ -663,8 +751,8 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             }
 
             // Save quiz
-            await base44.entities.Quiz.create({
-                title: effectiveSubject + (aiSettings.topic ? ' - ' + aiSettings.topic : '') + (aiSettings.quiz_style !== 'standard' ? ' (' + aiSettings.quiz_style.replace('_', ' ') + ')' : ''),
+            const created = await base44.entities.Quiz.create({
+                title: quizTitle,
                 subject: effectiveSubject,
                 questions: formattedQuestions,
                 difficulty: aiSettings.difficulty,
@@ -698,29 +786,39 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             // with no case study needs to know it is the app and not them, and
             // they are the only one who can press generate again.
             const unanswerable = formattedQuestions.filter(referencesMissingSource).length;
-            toast({
-                title: "Quiz created!",
-                description: unanswerable > 0
-                    ? `${formattedQuestions.length} questions. ${unanswerable} of them point at source material that didn't come through — regenerate if those ones don't make sense.`
-                    : `${formattedQuestions.length} questions generated successfully`
+            // Settled, not announced: the page showing it (settleQuizJob)
+            // announces it, and anywhere else the card holds it as Ready with
+            // the same warning the toast carries.
+            job.ready({
+                items: formattedQuestions.length,
+                note: unanswerable > 0 ? `${unanswerable} point at source material that didn't come through.` : "",
+                openTo: created?.id ? `/Quizzes?open=${created.id}` : "/Quizzes",
+                result: { quizId: created?.id || null, count: formattedQuestions.length, unanswerable },
             });
-
-            // Reset form
-            setUploadedFiles([]);
-            setAiSettings(DEFAULT_AI_SETTINGS);
-            setIsGenerating(false);
-            setShowAIDialog(false);
-            await loadData();
         } catch (error) {
             console.error("Quiz generation error:", error);
-
-            toast({
-                title: "Generation failed",
-                description: error.message || "Try a smaller file or fewer questions",
-                variant: "destructive"
-            });
-            setIsGenerating(false);
+            job.fail(error.message || "Try a smaller file or fewer questions");
         }
+    };
+
+    /** A quiz job this page was showing, settled — what the generator used to do inline. */
+    const settleQuizJob = (job) => {
+        if (job.status === "failed") {
+            // The dialog stays open so they can adjust and retry.
+            toast({ title: "Generation failed", description: job.error || "Try a smaller file or fewer questions", variant: "destructive" });
+            return;
+        }
+        const { count = job.items || 0, unanswerable = 0 } = job.result || {};
+        toast({
+            title: "Quiz created!",
+            description: unanswerable > 0
+                ? `${count} questions. ${unanswerable} of them point at source material that didn't come through — regenerate if those ones don't make sense.`
+                : `${count} questions generated successfully`
+        });
+        setUploadedFiles([]);
+        setAiSettings(DEFAULT_AI_SETTINGS);
+        setShowAIDialog(false);
+        loadData();
     };
 
     const handleDeleteQuiz = async (quizId) => {
@@ -786,10 +884,20 @@ Base ALL questions on the provided material. If files are attached, read ALL con
             return;
         }
 
-        setIsGenerating(true);
+        if (runningIn(getJobs(), "quiz")) return;
+        const numQuestions = quiz.questions?.length || 10;
+        // A reshuffle is a quiz being made, in the same lane, and nothing on
+        // this page shows its progress — so the floating card does, here too.
+        const job = startJob({
+            kind: "reshuffle",
+            title: `${quiz.subject} (Reshuffled)`,
+            email: user?.email,
+            total: numQuestions,
+            files: 0,
+            openTo: "/Quizzes",
+        });
 
         try {
-            const numQuestions = quiz.questions?.length || 10;
             const mcqCount = Math.ceil(numQuestions * 0.6);
             const shortCount = numQuestions - mcqCount;
             // Reshuffle means "same quiz, new questions", so it has to keep the
@@ -919,7 +1027,8 @@ Return valid JSON only.`,
                     },
                     required: ["questions"]
                 }
-            });
+            }, { onProgress: job.progress });
+            job.stage("finish");
 
             if (!response?.questions?.length) {
                 throw new Error("AI didn't generate questions. Try again.");
@@ -977,7 +1086,7 @@ Return valid JSON only.`,
                 throw new Error("No valid questions generated. Please try again.");
             }
 
-            await base44.entities.Quiz.create({
+            const created = await base44.entities.Quiz.create({
                 title: `${quiz.subject} (Reshuffled)`,
                 subject: quiz.subject,
                 questions: formattedQuestions,
@@ -985,21 +1094,16 @@ Return valid JSON only.`,
                 category: quiz.category || "subject_content",
             });
 
-            toast({
-                title: "New quiz created!",
-                description: `${formattedQuestions.length} new questions generated`
+            // Nothing on this page draws a reshuffle, so it is always held:
+            // the card turns to Ready with Open on it — the toast this replaced,
+            // with somewhere to go — and the shelf re-reads itself quietly.
+            job.ready({
+                items: formattedQuestions.length,
+                openTo: created?.id ? `/Quizzes?open=${created.id}` : "/Quizzes",
             });
-
-            await loadData();
         } catch (error) {
             console.error("Reshuffle error:", error);
-            toast({
-                title: "Reshuffle failed",
-                description: error.message || "Could not generate new questions",
-                variant: "destructive"
-            });
-        } finally {
-            setIsGenerating(false);
+            job.fail(error.message || "Could not generate new questions");
         }
     };
 
@@ -1855,10 +1959,9 @@ Return valid JSON only.`,
                 <Dialog open={showAIDialog} onOpenChange={(open) => {
                     if (!open) {
                         // Allow closing at any time — including mid-generation.
-                        // The in-flight AI request continues in the background;
-                        // when it resolves the new quiz still appears in the list.
+                        // The job carries on, and with the skeleton gone the
+                        // floating card picks it up, here and on any other page.
                         setShowAIDialog(false);
-                        setIsGenerating(false);
                         setUploadedFiles([]);
                         setAiSettings(DEFAULT_AI_SETTINGS);
                     }
@@ -1872,13 +1975,14 @@ Return valid JSON only.`,
                             <p className="text-sm text-muted-foreground mt-2">Questions written from your own material in VCAA's style, and marked when you sit it.</p>
                         </DialogHeader>
 
-                        <div className="flex-1 overflow-y-auto px-6">
-                            {isGenerating ? (
+                        <div ref={aiDialogBody} className="flex-1 overflow-y-auto px-6">
+                            {quizJob?.kind === "quiz" ? (
                                 <div className="py-6">
                                     <AISkeleton
                                         type="questions"
-                                        count={aiSettings.num_questions || 5}
-                                        message={`Creating your ${aiSettings.num_questions || 5}-question quiz…`}
+                                        count={quizJob.total || aiSettings.num_questions || 5}
+                                        message={`Creating your ${quizJob.total || aiSettings.num_questions || 5}-question quiz…`}
+                                        job={quizJob}
                                     />
                                 </div>
                             ) : (

@@ -93,12 +93,21 @@ export async function acceptFiles(fileList, { toast, existing = [] } = {}) {
  * single expired or oversized file turned a five-file generate into nothing at
  * all. Returns what landed plus what did not, and the caller decides.
  */
-export async function uploadAll(files, uploader) {
-    const settled = await Promise.allSettled((files || []).map(async (f) => ({
-        url: (await uploader({ file: f })).file_url,
-        name: f.name,
-        ext: String(f.name || "").split(".").pop()?.toLowerCase() || "",
-    })));
+export async function uploadAll(files, uploader, { onEach } = {}) {
+    // `onEach` hears every file as it lands or fails — the job card counts
+    // uploads one at a time (aiJobs.js), and a list that only reports at the
+    // end would sit at "0 of 3" until all three were done.
+    const settled = await Promise.allSettled((files || []).map(async (f) => {
+        try {
+            return {
+                url: (await uploader({ file: f })).file_url,
+                name: f.name,
+                ext: String(f.name || "").split(".").pop()?.toLowerCase() || "",
+            };
+        } finally {
+            try { onEach?.(); } catch { /* a progress bar must never fail an upload */ }
+        }
+    }));
     const uploaded = [];
     const failed = [];
     settled.forEach((r, i) => {

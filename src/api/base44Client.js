@@ -184,9 +184,11 @@ const integrationsProxy = new Proxy(realBase44.integrations, {
         get(coreTarget, coreProp) {
           if (coreProp === 'InvokeLLM') {
             // Lazy-load to avoid a circular import at module init time.
-            return async (params) => {
+            // The second argument is `{ onProgress }` (aiJobs.js): a
+            // generate that reports how far along it is.
+            return async (params, options) => {
               const { invokeLLM } = await import('@/lib/aiClient');
-              return invokeLLM(params || {});
+              return invokeLLM(params || {}, options || {});
             };
           }
           if (coreProp === 'UploadFile') {

@@ -48,7 +48,12 @@ const shuffleQuestion = (q) => {
     return { question: q.question, options: opts, correctIndex: opts.indexOf(correct) };
 };
 
-export default function LoadingQuiz() {
+/**
+ * `making` is what is being built behind it. It said "cheat sheet" on every
+ * screen, so the quiz generator promised a cheat sheet and the flashcard
+ * generator did too: copy written for one screen, reused on three.
+ */
+export default function LoadingQuiz({ making = "cheat sheet" }) {
     const [deck, setDeck] = useState([]);
     const [loadingDeck, setLoadingDeck] = useState(true);
     const [idx, setIdx] = useState(0);
@@ -146,7 +151,7 @@ export default function LoadingQuiz() {
     if (loadingDeck || !current) {
         return (
             <div className="card-soft p-6">
-                <AceLoading>Building your cheat sheet…</AceLoading>
+                <AceLoading>Building your {making}…</AceLoading>
             </div>
         );
     }
@@ -158,7 +163,7 @@ export default function LoadingQuiz() {
             <div className="flex items-center justify-between px-5 py-3 border-b border-border bg-secondary/30">
                 <div className="flex items-center gap-2">
                     <AceShuffle size="sm" />
-                    <span className="text-sm font-bold text-foreground">Quick quiz while we build your cheat sheet</span>
+                    <span className="text-sm font-bold text-foreground">Quick quiz while we build your {making}</span>
                 </div>
                 {xpEarned > 0 && (
                     <span className="pill bg-xp/10 text-xp flex items-center gap-1"><Sparkles className="w-3 h-3" /> +{xpEarned} XP</span>
@@ -225,7 +230,7 @@ export default function LoadingQuiz() {
                     </motion.div>
                 </AnimatePresence>
 
-                <p className="text-[11px] text-center text-muted-foreground">Score {correctCount} · keep going while your cheat sheet builds</p>
+                <p className="text-[11px] text-center text-muted-foreground">Score {correctCount} · keep going while your {making} builds</p>
             </div>
         </div>
     );

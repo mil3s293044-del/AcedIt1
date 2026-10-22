@@ -8658,6 +8658,116 @@ that). Every "is this person Premium" check goes through `isPremium` /
 `subscription_tier` alone — five of them did, and would have left a code
 student looking free in the nav, the planner and the companion.
 
+## A quiz being made follows you to the next page
+
+**"When someone begins creating an AI resource, have there be a progress bar
+showing how close it is to being done if they click onto another page while
+waiting, and make sure it says."** A generate runs for twenty seconds to a
+couple of minutes. Leaving the page never stopped the request, but nothing on
+any other screen said it was still going:
+
+- a **quiz** saved itself silently, so a student back on the shelf who did not
+  see it yet pressed generate again;
+- a **deck** went into a draft that only came back if they happened to reopen
+  the flashcard screen;
+- **Active Recall's** questions landed in a component that no longer existed,
+  and were lost.
+
+A creation is a JOB now (`src/lib/jobStore.js`), owned by no page, and
+`JobTray` is a floating card that shows it on every page. It covers the three
+the student chose: making a quiz (and reshuffling one), flashcards from notes,
+and Active Recall questions. `src/lib/aiJobs.js` is the model and
+`aiJobs.test.mjs` holds it: 49 checks, 45 injections, every one caught against
+a green baseline.
+
+### The bar is counted, never timed
+
+The tempting bar eases toward 95% on a clock. Every position on it is a guess,
+which is the "figure with nothing behind it" this app refuses everywhere else.
+The model writes JSON and the server already streamed it, so the server counts
+each question or card as it CLOSES (`createItemCounter`). That count fills the
+bar: "6 of 10" means six questions exist.
+
+- **`progress: true` turns `invokeAI` into server-sent events**: `progress` as
+  items close, `done` with the parsed result, `error` with the message, and a
+  heartbeat every eight seconds. Only a schema call is counted, and only when
+  the caller asks. Every other call still gets plain JSON, and every tier check
+  has already run, so a refusal is still an ordinary status code. The
+  schema-fallback retry is counted too, or a retried generate would sit at
+  zero.
+- **The client times a counted call on SILENCE**, not in total. A thirty-card
+  deck can genuinely write for longer than two minutes, and the heartbeat is
+  proof it is still going. A connection that closes without `done` is a
+  failure, never an empty success.
+- **Before anything can be counted, the bar holds still**: files uploading, or
+  the model reading them. A sheen passes over it and the line says which wait it
+  is. Where the student set no count ("every card it supports") there is no
+  denominator, so the line says "14 so far" and the bar does not pretend.
+- **The stage bands only stop the bar running backwards.** They are layout, not
+  data. The printed count is the measurement.
+
+### Hold for review
+
+Nothing new saves itself. A quiz was already saved by its generator, and Open
+lands on its pre-sit table (`/Quizzes?open=`). A deck keeps its Save Deck step,
+and Review reopens the preview. An Active Recall set keeps its Start. A held
+result is kept in sessionStorage, so a reload does not lose it. A RUNNING job
+cannot survive a reload, because it is a request in this tab, so the card asks
+before the tab closes. Any running job holds the app still (`BUSY.AI`), because
+uploading and saving are longer than the model call that `invokeLLM` already
+claims.
+
+### The generator cannot hand back its own result
+
+**It is a closure over the mount that STARTED the job.** A student who leaves
+and comes back is looking at a different mount, whose state that closure cannot
+reach. Driving it found exactly that: the dialog reopened on the skeleton, the
+job finished, and the new mount never heard. So the generator only marks the
+job settled. Whichever mount is watching it takes it (`watchStep`,
+`useJobView`), toasts, closes the dialog, and opens the preview.
+
+**WATCHING IS NOT DRAWING, and the first version confused them.** The deck
+screen's skeleton sat under a warm-up quiz, below the fold at laptop height. It
+counted as showing the job, so it hid the card, and the student was left on a
+page that looked idle. There are now two counted claims:
+
+- a page that will take a settled job **watches** it, which stops a "Ready"
+  card flashing for one frame;
+- a bar actually **on screen** (`JobBar claims`, an IntersectionObserver)
+  stands the card down while the job runs.
+
+The counted bar now leads the skeleton, above the warm-up quiz. A phone's quiz
+dialog also scrolls to the top when a job starts, or the line lands above what
+can be seen.
+
+### What driving it found
+
+- **The page crashed the moment a generate started.** `show` read
+  `showAIDialog`, which was declared further down, so it hit the temporal dead
+  zone on the first running render. Nothing caught it because nothing calls
+  `show` until a job exists. The card kept counting over the error screen.
+  The test now checks that every name `show` reads is declared before the hook.
+- **Study read `?tab=` once, on mount.** Review from a page already on Study
+  landed on the timer. Re-keying on the query alone was not enough: picking a
+  tile does not rewrite the URL, so the address could already say
+  `?tab=spaced_repetition`. It is keyed on `location.key`, which is new on
+  every navigation.
+- **The warm-up quiz said "while we build your cheat sheet"** in the quiz and
+  flashcard generators. The copy was written for one screen and reused on
+  three. `LoadingQuiz` takes `making` now.
+- **A double press reads the store, not the render.** The second press lands
+  before React has re-rendered with the first job.
+
+One job per lane. A reshuffle IS a quiz being made, so it shares the quiz lane.
+A finished job in a lane is replaced by a new one; a running one never is.
+
+Draw every card state with `scripts/_floorProbe.jsx?v=jobs`. To drive it for
+real, run `server.mjs` with `ANTHROPIC_BASE_URL` pointed at a slow fake that
+streams Anthropic's event format. Then generate, leave mid-count, and watch the
+card fill, turn Ready and land on Open. Do this in both themes, at 390, and with
+reduced motion. The harness's `page.route(...).continue()` is what lets the real
+request through.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -9109,6 +9219,12 @@ student looking free in the nav, the planner and the companion.
   `supabase/migrations/0043_study_groups_server_only.sql` — study groups on the
   server: codes and links that ask, set phrases instead of a chat, this week
   first, a shelf you add from in one tap. Apply 0043 AFTER the deploy
+- `src/lib/aiJobs.js` + `aiJobs.test.mjs`, `src/lib/jobStore.js`,
+  `src/components/shared/JobTray.jsx`: a quiz, deck or Active Recall set being
+  made, followed from page to page. The server counts items as they close and
+  streams them (`progress: true` on `invokeAI`), and the card fills on that
+  count. A finished job is held as Ready until Open. The page that watched a
+  job takes it, and a bar on screen stands the card down.
 - `src/lib/premiumGrant.js` + `premiumGrant.test.mjs` — when a checkout grants
   premium (a $0 promotion code included, a trial deliberately not), that the
   session is the caller's, and the reveal owed on the profile until a screen

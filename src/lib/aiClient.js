@@ -32,6 +32,7 @@ import { supabase } from '@/api/supabaseClient';
 import { FEATURES as TIER_FEATURES } from '@/lib/tierAccess';
 import { apiUrl } from '@/lib/apiBase';
 import { globalBusy, BUSY } from "@/lib/liveRefresh";
+import { readCounted } from "@/lib/aiJobs";
 
 export const FEATURES = TIER_FEATURES;
 
@@ -57,7 +58,7 @@ async function getAuthHeader() {
 
 // Non-streaming — returns the parsed result (string or object depending on
 // whether response_json_schema was passed).
-export async function invokeLLM(params) {
+export async function invokeLLM(params, options = {}) {
   // Hold the app still while a model call is in flight — a refresh mid-call
   // can drop what is being written, and the marking path runs through here.
   // Released in a finally below, because a leaked claim would leave the app
@@ -65,12 +66,22 @@ export async function invokeLLM(params) {
   const busy = globalBusy.acquire(BUSY.AI);
   const authHeaders = await getAuthHeader();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 120_000); // 2 min timeout
+  // `onProgress` asks the server to COUNT what it has written (aiJobs.js):
+  // each question or card as it closes. Only a schema call is countable.
+  const counted = typeof options.onProgress === 'function' && !!params?.response_json_schema;
+  // A counted call is timed on SILENCE rather than in total. A thirty-card
+  // deck can genuinely write for longer than two minutes, and every event —
+  // the server's heartbeat included — is proof it is still going.
+  let timeout = setTimeout(() => controller.abort(), 120_000); // 2 min timeout
+  const stillAlive = () => {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => controller.abort(), 120_000);
+  };
   try {
     const r = await fetch(apiUrl('/local-ai/invokeAI'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeaders },
-      body: JSON.stringify(params || {}),
+      body: JSON.stringify(counted ? { ...(params || {}), progress: true } : (params || {})),
       signal: controller.signal,
     });
 
@@ -86,6 +97,11 @@ export async function invokeLLM(params) {
       throw new Error(body.message || `AI request failed (${r.status})`);
     }
 
+    // A server that answered with plain JSON (an older deploy, or a call it
+    // could not count) is read the ordinary way — the bar just never fills.
+    if (counted && r.body && (r.headers.get('content-type') || '').includes('text/event-stream')) {
+      return await readCounted(r.body, options.onProgress, stillAlive);
+    }
     return await r.json();
   } catch (err) {
     if (err.name === 'AbortError') throw new Error('AI request timed out — the document may be too large. Try a smaller file or fewer questions.');
