@@ -1026,3 +1026,31 @@
 @media (prefers-reduced-motion: reduce) {
   .board-sheen::before { animation: none; display: none; }
 }
+
+/* A job's bar while there is nothing to COUNT yet — the files are uploading or
+   the model is reading them. The fill holds still and a light passes over it,
+   so the bar says "working" without its position claiming anything (aiJobs.js).
+   Under reduced motion the pass is gone and the status line says it alone. */
+@keyframes job-sheen {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+.job-sheen {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.job-sheen::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, hsl(var(--primary) / 0.55), transparent);
+  animation: job-sheen 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .job-sheen::before { animation: none; display: none; }
+}

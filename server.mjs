@@ -85,6 +85,7 @@ import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/
 import { codePremiumActive, normaliseCode, cleanName, nameProblem, redeemVerdict } from "./src/lib/premiumCodes.js";
 import { makeFriendCode, normaliseFriendCode, REQUESTS_PER_DAY, PENDING_MAX, LOOKUPS_PER_HOUR, noteText, SHARE_TABLES, DECK_SHARE_MAX, splitFriendships, friendName } from "./src/lib/friends.js";
 import { outgoingCard, importedDeck, importDeckId } from "./src/lib/sharedDeck.js";
+import { createItemCounter } from "./src/lib/aiJobs.js";
 import {
   makeGroupCode, normaliseGroupCode, cleanGroupName, isMember, isOwner, joinRefusal, withMember, withoutMember,
   GROUP_PHRASES, phraseText, feedItem, shapeFeed, GROUP_REACTIONS, toggleReaction, reactionSummary,
@@ -4295,9 +4296,32 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     // Use streaming internally to avoid HTTP timeouts on long generations
     // (large PDFs, big essays, etc.). We still return a single JSON response
     // to the caller — the streaming is purely for connection-level reliability.
+    //
+    // ─── UNLESS THE CALLER ASKED HOW FAR ALONG IT IS ─────────────────────────
+    // A quiz, a deck or a set of questions is a job a student may walk away
+    // from (aiJobs.js), and the card that follows them around fills on a
+    // COUNT: each question or card the model has finished writing. That count
+    // only exists here, in the stream, so `progress: true` turns the reply
+    // into server-sent events — `progress` as items close, `done` with the
+    // parsed result, `error` with the message — and every check above has
+    // already run, so a refusal still arrives as an ordinary status code.
+    // Only a schema call is countable; anything else ignores the flag.
+    const progressSse = params.progress === true && !!params.response_json_schema ? openProgressSse(res) : null;
+    const counted = (stream) => {
+      if (!progressSse) return stream;
+      const counter = createItemCounter();
+      let started = false;
+      let last = -1;
+      stream.on("text", (delta) => {
+        const items = counter.push(delta);
+        if (!started) { started = true; progressSse.send("progress", { stage: "write", items }); last = items; }
+        else if (items !== last) { last = items; progressSse.send("progress", { stage: "write", items }); }
+      });
+      return stream;
+    };
     let response;
     try {
-      const stream = anthropic.messages.stream(request, { timeout: 120_000 });
+      const stream = counted(anthropic.messages.stream(request, { timeout: 120_000 }));
       response = await stream.finalMessage();
     } catch (err) {
       // Fallback: schema rejected by Anthropic's grammar compiler.
@@ -4328,7 +4352,10 @@ app.post("/local-ai/invokeAI", async (req, res) => {
         request.system = request.system
           ? [...request.system, schemaInstruction]
           : [schemaInstruction];
-        const stream = anthropic.messages.stream(request, { timeout: 120_000 });
+        // The first attempt may have written part of an answer before it was
+        // refused, so the count starts again with the retry.
+        progressSse?.send("progress", { stage: "write", items: 0 });
+        const stream = counted(anthropic.messages.stream(request, { timeout: 120_000 }));
         response = await stream.finalMessage();
       } else {
         throw err;
@@ -4358,6 +4385,7 @@ app.post("/local-ai/invokeAI", async (req, res) => {
         // Surface this as a 500 so the client's catch handler fires; returning
         // the raw text on success silently breaks every JSON-schema caller.
         console.error("[local-ai] Failed to parse JSON response (likely truncated). First 500 chars:", stripped.slice(0, 500));
+        if (progressSse) return progressSse.fail("AI response was incomplete — try generating fewer items at once (e.g. 5–8 questions instead of 15+).", { truncated: true });
         return res.status(500).json({
           message: "AI response was incomplete — try generating fewer items at once (e.g. 5–8 questions instead of 15+).",
           truncated: true,
@@ -4387,15 +4415,56 @@ app.post("/local-ai/invokeAI", async (req, res) => {
     // text prompts, object for response_json_schema). The SDK's axios
     // interceptor returns `response.data` to the caller, so what we send here
     // becomes what the AI tool sees directly.
+    if (progressSse) return progressSse.done(result);
     return res.json(result);
   } catch (err) {
     console.error("[local-ai] error:", err);
     const message = err?.message || String(err);
+    // Once the events have started the status line is gone, so a failure is
+    // an event of its own rather than a 500 nobody can read.
+    if (res.headersSent && res.getHeader("Content-Type")?.toString().includes("text/event-stream")) {
+      return writeSseError(res, message);
+    }
     // SDK's error interceptor reads error.response.data.message — give it that
     // shape so AI tools see a useful message.
     return res.status(500).json({ message });
   }
 });
+
+/**
+ * Server-sent events for a counted generate. Opened only once every check has
+ * passed. A heartbeat goes out every few seconds while the model is still
+ * reading, so a proxy does not close a quiet connection and the client's
+ * idle timer knows the call is alive.
+ */
+function openProgressSse(res) {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders?.();
+  let closed = false;
+  const send = (event, data) => {
+    if (closed) return;
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data ?? {})}\n\n`);
+  };
+  const beat = setInterval(() => send("ping", {}), 8000);
+  beat.unref?.();
+  const end = () => { if (!closed) { closed = true; clearInterval(beat); res.end(); } };
+  res.on("close", () => { closed = true; clearInterval(beat); });
+  send("progress", { stage: "read", items: 0 });
+  return {
+    send,
+    done(result) { send("done", result); end(); },
+    fail(message, extra = {}) { send("error", { message, ...extra }); end(); },
+  };
+}
+
+function writeSseError(res, message) {
+  try {
+    res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
+  } catch { /* the connection is already gone */ }
+  return res.end();
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 // Goal AI cluster — Phase 3b ports (2 functions: AI plan generator + auto-progress tracker)

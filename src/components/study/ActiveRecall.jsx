@@ -31,6 +31,9 @@ import SourceRow from "./SourceRow";
 import { deckCards } from "@/lib/mistakeBank";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { signalBrain } from "@/lib/brainSignal";
+import { startJob, getJobs, useJobs, useJobView, adoptJob } from "@/lib/jobStore";
+import { runningIn, jobLine } from "@/lib/aiJobs";
+import { JobBar } from "@/components/shared/JobTray";
 
 // Static class lookups so Tailwind JIT can see every utility.
 const verdictConfig = {
@@ -285,9 +288,20 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
     // setup screen with one source list, so a second picker would be two
     // answers to "what am I working from". See megaUpload.js.
     const [megaPick, setMegaPick] = useState(null);
-    const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
     const [isGeneratingMarking, setIsGeneratingMarking] = useState(false);
     const [isFocusMode, setIsFocusMode] = useState(false);
+    // Whose questions these are — the job card is per student (aiJobs.js).
+    const [myEmail, setMyEmail] = useState(null);
+    // A question set being made is a JOB: leaving this screen mid-way used to
+    // drop the questions into a component that no longer existed. Now a
+    // floating card follows the student and holds them until they come back.
+    // While the setup is on screen, its own button shows the job.
+    const jobs = useJobs();
+    const recallJob = useJobView("recall", {
+        show: phase === "setup" && !isFocusMode,
+        onSettled: (job) => settleRecallJob(job),
+    });
+    const isGeneratingQuestions = !!recallJob;
     const [showFocusPrompt, setShowFocusPrompt] = useState(false);
     // See startFromSuggestion — carries a pick across the tick that sets state.
     const pendingPick = useRef(null);
@@ -332,6 +346,7 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
         const loadSubjects = async () => {
             try {
                 const currentUser = await base44.auth.me();
+                setMyEmail(currentUser?.email || null);
                 const subjects = await base44.entities.UserSubject.filter({ created_by: currentUser.email, is_active: true });
                 const uniqueSubjects = subjects.reduce((acc, cur) => {
                     if (!acc.find(i => i.subject_name === cur.subject_name)) acc.push(cur);
@@ -419,9 +434,20 @@ export default function ActiveRecall({ onSessionComplete, userSubjects: initialU
             return;
         }
 
-        setIsGeneratingQuestions(true);
+        // Read the store, not the render: a double-press lands before React
+        // has re-rendered with the first job in it.
+        if (runningIn(getJobs(), "recall")) return;
+        const job = startJob({
+            kind: "recall",
+            title: `${selectedSubject}${topic ? ` · ${topic}` : ""} questions`,
+            email: myEmail,
+            total: questionCount,
+            files: sourceFiles.length,
+            openTo: "/Study?tab=active_recall",
+        });
         try {
-            const { uploaded, failed } = await uploadAll(sourceFiles, base44.integrations.Core.UploadFile);
+            const { uploaded, failed } = await uploadAll(sourceFiles, base44.integrations.Core.UploadFile, { onEach: job.fileDone });
+            job.stage("read");
             failed.forEach(f => toast({
                 title: "Skipped a file",
                 description: `${f.name} couldn't be uploaded, so it isn't included.`,
@@ -484,21 +510,52 @@ ${STIMULUS_RULE_INLINE}`,
                     },
                     required: ["questions"]
                 }
-            });
-            if (response?.questions?.length > 0) {
-                // Repaired as it arrives (questionText.js): a model that doubled
-                // its newline escape wrote the two characters `\n` between the
-                // parts of a question, and this list is stored as written.
-                setQuestions(response.questions.map((q) => cleanText(q.question)));
-                setUserAnswers(new Array(response.questions.length).fill(""));
-                toast({ title: `${response.questions.length} questions generated!`, description: "Ready to start your session." });
-            }
+            }, { onProgress: job.progress });
+            job.stage("finish");
+            if (!response?.questions?.length) throw new Error("No questions came back. Try again, or pick a smaller chapter.");
+            // Repaired as it arrives (questionText.js): a model that doubled
+            // its newline escape wrote the two characters `\n` between the
+            // parts of a question, and this list is stored as written.
+            const made = response.questions.map((q) => cleanText(q.question));
+            // Settled, not shown: the mount watching it fills the session
+            // (settleRecallJob), and anywhere else the card holds it as Ready.
+            job.ready({ items: made.length, result: { questions: made, subject: selectedSubject, topic } });
         } catch (error) {
-            toast({ title: "Generation failed", description: error.message || "Could not generate questions.", variant: "destructive" });
-        } finally {
-            setIsGeneratingQuestions(false);
+            job.fail(error.message || "Could not generate questions.");
         }
     };
+
+    /**
+     * A question set, settled — from the job this screen was showing, or one
+     * held while the student was elsewhere. The subject and topic come with
+     * it, because the setup may have been changed (or remounted empty) since.
+     */
+    const settleRecallJob = (job, { held = false } = {}) => {
+        if (job.status === "failed") {
+            toast({ title: "Generation failed", description: job.error || "Could not generate questions.", variant: "destructive" });
+            return;
+        }
+        const { questions: made = [], subject, topic: madeTopic } = job.result || {};
+        if (!made.length) return;
+        if (subject) setSelectedSubject(subject);
+        if (madeTopic !== undefined) setTopic(madeTopic || "");
+        setQuestions(made);
+        setUserAnswers(new Array(made.length).fill(""));
+        toast(held
+            ? { title: "Your questions are ready", description: `${made.length} questions, ready to start.` }
+            : { title: `${made.length} questions generated!`, description: "Ready to start your session." });
+    };
+
+    // A set finished while the student was somewhere else is held; landing
+    // back on the setup takes it — the card's Start included, which can arrive
+    // on a page that was already mounted.
+    const heldRecallId = jobs.find((j) => j.status === "ready" && j.kind === "recall"
+        && (!j.email || !myEmail || j.email === myEmail))?.id || null;
+    useEffect(() => {
+        if (!heldRecallId || phase !== "setup" || isFocusMode) return;
+        const job = adoptJob("recall", myEmail);
+        if (job) settleRecallJob(job, { held: true });
+    }, [heldRecallId, phase, isFocusMode, myEmail]);
 
     /**
      * A suggestion from Ace's panel, taken all the way into a session.
@@ -902,11 +959,15 @@ For each answer:
                                     className="w-full h-11 rounded-xl font-bold gap-2 border-2"
                                 >
                                     {isGeneratingQuestions ? (
-                                        <><AceShuffle size="sm" /> Reading your notes…</>
+                                        <><AceShuffle size="sm" /> {jobLine(recallJob).status}…{jobLine(recallJob).detail ? ` ${jobLine(recallJob).detail}` : ""}</>
                                     ) : (
                                         <><Wand2 className="w-4 h-4" /> Make questions from my notes</>
                                     )}
                                 </Button>
+                                {/* The same bar the floating card draws, so the
+                                    two cannot say different things about one
+                                    set of questions. */}
+                                {recallJob && <JobBar job={recallJob} claims />}
                                 {/* A disabled button that will not say why is
                                     the single most confusing control in an app.
                                     This one needs a subject as well. */}

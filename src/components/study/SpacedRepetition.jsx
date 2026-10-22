@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Flashcard, UserSubject } from "@/entities/all";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,6 +43,8 @@ import { isNew, isReady, tally } from "@/lib/due";
 import { deckCards } from "@/lib/mistakeBank";
 import { calculateNextReview as sm2Next, formatIntervalShort as sm2Interval, reviewPatch, RATINGS } from "@/lib/sm2";
 import { signalBrain } from "@/lib/brainSignal";
+import { startJob, getJobs, useJobs, useJobView, adoptJob } from "@/lib/jobStore";
+import { runningIn } from "@/lib/aiJobs";
 
 // Lucide alias — design system maps "alert" semantics to AlertTriangle.
 const AlertCircle = AlertTriangle;
@@ -180,7 +182,6 @@ export default function SpacedRepetition() {
     // apart from `uploadedFiles` because it is not a file the student is
     // holding — the book is already on the server and this is a range.
     const [megaPick, setMegaPick] = useState(null);
-    const [isGenerating, setIsGenerating] = useState(false);
     const [generatedFlashcards, setGeneratedFlashcards] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     /**
@@ -228,6 +229,18 @@ export default function SpacedRepetition() {
     const [isSavingDeck, setIsSavingDeck] = useState(false);
 
     const [newDeck, setNewDeck] = useState({ subject_name: '', subject_code: '', topic: '', unit: 'General' });
+    // A deck being made is a JOB (aiJobs.js), so leaving this screen mid-way
+    // does not lose it: a floating card follows the student, and the cards
+    // are held until they come back to save them. While the deck grid is on
+    // screen its own skeleton shows the job, and a job settling in front of
+    // the student opens the preview here — on whichever mount is showing it.
+    const jobs = useJobs();
+    const inGrid = !isLoading && !reviewMode && !selectedDeck;
+    const deckJob = useJobView("flashcards", {
+        show: inGrid,
+        onSettled: (job) => settleDeckJob(job),
+    });
+    const isGenerating = !!deckJob;
     const [newCard, setNewCard] = useState({ question: '', answer: '' });
     const [aiSettings, setAiSettings] = useState({
         // 'max' = as many as the material supports. `everything` + `max` is what
@@ -343,23 +356,46 @@ export default function SpacedRepetition() {
         try { sessionStorage.removeItem(draftKey); } catch { /* nothing to clean up */ }
     }, [draftKey]);
 
+    // A deck finished while the student was somewhere else is HELD by the job
+    // store, and the closure that made it also stashed it as a draft. Whichever
+    // turns up first is the same cards; taking the job is what clears the
+    // floating card's "Ready". Runs whenever the deck grid is on screen with a
+    // held deck waiting — landing here from the card's Review included, which
+    // can be a page that was already mounted on another view.
+    const heldDeckId = jobs.find((j) => j.status === "ready" && j.kind === "flashcards"
+        && (!j.email || j.email === user?.email))?.id || null;
+    // The DRAFT is read once per account per mount, as it always was; a HELD
+    // job whenever one is waiting. Without the split, the watcher taking a job
+    // in front of the student and this effect reading the draft that same job
+    // stashed would announce one deck twice.
+    const draftChecked = useRef(null);
     useEffect(() => {
-        if (!draftKey || generatedFlashcards?.length) return;
+        if (!draftKey || !inGrid || generatedFlashcards?.length) return;
+        const held = adoptJob("flashcards", user?.email);
+        const firstLook = draftChecked.current !== draftKey;
+        draftChecked.current = draftKey;
+        if (!held && !firstLook) return;
+        let draft = null;
         try {
             const raw = sessionStorage.getItem(draftKey);
-            if (!raw) return;
-            const draft = JSON.parse(raw);
-            if (!draft?.cards?.length) return;
-            setGeneratedFlashcards(draft.cards);
-            if (draft.deck) setNewDeck(prev => ({ ...prev, ...draft.deck }));
-            setIsShowingGenerated(true);
-            toast({
-                title: "Picked up where you left off",
-                description: `${draft.cards.length} generated cards are still waiting to be saved.`,
-            });
+            draft = raw ? JSON.parse(raw) : null;
         } catch { clearDraft(); }
-        // Restores once, when the user lands on the page.
-    }, [draftKey]);
+        const cards = draft?.cards?.length ? draft.cards : held?.result?.cards;
+        if (!cards?.length) return;
+        setGeneratedFlashcards(cards);
+        const deck = draft?.deck || held?.result?.deck;
+        if (deck) setNewDeck(prev => ({ ...prev, ...deck }));
+        setIsShowingGenerated(true);
+        toast(held ? {
+            title: "Your deck is ready",
+            description: `${cards.length} cards are waiting to be saved.`,
+        } : {
+            title: "Picked up where you left off",
+            description: `${cards.length} generated cards are still waiting to be saved.`,
+        });
+        // Restores when the user lands on the grid, and again if a deck is
+        // held while they are here.
+    }, [draftKey, inGrid, heldDeckId]);
 
     // Subject and topic are usually typed after generating, so keep the stashed
     // draft current — otherwise coming back restores the cards but loses them.
@@ -388,10 +424,25 @@ export default function SpacedRepetition() {
             return;
         }
 
+        // Read the store, not the render: a double-press lands before React
+        // has re-rendered with the first job in it.
+        if (runningIn(getJobs(), "flashcards")) return;
         setIsShowingGenerated(false);
-        setIsGenerating(true);
+        const sources = [...uploadedFiles.map((f) => f.name), ...(megaPick ? [megaPick.name] : [])]
+            .map((n) => String(n || "").replace(/\.[a-z0-9]+$/i, "")).filter(Boolean);
+        const job = startJob({
+            kind: "flashcards",
+            title: sources.length ? `Cards from ${sources[0]}${sources.length > 1 ? ` + ${sources.length - 1} more` : ""}` : "Your flashcards",
+            email: user?.email,
+            // "As many as the notes support" has no denominator, and the card
+            // counts up rather than inventing one.
+            total: aiSettings.cardCount === "max" ? null : aiSettings.cardCount,
+            files: uploadedFiles.length,
+            openTo: "/Study?tab=spaced_repetition",
+        });
         try {
-            const { uploaded, failed } = await uploadAll(uploadedFiles, base44.integrations.Core.UploadFile);
+            const { uploaded, failed } = await uploadAll(uploadedFiles, base44.integrations.Core.UploadFile, { onEach: job.fileDone });
+            job.stage("read");
             failed.forEach(f => toast({
                 title: "Skipped a file",
                 description: `${f.name} couldn't be uploaded, so it isn't in these cards.`,
@@ -474,7 +525,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                     },
                     required: ["flashcards"]
                 }
-            });
+            }, { onProgress: job.progress });
+            job.stage("finish");
 
             if (userProfile?.subscription_tier !== 'premium' && userProfile) {
                 await base44.entities.UserProfile.update(userProfile.id, { ai_credits: Math.max(0, userProfile.ai_credits - 100) });
@@ -487,25 +539,41 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                 ? (response.flashcards || [])
                 : (response.flashcards || []).slice(0, aiSettings.cardCount);
 
-            // Stash before touching state — if they navigated away mid-generation
-            // these setters are no-ops, and the draft is the only thing that
-            // survives to be saved later.
+            // Stash before settling — if they navigated away mid-generation
+            // this mount's setters are no-ops, and the draft is what survives
+            // a reload to be saved later.
             saveDraft(cards, newDeck);
-            setGeneratedFlashcards(cards);
-            setIsGenerating(false);
-            setIsShowingGenerated(true);
-            toast({
-                title: `${cards.length} flashcards generated!`,
-                // Asking for 30 and getting 12 looks like a failure unless you
-                // say the material was the limit, not the generator.
-                description: aiSettings.cardCount !== "max" && cards.length < aiSettings.cardCount
-                    ? `That's everything the material supported at this coverage. Not saved yet — hit Save to keep them.`
-                    : "Not saved yet — open Spaced Repetition and hit Save to keep them.",
+            // Settled, not shown: the mount watching it opens the preview
+            // (settleDeckJob), and anywhere else the card holds it as Ready.
+            job.ready({
+                items: cards.length,
+                result: { cards, deck: newDeck, asked: aiSettings.cardCount },
             });
         } catch (error) {
             console.error(error);
-            toast({ title: "Generation failed", description: error.message, variant: "destructive" });
-        } finally { setIsGenerating(false); }
+            job.fail(error.message);
+        }
+    };
+
+    /** A deck job this screen was showing, settled — the preview opens on it. */
+    const settleDeckJob = (job) => {
+        if (job.status === "failed") {
+            toast({ title: "Generation failed", description: job.error || "Something went wrong. Nothing was saved.", variant: "destructive" });
+            return;
+        }
+        const { cards = [], deck, asked } = job.result || {};
+        if (!cards.length) return;
+        setGeneratedFlashcards(cards);
+        if (deck) setNewDeck((prev) => ({ ...prev, ...deck }));
+        setIsShowingGenerated(true);
+        toast({
+            title: `${cards.length} flashcards generated!`,
+            // Asking for 30 and getting 12 looks like a failure unless you
+            // say the material was the limit, not the generator.
+            description: asked !== "max" && cards.length < asked
+                ? `That's everything the material supported at this coverage. Not saved yet — hit Save to keep them.`
+                : "Not saved yet — hit Save to keep them.",
+        });
     };
 
     const handleSaveGeneratedFlashcards = async (deckInfo) => {
@@ -1101,7 +1169,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
     // ─── DECK GRID VIEW ──────────────────────────────────────────────────────
     return (
         <>
-            {isGenerating && <AISkeleton type="flashcards" count={6} message="Creating your flashcards…" />}
+            {isGenerating && <AISkeleton type="flashcards" count={6} message="Creating your flashcards…" job={deckJob} />}
 
             <div className="space-y-5">
                 {/* Search + filters + actions */}

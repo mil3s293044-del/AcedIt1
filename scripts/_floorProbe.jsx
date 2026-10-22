@@ -39,6 +39,9 @@ import AceShuffle, { AceLoading } from "@/components/ace/AceShuffle";
 import { Button } from "@/components/ui/button";
 import { base44 } from "@/api/base44Client";
 import { MemoryRouter } from "react-router-dom";
+import JobTray, { JobCard } from "@/components/shared/JobTray";
+import AISkeleton from "@/components/shared/AISkeleton";
+import { startJob, __resetJobs } from "@/lib/jobStore";
 import ProbeTopNav from "@/components/layout/TopNav";
 import ConsentBanner from "@/components/legal/ConsentBanner";
 import AgeGate from "@/components/legal/AgeGate";
@@ -2299,6 +2302,59 @@ views.qtext = () => (
         </div>
     </div>
 );
+
+/* ── ?v=jobs — every state of the floating job card ──────────────────────────
+ *
+ * A real account only ever shows one card at a time, and each state lasts
+ * seconds. Drawn here side by side: uploading, reading (sheen, nothing to count
+ * yet), writing with a total, writing with none ("so far"), finishing, ready,
+ * and failed — plus the page's own skeleton with the same job, and the real
+ * tray fixed in its corner over a page, with Ace's launcher footprint marked,
+ * to judge the clearance at 390.
+ */
+const JOB = { kind: "quiz", title: "Chemistry quiz", status: "running", files: 0, filesDone: 0, items: 0, total: 10, stage: "read", openTo: "/Quizzes" };
+const JOB_STATES = [
+    ["uploading", { ...JOB, files: 3, filesDone: 1, stage: "upload" }],
+    ["reading", { ...JOB, stage: "read" }],
+    ["writing", { ...JOB, stage: "write", items: 6 }],
+    ["so far", { ...JOB, kind: "flashcards", title: "Cards from Redox chapter", total: null, stage: "write", items: 14 }],
+    ["finishing", { ...JOB, kind: "recall", title: "Chemistry · Redox questions", total: 6, stage: "finish", items: 6 }],
+    ["ready", { ...JOB, status: "ready", items: 10, note: "2 point at source material that didn't come through." }],
+    ["failed", { ...JOB, kind: "flashcards", title: "Cards from Methods notes", status: "failed", error: "AI response was incomplete — try generating fewer items at once (e.g. 5–8 questions instead of 15+)." }],
+];
+function JobsProbe() {
+    React.useEffect(() => {
+        __resetJobs();
+        const a = startJob({ kind: "quiz", title: "Chemistry quiz", email: null, total: 10, files: 0, openTo: "/Quizzes" });
+        a.progress({ stage: "write", items: 4 });
+        const b = startJob({ kind: "flashcards", title: "Cards from Redox chapter", email: null, total: null, files: 0, openTo: "/Study" });
+        b.progress({ stage: "write", items: 9 });
+        b.ready({ items: 9, result: {} });
+    }, []);
+    return (
+        <MemoryRouter initialEntries={["/Dashboard"]}>
+            <div className="min-h-screen bg-background p-4 sm:p-6 pb-64">
+                <div className="max-w-sm space-y-3" data-probe="states">
+                    {JOB_STATES.map(([label, job]) => (
+                        <div key={label}>
+                            <p className="stat-label text-muted-foreground mb-1">{label}</p>
+                            <JobCard job={job} onOpen={() => {}} />
+                        </div>
+                    ))}
+                </div>
+                <div className="max-w-xl mt-8" data-probe="skeleton">
+                    <p className="stat-label text-muted-foreground mb-1">the page's own skeleton, same job</p>
+                    <AISkeleton type="questions" count={2} withQuiz={false} job={JOB_STATES[2][1]} />
+                </div>
+            </div>
+            {/* Where Ace's launcher stands on a phone (right-4 bottom-24, 64px). */}
+            <div aria-hidden className="md:hidden fixed right-4 bottom-24 w-16 h-[88px] rounded-xl border-2 border-dashed border-streak/60" />
+            <div aria-hidden className="md:hidden fixed inset-x-0 bottom-0 h-[72px] bg-surface/95 border-t-2 border-border" />
+            <JobTray email={null} />
+        </MemoryRouter>
+    );
+}
+views.jobs = () => <JobsProbe />;
 
 ReactDOM.createRoot(document.getElementById("root")).render(
     React.createElement(views[which] || views.deal));

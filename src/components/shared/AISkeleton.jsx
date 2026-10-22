@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import LoadingQuiz from "@/components/shared/LoadingQuiz";
+import { JobBar } from "@/components/shared/JobTray";
+import { jobLine } from "@/lib/aiJobs";
 
 // AISkeleton — inline placeholder UI shown while an AI tool is generating.
 // Replaces the old full-screen <AILoadingProgress> modal with quiet, shaped
@@ -144,6 +146,9 @@ function MarkingSkeleton() {
     );
 }
 
+// What the warm-up quiz says is being built while it runs.
+const MAKING = { questions: "quiz", flashcards: "cards", plan: "plan", marking: "marking", text: "answer" };
+
 // ─── Top-level component ────────────────────────────────────────────────────
 
 export default function AISkeleton({
@@ -152,6 +157,7 @@ export default function AISkeleton({
     message,
     className = "",
     withQuiz = true,   // show the loading mini-quiz above the skeleton
+    job = null,        // a running job (jobStore.js): the bar fills on its count
 }) {
     const [seconds, setSeconds] = useState(0);
     useEffect(() => {
@@ -194,9 +200,24 @@ export default function AISkeleton({
             aria-live="polite"
             aria-label={message || "AI is generating"}
         >
-            {/* Loading mini-quiz — turns the wait into quick revision + XP */}
-            {withQuiz && <LoadingQuiz />}
-
+            {job ? (
+                /* A JOB IS COUNTED, so the page says what the floating card
+                   would say — the stage and "6 of 10" — from the same model.
+                   The two cannot disagree about one quiz. It leads, above the
+                   warm-up quiz: under it, the one honest figure on the screen
+                   was below the fold. */
+                <div className="space-y-2 px-1 py-1">
+                    <div className="flex items-center gap-2.5">
+                        <Sparkles className="w-4 h-4 text-primary" />
+                        <span className="text-sm font-bold text-foreground">{jobLine(job).status}</span>
+                        <span className="text-xs text-muted-foreground tabular-nums ml-auto">
+                            {jobLine(job).detail || `${seconds}s`}
+                        </span>
+                    </div>
+                    <JobBar job={job} claims />
+                </div>
+            ) : (
+            <>
             {/* Status strip — honest, no fake percent. Just an animated icon,
                 a friendly status line, and a rolling seconds counter. */}
             <div className="flex items-center gap-2.5 px-1 py-1">
@@ -224,6 +245,11 @@ export default function AISkeleton({
                     100% { transform: translateX(410%); }
                 }
             `}</style>
+            </>
+            )}
+
+            {/* Loading mini-quiz — turns the wait into quick revision + XP */}
+            {withQuiz && <LoadingQuiz making={MAKING[type] || "answer"} />}
 
             {/* The shaped placeholders */}
             <div className={type === "flashcards" ? "" : "space-y-3"}>

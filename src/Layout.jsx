@@ -24,6 +24,7 @@ import { revealDue, withRevealSeen } from "@/lib/premiumGrant";
 // every student parses before their first screen.
 const PremiumReveal = React.lazy(() => import("@/components/subscription/PremiumReveal"));
 import UpdatePrompt from "@/components/shared/UpdatePrompt";
+import JobTray from "@/components/shared/JobTray";
 import AchievementUnlock from "@/components/ranked/AchievementUnlock";
 import { useAchievementWatch } from "@/lib/useAchievementWatch";
 import TopNav from "@/components/layout/TopNav";
@@ -588,6 +589,11 @@ export default function Layout({ children }) {
                     />
                 )}
             </AnimatePresence>
+
+            {/* A quiz, a deck or a set of questions being made, followed from
+                page to page — and held as "Ready" when it finishes somewhere
+                its own page is not showing it (aiJobs.js). */}
+            <JobTray email={userProfile?.created_by} />
 
             <main className="text-foreground w-full pb-20 md:pb-0 md:pl-16">
                 <StakesPill />

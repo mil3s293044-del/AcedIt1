@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { StudyTechnique, UserProfile, User, UserSubject } from "@/entities/all";
+import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
     Clock,
@@ -127,10 +128,19 @@ export default function Study() {
 
     // Deep links: /Study?tab=spaced_repetition etc. — duel shortcuts land on
     // the exact technique that scores their yardstick.
+    //
+    // Keyed on the NAVIGATION, not on mount. A link into Study from Study —
+    // the floating job card's Review, landing a deck made while the student
+    // was on the timer — leaves the page mounted, and read once it lands them
+    // on the tab they were already on. And the query may not even change:
+    // picking a tile does not rewrite the URL, so the address can already say
+    // ?tab=spaced_repetition while the timer is on screen. `key` is new on
+    // every navigation, so it re-reads exactly when somebody navigates here.
+    const location = useLocation();
     useEffect(() => {
-        const t = new URLSearchParams(window.location.search).get('tab');
+        const t = new URLSearchParams(location.search).get('tab');
         if (t && TECHNIQUES.some(x => x.id === t)) setActiveTab(t);
-    }, []);
+    }, [location.search, location.key]);
     const [isLoading, setIsLoading] = useState(true);
     const [authError, setAuthError] = useState(false);
     // Today's intent picks the opening technique once per visit, not on every
