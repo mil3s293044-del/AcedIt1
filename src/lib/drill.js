@@ -167,7 +167,16 @@ export function buildCloze(card, { minBlanks = 2, maxBlanks = 3 } = {}) {
     // Three gaps, not four. Four holes in one sentence stops being a recall
     // exercise and becomes a word-order puzzle, and the extra one is always
     // the weakest candidate by definition.
-    const terms = keyTerms(body, card?.extra?.mistake?.criterion || "", { max: maxBlanks });
+    const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const firstAt = (t) => body.search(new RegExp(`\\b${esc(t)}\\b`, "i"));
+    // IN READING ORDER. `keyTerms` ranks longest-first, and the walk below
+    // only searches FORWARD from the last gap — so a term that appears before
+    // the longest one was silently skipped. On a one-clause mistake wording it
+    // rarely showed; on a whole saved answer it dropped the fill to one gap
+    // and the rung was struck off as unbuildable.
+    const terms = keyTerms(body, card?.extra?.mistake?.criterion || "", { max: maxBlanks })
+        .filter((t) => firstAt(t) >= 0)
+        .sort((a, b) => firstAt(a) - firstAt(b));
     if (terms.length < minBlanks) return null;
 
     const segments = [];
@@ -369,7 +378,7 @@ export const LADDER = [
     { id: "recognise", label: "See it",   blurb: "Read what would have scored." },
     { id: "spot",      label: "Spot it",  blurb: "Find the words that cost the mark." },
     { id: "cloze",     label: "Fill it",  blurb: "Put the load-bearing words back." },
-    { id: "repair",    label: "Fix it",   blurb: "Rewrite it so it scores." },
+    { id: "repair",    label: "Rewrite it", blurb: "Your own sentence, edited until it scores." },
     { id: "redo",      label: "Prove it", blurb: "Sit the whole question again." },
 ];
 
@@ -408,7 +417,7 @@ const rawStageIndex = (card) => {
  *
  * `laddered` matters for more than tidiness. The rung is read off
  * `repetitions`, which stops climbing at the top rehearsal rung, so without it
- * a card sits on "Fix it" as CURRENT forever and the tracker can never reach
+ * a card sits on "Rewrite it" as CURRENT forever and the tracker can never reach
  * the end. A student who has finished would be looking at four of five.
  */
 export function ladderFor(card, { cleared = false, laddered = false } = {}) {

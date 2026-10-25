@@ -23,6 +23,7 @@ const FEATURE_LABEL = {
     [FEATURES.ROADMAP_AI_GEN]:   "Roadmap AI",
     [FEATURES.BLURTING]:         "Blurting",
     [FEATURES.ACTIVE_RECALL]:    "Active Recall",
+    [FEATURES.REVISION_POINTS]:  "Key knowledge",
     [FEATURES.SPACED_REP]:       "Spaced Rep",
     [FEATURES.ADVANCED_ANALYTICS]: "Analytics",
 };

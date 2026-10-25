@@ -51,6 +51,7 @@ import { deckCards, BANK_TOPIC } from "@/lib/mistakeBank";
 import { studyEvents } from "@/lib/studyLog";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
 import { markSplit, coverageFor, subjectStats, subjectLead } from "@/lib/subjectHub";
+import { revisionQuery, sacKey, examKey } from "@/lib/revision";
 import { toolQuery, personaFor } from "@/lib/toolBrief";
 import HelpButton from "@/components/shared/HelpButton";
 
@@ -73,8 +74,11 @@ const LEAD_TONE = {
 
 /** Where the lead sends you. One button, and it goes somewhere real. */
 const LEAD_ACTION = {
-    assessment: { label: "Open the planner", page: "Goals" },
-    mistakes:   { label: "Fix them", page: "MistakeBank" },
+    // A SAC inside a fortnight opens ITS revision folder, and dropped marks
+    // open the subject's exam folder on its mistakes: Revision is where both
+    // are gathered, and the planner only knows the date.
+    assessment: { label: "Revise for it", page: "Revision", query: (stats) => revisionQuery({ folder: stats?.nextAssessment?.id ? sacKey(stats.nextAssessment.id) : null }) },
+    mistakes:   { label: "Fix them", page: "Revision", query: (stats) => revisionQuery({ folder: examKey(stats?.subject || ""), tab: "mistakes" }) },
     due:        { label: "Review now", page: "Review" },
     gap:        { label: "Make something for it", page: "Study" },
     weight:     { label: "Sit a quiz", page: "Quizzes" },
@@ -283,7 +287,7 @@ export default function SubjectHub() {
                                 <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
                                     {lead.detail}
                                 </p>
-                                <Link to={createPageUrl(action.page)} className="mt-4 w-fit">
+                                <Link to={`${createPageUrl(action.page)}${action.query ? action.query(stats) : ""}`} className="mt-4 w-fit">
                                     <Button className="gap-1.5">{action.label}
                                         <ArrowRight className="w-4 h-4" /></Button>
                                 </Link>

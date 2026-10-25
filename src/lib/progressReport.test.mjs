@@ -501,7 +501,12 @@ check("every technique a row claims to open is one of Study's own ids", () => {
     const ids = [...study.matchAll(/\{\s*id:\s*"([a-z_]+)"/g)].map((m) => m[1]);
     assert.ok(ids.includes("spaced_repetition"), "the Study technique scan matched nothing");
     const claimed = [...TABS_SRC.matchAll(/^\s*"[^"]+":\s*"([a-z_]+)",$/gm)].map((m) => m[1]);
-    assert.ok(claimed.length >= 6, "the TECHNIQUE_ID map was not found — the scan would pass forever");
+    // FIVE, not six: Revision Mode left Study for a folder's Mock exam on
+    // /Revision, and its row opens Revision rather than a technique id.
+    assert.ok(claimed.length >= 5, "the TECHNIQUE_ID map was not found — the scan would pass forever");
+    assert.ok(!claimed.includes("exam"), "a technique row still claims Study's retired `exam` tab");
+    assert.ok(/t\.name === "Revision Mode" \? createPageUrl\("Revision"\)/.test(TABS_SRC),
+        "minutes logged on the mock exam no longer open the place it lives now");
     for (const id of claimed) {
         assert.ok(ids.includes(id),
             `a technique row links to ?tab=${id}, which Study does not honour — ` +

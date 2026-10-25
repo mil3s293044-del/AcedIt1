@@ -8,6 +8,24 @@ import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
 import { isReady } from "@/lib/due";
 import { deleteResult } from "@/lib/saveResult";
+import { ANSWER_TOPIC, isLegacySaved, exemplarMeta } from "@/lib/answerBank";
+
+/**
+ * An answer-bank card in the shape the Saved answers list has always drawn —
+ * a title, a subject, a day, and markdown for the viewer.
+ */
+function savedFromCard(card) {
+    const m = exemplarMeta(card);
+    return {
+        id: card.id,
+        _card: true,
+        title: m.question,
+        subject_name: card.subject_name,
+        topic: m.topic,
+        date_created: String(m.savedAt || card.created_date || "").slice(0, 10),
+        content: `**Question**\n${m.question}\n\n**${m.kind === "own" ? "Your full-mark answer" : "Model answer"}**\n${m.answer}`,
+    };
+}
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,6 +52,7 @@ import {
     Bookmark,
     ChevronDown,
     ChevronUp,
+    ChevronRight,
     Trash2,
     Eye
 } from "lucide-react";
@@ -321,7 +340,7 @@ export default function Quizzes() {
             // waits on anything else. Each keeps its own catch so one failing
             // table still leaves the rest of the page usable.
             const fail = (what) => (e) => { console.error(`Error loading ${what}:`, e); return []; };
-            const [quizzesData, attemptsData, sharedQuizzesData, userSubjectsData, saved, bankCards] =
+            const [quizzesData, attemptsData, sharedQuizzesData, userSubjectsData, saved, bankCards, answerRows] =
                 await Promise.all([
                     base44.entities.Quiz.filter({ created_by: currentUser.email }).catch(fail("quizzes")),
                     base44.entities.QuizAttempt.filter({ created_by: currentUser.email }).catch(fail("quiz attempts")),
@@ -334,8 +353,18 @@ export default function Quizzes() {
                     base44.entities.Flashcard.filter({
                         created_by: currentUser.email, topic: BANK_TOPIC, is_active: true,
                     }).catch(fail("mistake bank")),
+                    // SAVED ANSWERS ARE THE ANSWER BANK NOW. The list keeps its
+                    // place and its look; what it lists is the bank (drillable,
+                    // in Revision) plus anything saved before the bank existed
+                    // that has not been moved in yet.
+                    base44.entities.Flashcard.filter({
+                        created_by: currentUser.email, topic: ANSWER_TOPIC, is_active: true,
+                    }).catch(fail("answer bank")),
                 ]);
-            setSavedAnswers(saved || []);
+            setSavedAnswers([
+                ...(answerRows || []).map(savedFromCard),
+                ...(saved || []).filter(isLegacySaved),
+            ]);
             setBankCards(bankCards || []);
 
             setQuizzes(quizzesData || []);
@@ -1340,10 +1369,16 @@ Return valid JSON only.`,
                                 <span className="font-display font-extrabold text-foreground text-sm">Saved answers</span>
                                 <span className="pill bg-chart-4/15 text-chart-4">{savedAnswers.length}</span>
                             </div>
+                            <span className="ml-auto mr-3 text-xs font-bold text-primary hidden sm:inline">Learn them in Revision</span>
                             {showSaved ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
                         </button>
                         {showSaved && (
                             <div className="px-3 pb-3 space-y-2 max-h-80 overflow-y-auto border-t border-border pt-3">
+                                <Link to={`${createPageUrl("Revision")}?view=answers`} data-saved-to-revision
+                                    className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/20 text-xs font-bold text-primary hover:bg-primary/10">
+                                    Drill them until you can write them cold — they're in Revision
+                                    <ChevronRight className="w-3.5 h-3.5 flex-shrink-0" />
+                                </Link>
                                 {savedAnswers.map(s => (
                                     <div key={s.id} className="flex items-center justify-between gap-2 p-3 bg-background rounded-xl border border-border">
                                         <div className="flex-1 min-w-0">
@@ -1352,7 +1387,9 @@ Return valid JSON only.`,
                                         </div>
                                         <div className="flex gap-1 flex-shrink-0">
                                             <button onClick={() => setViewingSaved(s)} className="p-1.5 text-muted-foreground hover:text-chart-4 hover:bg-chart-4/10 rounded-lg transition-colors"><Eye className="w-3.5 h-3.5" /></button>
-                                            <button onClick={() => deleteResult('saved_answer', s.id).then(() => setSavedAnswers(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground hover:text-streak hover:bg-streak/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                                            <button onClick={() => (s._card
+                                                ? base44.entities.Flashcard.update(s.id, { is_active: false })
+                                                : deleteResult('saved_answer', s.id)).then(() => setSavedAnswers(prev => prev.filter(x => x.id !== s.id)))} className="p-1.5 text-muted-foreground hover:text-streak hover:bg-streak/10 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
                                         </div>
                                     </div>
                                 ))}
@@ -1500,7 +1537,7 @@ Return valid JSON only.`,
                                 of them do different things. */}
                             {bank.total > 0 && (
                                 <div className="mt-auto pt-4">
-                                    <Link to={createPageUrl("MistakeBank")} className="block">
+                                    <Link to={`${createPageUrl("Revision")}?view=mistakes`} className="block">
                                         <Button size="sm"
                                             className="w-full btn-3d bg-streak hover:bg-streak text-white">
                                             <Bookmark className="w-3.5 h-3.5" />

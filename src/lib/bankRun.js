@@ -205,11 +205,13 @@ export function moveOf(before, after, attempts) {
 export function moveLine(move) {
     if (!move) return null;
     if (move.kind === "fixed") return "Fixed.";
+    if (move.kind === "learned") return "Learned. It comes back now and then to stay that way.";
     if (move.kind === "proven") return "Rehearsed — sit the question to prove it.";
     if (move.kind === "climbed") return `Up to ${move.to}.`;
     if (move.kind === "closer") {
         const more = move.needs === 1 ? "One more" : `${move.needs} more`;
         if (move.next === "fixed") return `${more} good and it's fixed.`;
+        if (move.next === "learned") return `${more} good and it's learned.`;
         return move.next ? `${more} good to reach ${move.next}.` : `Still on ${move.to}, and closer.`;
     }
     if (move.kind === "slipped") {
@@ -227,14 +229,16 @@ export function moveLine(move) {
 export function runSummary(moves = []) {
     const last = new Map();
     for (const m of moves) if (m?.id != null) last.set(m.id, m);
-    const out = { climbed: [], closer: [], held: [], slipped: [], proven: [], fixed: [] };
+    // `learned` is the answer bank's `fixed`: one run carries both kinds of
+    // card, and an answer that reached the end must not be filed under held.
+    const out = { climbed: [], closer: [], held: [], slipped: [], proven: [], fixed: [], learned: [] };
     for (const m of last.values()) (out[m.kind] || out.held).push(m);
     return {
         ...out,
         total: last.size,
         // Up is anything that moved forward: a harder exercise, a step closer
-        // to one, onto the last gate, or fixed.
-        up: out.climbed.length + out.closer.length + out.proven.length + out.fixed.length,
+        // to one, onto the last gate, fixed, or learned.
+        up: out.climbed.length + out.closer.length + out.proven.length + out.fixed.length + out.learned.length,
     };
 }
 

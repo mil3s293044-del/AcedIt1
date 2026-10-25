@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { StudyTechnique, UserProfile, User, UserSubject } from "@/entities/all";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { createPageUrl } from "@/utils";
+import { revisionQuery, examKey } from "@/lib/revision";
 import { motion } from "framer-motion";
 import {
     Clock,
@@ -8,7 +10,6 @@ import {
     RefreshCw,
     PenTool,
     AlertTriangle,
-    GraduationCap,
     BookOpen,
     Flame,
     Sparkles,
@@ -28,7 +29,6 @@ import { base44 } from "@/api/base44Client";
 import SpacedRepetition from "../components/study/SpacedRepetition";
 import ActiveRecall from "../components/study/ActiveRecall";
 import BlurtingMethod from "../components/study/BlurtingMethod";
-import ExamMode from "../components/study/ExamMode";
 import MindMaps from "../components/study/MindMaps";
 import HelpButton from "@/components/shared/HelpButton";
 import NeuroPanel from "../components/study/NeuroPanel";
@@ -52,7 +52,6 @@ const TECHNIQUES = [
     { id: "spaced_repetition", name: "Spaced Repetition", icon: RefreshCw,     tile: "bg-chart-3/10",  text: "text-chart-3",  accent: "chart-3",  blurb: "Flashcards on a schedule that hits memory at the right moment.",               goodFor: "Locking facts in for the long haul." },
     { id: "active_recall",     name: "Active Recall",     icon: Brain,         tile: "bg-chart-4/10",  text: "text-chart-4",  accent: "chart-4",  blurb: "Quiz yourself instead of re-reading notes.",                                   goodFor: "Testing what you actually know vs. what feels familiar." },
     { id: "blurting",          name: "Blurting",          icon: PenTool,       tile: "bg-xp/10",       text: "text-xp",       accent: "xp",       blurb: "Brain-dump everything you remember on a topic, then check.",                   goodFor: "Spotting blind spots before exams hit them first." },
-    { id: "exam",              name: "Revision Mode",     icon: GraduationCap, tile: "bg-streak/10",   text: "text-streak",   accent: "streak",   blurb: "A timed mock exam built from your own cards and quizzes.",                     goodFor: "Building exam stamina and timing under real conditions." },
     { id: "mind_map",          name: "Mind Maps",         icon: Network,       tile: "bg-map/10",      text: "text-map",      accent: "map",      blurb: "Map a topic from memory, then get interrogated on the gaps.",                  goodFor: "Seeing how ideas connect — and finding the links you can't explain." },
 ];
 
@@ -70,7 +69,7 @@ function getCoachLine({ name, hour, todayMins, weekMins, streakDays, hasStudiedA
     const period = hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Late night";
 
     if (!hasStudiedAnything) {
-        return `${period}, ${name}. Six techniques to make studying actually work.`;
+        return `${period}, ${name}. Five techniques to make studying actually work.`;
     }
     if (urgentDays !== null && urgentDays !== undefined && urgentDays <= 3 && todayMins === 0) {
         return `${period}, ${name}. Exam in ${urgentDays === 0 ? 'a few hours' : `${urgentDays} day${urgentDays === 1 ? '' : 's'}`} — let's lock in.`;
@@ -137,10 +136,22 @@ export default function Study() {
     // ?tab=spaced_repetition while the timer is on screen. `key` is new on
     // every navigation, so it re-reads exactly when somebody navigates here.
     const location = useLocation();
+    const navigate = useNavigate();
     useEffect(() => {
-        const t = new URLSearchParams(location.search).get('tab');
+        const q = new URLSearchParams(location.search);
+        const t = q.get('tab');
+        // REVISION MODE MOVED. The mock exam is a folder's Mock exam tab on
+        // /Revision now; an old link or bookmark lands there — on that
+        // subject's exam folder when the link named one — rather than on a
+        // technique that is no longer here.
+        if (t === 'exam') {
+            const subject = q.get('subject');
+            navigate(`${createPageUrl('Revision')}${revisionQuery(subject && subject !== 'all'
+                ? { folder: examKey(subject), tab: 'mock' } : {})}`, { replace: true });
+            return;
+        }
         if (t && TECHNIQUES.some(x => x.id === t)) setActiveTab(t);
-    }, [location.search, location.key]);
+    }, [location.search, location.key, navigate]);
     const [isLoading, setIsLoading] = useState(true);
     const [authError, setAuthError] = useState(false);
     // Today's intent picks the opening technique once per visit, not on every
@@ -334,11 +345,6 @@ export default function Study() {
                 userSubjects={userSubjects}
             />
         ),
-        exam: (
-            <ExamMode
-                userSubjects={userSubjects}
-            />
-        ),
         mind_map: (
             <MindMaps
                 user={user}
@@ -497,17 +503,9 @@ export default function Study() {
                 icon: Swords,
             };
         }
-        if (nextDeadline && nextDeadline.days <= 7) {
-            return {
-                label: nextDeadline.days === 0 ? "Exam today" : `Exam in ${nextDeadline.days} day${nextDeadline.days === 1 ? '' : 's'}`,
-                title: `${nextDeadline.title} is coming up`,
-                sub: "Open Revision Mode and run a timed mock from your own material.",
-                cta: "Open Revision Mode",
-                tab: "exam",
-                accent: "streak",
-                icon: GraduationCap,
-            };
-        }
+        // A SAC inside a week used to point at Revision Mode here. The mock
+        // moved into that SAC's folder on /Revision, which also holds its
+        // mistakes and key knowledge — the coach strip links there instead.
         if (dueFlashcardCount >= 5) {
             return {
                 label: "Cards waiting",
@@ -572,7 +570,6 @@ export default function Study() {
             case "spaced_repetition": return dueFlashcardCount > 0 ? `${dueFlashcardCount} cards ready now.` : "Keep your flashcards fresh.";
             case "active_recall":     return "Quiz yourself — beats re-reading.";
             case "blurting":          return "Brain-dump a topic, spot the gaps.";
-            case "exam":              return nextDeadline && nextDeadline.days <= 14 ? `Exam in ${nextDeadline.days}d — run a timed mock.` : "Practice under exam conditions.";
             case "mind_map":          return "Map a topic blind, find the gaps.";
             default:                  return "";
         }
@@ -614,7 +611,7 @@ export default function Study() {
                             Study
                         </h1>
                         <p className="text-muted-foreground mt-2 text-sm lg:text-base">
-                            Six evidence-based techniques to make your study time count.
+                            Five evidence-based techniques to make your study time count.
                         </p>
                     </motion.section>
 

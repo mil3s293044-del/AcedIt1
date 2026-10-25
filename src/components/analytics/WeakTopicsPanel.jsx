@@ -35,9 +35,9 @@ export default function WeakTopicsPanel({ flashcards = [] }) {
                     <p className="stat-label mb-0.5">Weak topics</p>
                     <p className="text-xs text-muted-foreground">What's costing you marks, worst first.</p>
                 </div>
-                {/* Revision Mode already weights papers toward flagged-weak
-                    material — this just aims it at one topic. */}
-                <Link to={`${createPageUrl("Study")}?tab=exam`}>
+                {/* A full paper is a folder's Mock exam on Revision now, which
+                    already weights it toward flagged-weak material. */}
+                <Link to={createPageUrl("Revision")}>
                     <span className="inline-flex items-center gap-1.5 text-xs font-bold text-chart-3 hover:underline whitespace-nowrap">
                         Sit a full paper <ArrowRight className="w-3.5 h-3.5" />
                     </span>
@@ -59,7 +59,7 @@ export default function WeakTopicsPanel({ flashcards = [] }) {
                             </p>
                         </div>
                         <Link
-                            to={`${createPageUrl("Study")}?tab=exam&subject=${encodeURIComponent(t.subject)}&topic=${encodeURIComponent(t.topic)}`}
+                            to={`${createPageUrl("Study")}?tab=spaced_repetition&subject=${encodeURIComponent(t.subject)}&topic=${encodeURIComponent(t.topic)}`}
                             className="flex-shrink-0"
                         >
                             <span className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-xl bg-secondary text-foreground hover:bg-secondary/70 transition-colors">

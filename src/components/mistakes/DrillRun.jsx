@@ -40,14 +40,32 @@ import { calculateNextReview, formatIntervalShort, RATINGS } from "@/lib/sm2";
 import { drillFor, suggestRating } from "@/lib/drill";
 import { mistakeMeta } from "@/lib/mistakeBank";
 import { afterRating, moveOf, moveLine, runSummary, rungOf, MOVE_MS } from "@/lib/bankRun";
+import RebuildDrill from "@/components/revision/RebuildDrill";
+import WriteDrill from "@/components/revision/WriteDrill";
+// ONE RUN CARRIES BOTH BANKS. A folder's drill is its mistakes and its saved
+// answers together, and two runs back to back would be two end screens for one
+// sitting. Each card is dispatched on its marker; the rail, the strip, the
+// ratings and the scheduler are shared, because they are the same thing.
+import {
+    isAnswerCard, answerDrillFor, answerRung, answerAfter, answerMoveOf, exemplarMeta, suggestFrom,
+} from "@/lib/answerBank";
 
 /** The rung's name, said out loud: a drill that silently gets harder feels like moved goalposts. */
 const STAGE_BADGE = {
     recognise: { label: "See it", cls: "bg-secondary text-muted-foreground", blurb: "Read what scores, then rate how well you knew it." },
     spot:      { label: "Spot it", cls: "bg-streak/15 text-streak", blurb: "Your own sentence. Find the words that cost the mark." },
     cloze:     { label: "Fill it", cls: "bg-xp/15 text-xp", blurb: "You have seen this one. Put the words back." },
-    repair:    { label: "Fix it", cls: "bg-primary/15 text-primary", blurb: "Write the version that would have scored." },
+    repair:    { label: "Rewrite it", cls: "bg-primary/15 text-primary", blurb: "Write the version that would have scored." },
+    // The answer bank's rungs — the same idea pointed the other way: these
+    // are answers that SCORED, and the ladder is getting them word-perfect.
+    read:      { label: "Read it", cls: "bg-secondary text-muted-foreground", blurb: "Read it through, and what earned the marks." },
+    fill:      { label: "Fill it", cls: "bg-xp/15 text-xp", blurb: "Put back the words the marks turned on." },
+    rebuild:   { label: "Rebuild it", cls: "bg-chart-3/15 text-chart-3", blurb: "Every word is its first letter. Write it back." },
+    write:     { label: "Write it", cls: "bg-primary/15 text-primary", blurb: "Just the question. Write the answer." },
 };
+
+/** What a card is called on the end screen: the criterion for a mistake, the question for an answer. */
+const labelOf = (c) => (isAnswerCard(c) ? exemplarMeta(c).question : (mistakeMeta(c).criterion || c?.question || ""));
 
 /** A move's look. Shape carries it as well as colour — the CVD rule. Static classes. */
 const MOVE = {
@@ -55,6 +73,7 @@ const MOVE = {
     closer:  { Icon: ArrowUp, chip: "bg-primary/10 text-primary", slot: "bg-primary/45 text-primary-foreground" },
     proven:  { Icon: Flag, chip: "bg-chart-3/15 text-chart-3", slot: "bg-chart-3 text-white" },
     fixed:   { Icon: Check, chip: "bg-primary/15 text-primary", slot: "bg-primary text-primary-foreground" },
+    learned: { Icon: Check, chip: "bg-primary/15 text-primary", slot: "bg-primary text-primary-foreground" },
     held:    { Icon: Equal, chip: "bg-secondary text-muted-foreground", slot: "bg-foreground/25 text-foreground" },
     slipped: { Icon: ArrowDown, chip: "bg-streak/15 text-streak", slot: "bg-streak text-white" },
 };
@@ -80,7 +99,7 @@ function RunStrip({ queue, moves, at }) {
 }
 
 /** The end of the run: what moved, said by where it went. */
-function RunEnd({ moves, cards, onClear, onSitAgain, onClose }) {
+function RunEnd({ moves, cards, onClear, onSitAgain, onClose, closeLabel }) {
     const reduce = useReducedMotion();
     const s = runSummary(moves);
     const fixedCards = s.fixed.map((m) => cards.get(m.id)).filter(Boolean);
@@ -105,9 +124,14 @@ function RunEnd({ moves, cards, onClear, onSitAgain, onClose }) {
                         const c = cards.get(m.id);
                         return (
                             <li key={m.id} className="flex items-baseline justify-between gap-3">
-                                <MarkdownMath className="text-sm text-foreground leading-snug min-w-0">
-                                    {mistakeMeta(c).criterion || c?.question || ""}
-                                </MarkdownMath>
+                                {/* NEVER CLAMPED. An answer is labelled by its
+                                    question, and a question cut off mid-line
+                                    is the failure QuestionPanel exists for. */}
+                                <div className="min-w-0 flex-1">
+                                    <QuestionPanel label="" tone="plain" textClass="text-sm text-foreground leading-snug">
+                                        {labelOf(c)}
+                                    </QuestionPanel>
+                                </div>
                                 <span className="text-[11px] font-bold text-muted-foreground flex-shrink-0 tabular-nums">
                                     {m.kind === "closer" && m.next
                                         ? `${m.to} · ${m.needs} more for ${m.next}`
@@ -144,6 +168,11 @@ function RunEnd({ moves, cards, onClear, onSitAgain, onClose }) {
                     )}
                 </div>
             </Group>
+            <Group kind="learned" title="Learned" items={s.learned}>
+                <p className="text-xs text-muted-foreground mt-2.5 leading-snug">
+                    Every rung, a week apart. They come back now and then so they stay that way.
+                </p>
+            </Group>
             <Group kind="proven" title="Ready to prove on the question" items={s.proven}>
                 <p className="text-xs text-muted-foreground mt-2.5 leading-snug">
                     Rehearsed to the end. A mistake is fixed when you earn it back on the question it came from.
@@ -165,13 +194,16 @@ function RunEnd({ moves, cards, onClear, onSitAgain, onClose }) {
                 green ones above it. */}
             <Button onClick={onClose} data-run-close variant="outline"
                 className="w-full sm:w-auto border-2 border-border rounded-xl font-bold">
-                Back to the bank
+                {closeLabel}
             </Button>
         </motion.div>
     );
 }
 
-export default function DrillRun({ queue = [], attempts = [], onGraded, onClear, onSitAgain, onClose, label = "Drilling your mistakes" }) {
+export default function DrillRun({
+    queue = [], attempts = [], onGraded, onClear, onSitAgain, onClose,
+    label = "Drilling your mistakes", closeLabel = "Back to the bank",
+}) {
     const reduce = useReducedMotion();
     const [i, setI] = useState(0);
     const [shown, setShown] = useState(false);
@@ -187,17 +219,23 @@ export default function DrillRun({ queue = [], attempts = [], onGraded, onClear,
     const card = queue[i];
     // Per card, not per render: a cloze must not rebuild — and reshuffle its
     // word bank — while the student is looking at it.
-    const drill = useMemo(() => (card ? drillFor(card) : null), [card]);
-    const rung = useMemo(() => (card ? rungOf(card, attempts) : null), [card, attempts]);
+    const answerCard = isAnswerCard(card);
+    const drill = useMemo(() => (card ? (isAnswerCard(card) ? answerDrillFor(card) : drillFor(card)) : null), [card]);
+    const rung = useMemo(() => (card ? (isAnswerCard(card) ? answerRung(card) : rungOf(card, attempts)) : null), [card, attempts]);
     const afterSteps = useMemo(
-        () => (moving ? rungOf(moving.after, attempts).steps : null), [moving, attempts]);
+        () => (moving ? (isAnswerCard(moving.after) ? answerRung(moving.after) : rungOf(moving.after, attempts)).steps : null),
+        [moving, attempts]);
 
-    const rateable = !moving && drill && (drill.stage === "recognise" ? shown : suggested !== null);
+    // READ has nothing to judge: the answer is on the table and they rate how
+    // well they already had it. A check with nothing to look for suggests no
+    // button (0), and the row of ratings still appears.
+    const rateable = !moving && drill && (drill.stage === "recognise" ? shown
+        : drill.stage === "read" ? true : suggested !== null);
 
     const grade = (quality) => {
         if (!card || moving) return;
-        const after = afterRating(card, quality);
-        const move = moveOf(card, after, attempts);
+        const after = answerCard ? answerAfter(card, quality) : afterRating(card, quality);
+        const move = answerCard ? answerMoveOf(card, after) : moveOf(card, after, attempts);
         seen.current.set(card.id, card);
         onGraded?.(card, quality);
         setMoves((m) => [...m, move]);
@@ -231,12 +269,16 @@ export default function DrillRun({ queue = [], attempts = [], onGraded, onClear,
     if (done) {
         return (
             <SitScreen width="2xl" label={label}>
-                <RunEnd moves={moves} cards={seen.current} onClear={onClear} onSitAgain={onSitAgain} onClose={onClose} />
+                <RunEnd moves={moves} cards={seen.current} onClear={onClear} onSitAgain={onSitAgain} onClose={onClose}
+                    closeLabel={closeLabel} />
             </SitScreen>
         );
     }
 
-    const meta = mistakeMeta(card);
+    const ex = answerCard ? exemplarMeta(card) : null;
+    // One question printer for both kinds: an answer's question rides in the
+    // same field, so the panel below is the same panel whichever bank it is.
+    const meta = answerCard ? { ...mistakeMeta(card), question: ex.question } : mistakeMeta(card);
     const badge = STAGE_BADGE[drill.stage];
     const leave = moving?.move.kind === "slipped" ? { x: -60, y: 40, rotate: -6 }
         : moving?.move.kind === "held" ? { x: 40, rotate: 2 } : { x: 60, y: -40, rotate: 6 };
@@ -275,12 +317,45 @@ export default function DrillRun({ queue = [], attempts = [], onGraded, onClear,
                         <div>
                             <div className="flex items-center gap-2 flex-wrap">
                                 <span className={`pill text-[10px] ${badge.cls}`}>{badge.label}</span>
-                                <p className="stat-label text-muted-foreground">{card.subject_name || "Mistake"}</p>
+                                <p className="stat-label text-muted-foreground">
+                                    {card.subject_name || (answerCard ? "Answer" : "Mistake")}
+                                    {answerCard && <span className="normal-case tracking-normal font-bold"> · {ex.kind === "own" ? "your full-mark answer" : ex.kind === "model" ? "model answer" : "your answer"}</span>}
+                                </p>
                             </div>
                             <p className="text-[11px] text-muted-foreground mt-1.5">{badge.blurb}</p>
                         </div>
 
                         <QuestionPanel>{meta.question}</QuestionPanel>
+
+                        {drill.stage === "read" && (
+                            <div data-answer-read>
+                                <p className="stat-label text-primary">{ex.kind === "own" ? "What you wrote, and it scored" : "What scores"}</p>
+                                <MarkdownMath className="text-base text-foreground leading-relaxed mt-1">{card.answer}</MarkdownMath>
+                                {ex.criteria.length > 0 && (
+                                    <div className="mt-4 pt-3 border-t border-border">
+                                        <p className="stat-label text-muted-foreground">What earned the marks</p>
+                                        <ul className="mt-1.5 space-y-1">
+                                            {ex.criteria.map((c) => (
+                                                <li key={c} className="flex items-start gap-2 text-sm text-foreground leading-snug">
+                                                    <Check className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" strokeWidth={3} />
+                                                    <MarkdownMath className="min-w-0">{c}</MarkdownMath>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                        {drill.stage === "fill" && (
+                            <ClozeDrill key={card.id} cloze={drill.cloze} onGraded={(g) => setSuggested(suggestRating(g))} />
+                        )}
+                        {drill.stage === "rebuild" && (
+                            <RebuildDrill key={card.id} rebuild={drill.rebuild} onGraded={(g) => setSuggested(suggestFrom(g))} />
+                        )}
+                        {drill.stage === "write" && (
+                            <WriteDrill key={card.id} write={drill.write} answer={card.answer}
+                                onGraded={(g) => setSuggested(g.total ? suggestFrom(g) : 0)} />
+                        )}
 
                         {drill.stage === "recognise" && (
                             <>
@@ -342,7 +417,7 @@ export default function DrillRun({ queue = [], attempts = [], onGraded, onClear,
                     <div className="space-y-1.5">
                         {/* The drill SUGGESTS; the student decides. Only they
                             know whether they knew it or guessed. */}
-                        {suggested != null && (
+                        {suggested > 0 && (
                             <p className="text-xs text-muted-foreground text-center">
                                 Suggested from how you went — change it if you know better.
                             </p>

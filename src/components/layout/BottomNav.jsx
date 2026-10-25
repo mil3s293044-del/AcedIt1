@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-    Home, Brain, Sparkles, Trophy, Menu, X,
+    Home, Brain, Sparkles, Trophy, Menu, X, FolderOpen,
     FileQuestion, BookOpen, Users, UsersRound, Map, ListChecks,
     Swords, Settings as SettingsIcon,
     CreditCard, HelpCircle, LifeBuoy
@@ -12,6 +12,9 @@ import { createPageUrl } from "@/utils";
 const PRIMARY_TABS = [
     { label: "Home",   path: "Dashboard", icon: Home },
     { label: "Study",  path: "Study",     icon: Brain },
+    // Its own tab, by request: the week before a SAC, this is where a student
+    // lives, and a screen in the More sheet is a screen nobody finds.
+    { label: "Revision", path: "Revision", icon: FolderOpen },
     { label: "AI",     path: "AITools",   icon: Sparkles },
     { label: "Ranked", path: "Ranked",    icon: Trophy },
 ];

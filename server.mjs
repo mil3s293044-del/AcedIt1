@@ -381,7 +381,7 @@ const TIER_FREE_COUNTER = { quiz_ai_gen: "free_ai_quizzes_used", quiz_ai_mark: "
 // while letting heavy ones walk into the money wall on day two. See
 // src/lib/chips.js. The counter keys stay: they no longer gate anything, but
 // they are the only per-feature usage record the app keeps.
-const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall", study_coach: "coach", mindmap_gaps: "mindmap" };
+const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", flashcard_ai_gen: "flashcards", ai_tool: "tools", ai_chat: "chat", goal_ai_gen: "goal", roadmap_ai_gen: "goal", blurting: "blurting", active_recall: "active_recall", revision_points: "revision", study_coach: "coach", mindmap_gaps: "mindmap" };
 // ─── Spend ceilings, in micro-dollars (1e-6 USD) ───────────────────────────
 // Providers bill in USD; the business plans in AUD. These are stated in USD
 // because that is the currency that actually leaves the account, with the AUD
@@ -1202,7 +1202,7 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
     const today = new Date().toISOString().slice(0, 10);
     let counters = profile.daily_ai_counters ?? {};
     if (counters.date !== today) {
-      counters = { date: today, quizzes: 0, flashcards: 0, tools: 0, chat: 0, marker: 0, goal: 0, blurting: 0, active_recall: 0, coach: 0, mindmap: 0 };
+      counters = { date: today, quizzes: 0, flashcards: 0, tools: 0, chat: 0, marker: 0, goal: 0, blurting: 0, active_recall: 0, revision: 0, coach: 0, mindmap: 0 };
     }
     // The per-feature counters no longer gate anything — chips do — but they
     // are still written, because they are the only per-feature usage record

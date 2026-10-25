@@ -543,6 +543,16 @@ check("A QUIZ MISS NEVER BECOMES AN ORDINARY FLASHCARD", () => {
             + "that row lands on the flashcard shelf, which is the leak this test exists for");
     }
     assert.ok(!/makeCardsFromMisses/.test(src), "the deck writer is back");
+    // THE SECOND LEGITIMATE BUILDER is the answer bank's: a saved answer is a
+    // marked row too (`topic: "Answer bank"`), and `deckCards` leaves it out
+    // the same way — answerBank.test holds that. Every `card` QuizPlayer
+    // writes comes from one builder or the other, never a literal.
+    const built = [...src.matchAll(/card\s*[:=]\s*([A-Za-z]+)\(/g)].map((m) => m[1]);
+    assert.ok(built.length > 0, "no card builder found — re-check this scan");
+    for (const b of built) {
+        assert.ok(["cardFromModule", "strongFor"].includes(b), `QuizPlayer builds a card with ${b}() — only the two banks' builders may write one`);
+    }
+    assert.ok(/const strongFor = [\s\S]{0,1600}return cardFromAnswer\(/.test(src), "strongFor no longer builds through cardFromAnswer");
 });
 
 check("THE QUESTION IS KEPT WHOLE, and rendered as maths where it is maths", () => {

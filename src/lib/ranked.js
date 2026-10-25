@@ -196,7 +196,8 @@ export const COMPONENT_ACTION = {
  * mapping, and two of them would have drifted the first time one changed.
  */
 export const COMPONENT_MOVE = {
-    mastery:     { label: "Fix a dropped mark", page: "MistakeBank" },
+    // The bank lives inside Revision now; "All mistakes" is the same screen.
+    mastery:     { label: "Fix a dropped mark", page: "Revision", query: "?view=mistakes" },
     consistency: { label: "Today's move",       page: "Dashboard" },
     effort:      { label: "Start a block",      page: "Study", query: "?tab=pomodoro" },
     breadth:     { label: "Pick a new one",     page: "Study" },

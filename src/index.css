@@ -489,6 +489,20 @@
     100% { opacity: 0; transform: scale(1.5); }
   }
 
+  /**
+   * SAID, NOT PROVED. The readiness bar's middle layer: what the student has
+   * rated "got it" or rehearsed to the end, but nothing marked has confirmed.
+   * Hatched rather than a paler fill, so the two layers read apart in
+   * greyscale and under a colour-vision deficiency — the floor's step-dot rule.
+   */
+  .ready-said {
+    background-image: repeating-linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.55) 0 3px,
+      hsl(var(--primary) / 0.22) 3px 6px
+    );
+  }
+
   /* Soft card: rounded, layered shadow, subtle border. Use as a default. */
   .card-soft {
     @apply bg-surface rounded-2xl border border-border;

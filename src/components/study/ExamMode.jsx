@@ -23,6 +23,10 @@ import MathText from "@/components/shared/LatexRenderer";
 import { markedPct } from "@/lib/quizScore";
 import SourcePanel from "@/components/quizzes/SourcePanel";
 import { signalBrain } from "@/lib/brainSignal";
+// A folder's mock is built from that folder's material only. `inFolder` is the
+// one test of "is this in the folder" — the same one that files mistakes and
+// answers there — so the paper and the folder cannot disagree about scope.
+import { inFolder } from "@/lib/revision";
 import {
   GraduationCap, Clock, AlertCircle, BarChart3, Check, X,
   ChevronLeft, ChevronRight, Play, Trophy, RefreshCw,
@@ -123,7 +127,10 @@ function getSourceKey(source) {
   return "active_recall";
 }
 
-export default function ExamMode({ userSubjects }) {
+export default function ExamMode({ userSubjects, scope = null }) {
+  // `scope` is a Revision folder: { subject, topics, label }. With it the
+  // subject is fixed and the pool is the folder's; without it, everything.
+  const inScope = (q) => !scope || inFolder(scope, q.subject, q.topic);
   const [user, setUser] = useState(null);
   const [phase, setPhase] = useState("setup");
   // Only while the paper is actually being sat. The setup screen and the
@@ -151,7 +158,7 @@ export default function ExamMode({ userSubjects }) {
     // the pre-seed value.
     const params = new URLSearchParams(window.location.search);
     return {
-      subject: params.get("subject") || "all",
+      subject: scope?.subject || params.get("subject") || "all",
       topic: params.get("topic") || "all",
       questionCount: 20,
       timeLimit: 30,
@@ -231,7 +238,7 @@ export default function ExamMode({ userSubjects }) {
   };
 
   const getAvailablePool = (cfg = config) =>
-  allQuestions.filter((q) =>
+  allQuestions.filter((q) => inScope(q) &&
   (cfg.subject === "all" || q.subject === cfg.subject) && (
   cfg.topic === "all" || q.topic === cfg.topic) &&
   cfg.sources.includes(getSourceKey(q.source))
@@ -240,7 +247,7 @@ export default function ExamMode({ userSubjects }) {
   // Topics that actually have material behind them, for the subject in play.
   const availableTopics = [...new Set(
     allQuestions.
-    filter((q) => config.subject === "all" || q.subject === config.subject).
+    filter((q) => inScope(q) && (config.subject === "all" || q.subject === config.subject)).
     map((q) => q.topic).
     filter(Boolean)
   )].sort((a, b) => a.localeCompare(b));
@@ -494,14 +501,18 @@ Return exactly ${openQs.length} results, in order.`,
                         <div className="w-16 h-16 bg-streak/15 rounded-2xl flex items-center justify-center mx-auto mb-4 ring-1 ring-streak/20">
                             <GraduationCap className="w-8 h-8 text-streak" />
                         </div>
-                        <h2 className="text-3xl font-black mb-2 text-foreground">Revision Mode</h2>
-                        <p className="text-muted-foreground text-sm max-w-sm mx-auto">Simulate real conditions with timed questions from your personal study materials.</p>
+                        <h2 className="text-3xl font-black mb-2 text-foreground">{scope ? "Mock exam" : "Revision Mode"}</h2>
+                        <p className="text-muted-foreground text-sm max-w-sm mx-auto">
+                          {scope
+                            ? <>Timed questions from everything in <span className="font-bold text-foreground">{scope.label}</span>.</>
+                            : "Simulate real conditions with timed questions from your personal study materials."}
+                        </p>
                         {!isLoadingData &&
             <div className="flex justify-center gap-6 mt-5 pt-5 border-t border-border">
                                 {[
-              { label: "Flashcards", val: allQuestions.filter((q) => q.source === "Flashcards").length, Icon: BookOpen, color: "text-chart-3" },
-              { label: "Quiz Q's", val: allQuestions.filter((q) => q.source === "Quizzes").length, Icon: FileText, color: "text-chart-4" },
-              { label: "Recall", val: allQuestions.filter((q) => q.source === "Active Recall").length, Icon: Brain, color: "text-primary" }].
+              { label: "Flashcards", val: allQuestions.filter((q) => inScope(q) && q.source === "Flashcards").length, Icon: BookOpen, color: "text-chart-3" },
+              { label: "Quiz Q's", val: allQuestions.filter((q) => inScope(q) && q.source === "Quizzes").length, Icon: FileText, color: "text-chart-4" },
+              { label: "Recall", val: allQuestions.filter((q) => inScope(q) && q.source === "Active Recall").length, Icon: Brain, color: "text-primary" }].
               map((s) =>
               <div key={s.label} className="text-center">
                                         <p className="text-xl font-bold text-foreground">{s.val}</p>
@@ -531,6 +542,11 @@ Return exactly ${openQs.length} results, in order.`,
                                     </label>
                                     {/* Topic belongs to a subject — switching subject has to clear it,
                                         or you get a paper filtered to a topic that isn't in there. */}
+                                    {scope ? (
+                                      <p className="h-11 flex items-center px-3 rounded-xl border-2 border-border bg-secondary/50 text-sm font-bold text-foreground">
+                                        {scope.subject}
+                                      </p>
+                                    ) : (
                                     <Select value={config.subject} onValueChange={(v) => setConfig((c) => ({ ...c, subject: v, topic: "all" }))}>
                                         <SelectTrigger className="border-2 border-border rounded-xl h-11 bg-secondary/50 focus:border-streak/40">
                                             <SelectValue />
@@ -540,6 +556,7 @@ Return exactly ${openQs.length} results, in order.`,
                                             {(userSubjects || []).map((s) => <SelectItem key={s.id} value={s.subject_name}>{s.subject_name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
+                                    )}
                                 </div>
 
                                 <div className="space-y-3">
@@ -579,7 +596,7 @@ Return exactly ${openQs.length} results, in order.`,
                             </label>
                             <div className="grid grid-cols-3 gap-3">
                                 {SOURCES.map((s) => {
-                const cnt = allQuestions.filter((q) => getSourceKey(q.source) === s.id && (config.subject === "all" || q.subject === config.subject) && (config.topic === "all" || q.topic === config.topic)).length;
+                const cnt = allQuestions.filter((q) => inScope(q) && getSourceKey(q.source) === s.id && (config.subject === "all" || q.subject === config.subject) && (config.topic === "all" || q.topic === config.topic)).length;
                 const sel = config.sources.includes(s.id);
                 const cls = SOURCE_CLASSES[s.id];
                 const SourceIcon = s.icon;

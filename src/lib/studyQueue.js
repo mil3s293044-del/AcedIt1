@@ -230,8 +230,9 @@ export function resitItem(quizzes = [], attempts = [], bankCards = []) {
         why: "You have missed these more than once, or drilled them and never re-sat them.",
         count: rows.length,
         cta: "Sit them",
-        page: "MistakeBank",
-        query: "?tab=redo",
+        // The bank is inside Revision; its Sit again tab is the same tab.
+        page: "Revision",
+        query: "?view=mistakes&tab=redo",
         urgency: rows.length,
     };
 }
@@ -261,8 +262,8 @@ export function mistakeItem(bankCards = [], isReady = () => false, attempts = []
             : "Each one is a criterion an assessor was looking for.",
         count: s.ready,
         cta: "Drill them",
-        page: "MistakeBank",
-        query: "",
+        page: "Revision",
+        query: "?view=mistakes",
         urgency: s.ready,
     };
 }

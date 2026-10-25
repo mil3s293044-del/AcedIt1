@@ -27,20 +27,20 @@
  * and they are not what somebody opening this screen came for. This is a
  * record and a way to work through it.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link, Navigate } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { createPageUrl } from "@/utils";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
-import { ToastAction } from "@/components/ui/toast";
 import AceSpot, { useAceCue } from "@/components/ace/AceSpot";
 import { isReady } from "@/lib/due";
-import { calculateNextReview, reviewPatch } from "@/lib/sm2";
 import {
-    BANK_TOPIC, bankSummary, fixState, mistakeMeta, casesFor, retireMistake, restoreMistake,
+    BANK_TOPIC, bankSummary, fixState, mistakeMeta, casesFor,
 } from "@/lib/mistakeBank";
+import useBankActions from "@/components/mistakes/useBankActions";
 import { redoQueue } from "@/lib/quizInsight";
+import { revisionQuery } from "@/lib/revision";
 import QuizPlayer from "@/components/quizzes/QuizPlayer";
 import PreSit from "@/components/quizzes/PreSit";
 import SitScreen from "@/components/shared/SitScreen";
@@ -79,7 +79,18 @@ function EmptyBank() {
     );
 }
 
+/**
+ * The route. The bank lives inside Revision now — "All mistakes" there is this
+ * same screen — and the route stays so every old link, bookmark and toast
+ * still lands on it, with its tab, rather than on a 404.
+ */
 export default function MistakeBank() {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    return <Navigate replace
+        to={`${createPageUrl("Revision")}${revisionQuery({ view: "mistakes", tab: tab === "redo" || tab === "fix" ? tab : undefined })}`} />;
+}
+
+export function MistakeBankView() {
     const { toast } = useToast();
     const [cards, setCards] = useState([]);
     // Quiz attempts: the command-term panel, the redo gate and every fixState.
@@ -102,9 +113,6 @@ export default function MistakeBank() {
     // A re-sit on the table (the pre-sit sheet), and one being sat.
     const [pendingRedo, setPendingRedo] = useState(null);
     const [redoing, setRedoing] = useState(null);
-    // Grades already sent, so a card graded in one run is not re-sent if the
-    // student starts another before the reload lands.
-    const sentRef = useRef(new Set());
     const putCards = useCallback((next) => {
         setCards((prev) => (typeof next === "function" ? next(prev) : next));
     }, []);
@@ -168,73 +176,9 @@ export default function MistakeBank() {
         setPendingRedo({ ...group.quiz, _isRetry: true, _parentTitle: group.title, title: `${group.title} — sit again`, questions });
     };
 
-    /**
-     * One graded card, written through the shared scheduler. Optimistic on the
-     * row we hold so the pile moves as they work; the reload at the end of a
-     * run reconciles it.
-     */
-    const onGraded = useCallback(async (card, quality) => {
-        const key = `${card.id}:${(card.total_reviews || 0) + 1}`;
-        if (sentRef.current.has(key)) return;
-        sentRef.current.add(key);
-        const updates = calculateNextReview(quality, card);
-        const totalReviews = (card.total_reviews || 0) + 1;
-        putCards((prev) => prev.map((c) => c.id === card.id
-            ? { ...c, ...reviewPatch(updates, quality), total_reviews: totalReviews } : c));
-        try {
-            await base44.entities.Flashcard.update(card.id, {
-                ...reviewPatch(updates, quality), total_reviews: totalReviews,
-            });
-            // The same per-card XP the deck pays, through the same idempotent
-            // event key — or one of the two screens is quietly the better
-            // place to do the work.
-            base44.functions.invoke("awardXPIncremental", {
-                type: "flashcard_card",
-                event_key: `fc_${card.id}_r${totalReviews}`,
-                metadata: { correct: quality >= 3, card_id: card.id },
-            }).then((res) => {
-                const xp = (res?.data ?? res)?.xp_awarded || 0;
-                if (xp > 0) window.dispatchEvent(new CustomEvent("xp_awarded", { detail: { xp, source: "flashcard" } }));
-            }).catch(() => {});
-        } catch {
-            sentRef.current.delete(key);
-            toast({ title: "That rating didn't save", description: "The card will come back around.", variant: "destructive" });
-        }
-    }, [toast, putCards]);
-
-    /**
-     * Clear mastered mistakes out of the bank: `retired_at`, never a delete.
-     * The card leaves every queue (due.js reports `known` first) and comes
-     * back with one tap, which is the only reason this is safe to offer on a
-     * routine screen without a confirmation.
-     */
-    const restore = useCallback(async (rows) => {
-        const patch = restoreMistake();
-        putCards((prev) => prev.map((c) =>
-            rows.some((r) => r.id === c.id) ? { ...c, ...patch } : c));
-        try { await Promise.all(rows.map((r) => base44.entities.Flashcard.update(r.id, patch))); }
-        catch { /* the reload reconciles */ }
-    }, [putCards]);
-
-    const clearFixed = useCallback(async (list) => {
-        const rows = (list || []).filter(Boolean);
-        if (!rows.length) return;
-        const patch = retireMistake();
-        putCards((prev) => prev.map((c) =>
-            rows.some((r) => r.id === c.id) ? { ...c, ...patch } : c));
-        try {
-            await Promise.all(rows.map((r) => base44.entities.Flashcard.update(r.id, patch)));
-            toast({
-                title: rows.length === 1 ? "Cleared" : `${rows.length} cleared`,
-                description: "Out of the bank and out of your review queue. Nothing is deleted.",
-                action: <ToastAction altText="Undo" onClick={() => restore(rows)}>Undo</ToastAction>,
-            });
-        } catch {
-            putCards((prev) => prev.map((c) =>
-                rows.some((r) => r.id === c.id) ? { ...c, retired_at: null } : c));
-            toast({ title: "That didn't save", description: "They're still in the bank.", variant: "destructive" });
-        }
-    }, [toast, putCards, restore]);
+    // Grading, clearing and restoring live in one hook that Revision shares —
+    // the code that pays XP for a rating is written once.
+    const { onGraded, clearFixed, restore } = useBankActions({ putCards, toast });
 
     const drill = (list, label) => {
         if (!list?.length) return;
@@ -422,7 +366,7 @@ export default function MistakeBank() {
  * second is the one that closes the loop: the drill ladder ends at "sit it
  * again", and this is where that happens.
  */
-function RedoTab({ groups, cases, onSit }) {
+export function RedoTab({ groups, cases, onSit }) {
     const closed = cases.filter((c) => c.closed);
 
     if (!groups.length) {
