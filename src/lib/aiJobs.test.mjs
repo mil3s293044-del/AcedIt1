@@ -481,7 +481,10 @@ await check("a held result is taken where Open lands", () => {
     assert.match(strip(read(PAGES.flashcards.file)), /adoptJob\("flashcards"/);
     assert.match(strip(read(PAGES.recall.file)), /adoptJob\("recall"/);
     const study = strip(read("src/pages/Study.jsx"));
-    assert.match(study, /URLSearchParams\(location\.search\)\.get\('tab'\)[\s\S]{0,120}\}, \[location\.search, location\.key\]\)/,
+    // The effect now also forwards the retired `?tab=exam` to Revision, so it
+    // reads the query once and calls `navigate`; what matters is still that it
+    // is keyed on the navigation (`location.key`), not on the query alone.
+    assert.match(study, /new URLSearchParams\(location\.search\)[\s\S]{0,40}\.get\('tab'\)[\s\S]{0,900}\}, \[location\.search, location\.key(?:, navigate)?\]\)/,
         "Study reads ?tab= once (or only when the query changes) — Review from a page already on Study, " +
         "whose address can already say ?tab=spaced_repetition, lands on the tab it was on");
 });

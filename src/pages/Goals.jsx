@@ -223,7 +223,8 @@ function daysLabel(days) {
 // table so the route and the name the detail card shows can't drift apart.
 const SESSION_ROUTES = [
     { test: /flash|card|spaced/, to: "/Study?tab=spaced_repetition", label: "Flashcards" },
-    { test: /mock|exam|paper|sac practice|revision mode/, to: "/Study?tab=exam", label: "Revision Mode" },
+    // The mock moved into Revision: a SAC's folder has it, aimed at that SAC.
+    { test: /mock|exam|paper|sac practice|revision mode/, to: "/Revision", label: "Mock exam" },
     { test: /quiz/, to: "/Quizzes", label: "Quizzes" },
     { test: /recall/, to: "/Study?tab=active_recall", label: "Active recall" },
     { test: /blurt/, to: "/Study?tab=blurting", label: "Blurting" },

@@ -60,7 +60,7 @@ check("A QUERY NOBODY READS IS A BUTTON THAT LIES", () => {
     // gets dropped: the link lands on the planner and the dialog it promised
     // to open never does. Every query this map emits is checked against the
     // page that has to honour it.
-    const WHERE = { Study: "src/pages/Study.jsx", Goals: "src/pages/Goals.jsx" };
+    const WHERE = { Study: "src/pages/Study.jsx", Goals: "src/pages/Goals.jsx", Revision: "src/pages/Revision.jsx" };
     for (const k of COMPONENT_KEYS) {
         const { page, query } = COMPONENT_MOVE[k];
         if (!query) continue;
@@ -78,7 +78,8 @@ check("A QUERY NOBODY READS IS A BUTTON THAT LIES", () => {
 
 check("the href is built, not hand-assembled at each call site", () => {
     assert.equal(moveHref("effort", pageUrl), "/Study?tab=pomodoro");
-    assert.equal(moveHref("mastery", pageUrl), "/MistakeBank");
+    // The bank lives inside Revision; "All mistakes" is the same screen.
+    assert.equal(moveHref("mastery", pageUrl), "/Revision?view=mistakes");
     assert.equal(moveHref("nope", pageUrl), null, "an unknown key must refuse rather than build /undefined");
     assert.equal(moveHref("effort", null), null);
 });

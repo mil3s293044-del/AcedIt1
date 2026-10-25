@@ -72,6 +72,7 @@ export const MICROS_PER_CHIP = WEEKLY_CAP_MICROS / WEEKLY_CHIPS;
 export const PRICE = {
     study_coach:      2,    // $0.0027 on Haiku  — 42% margin
     active_recall:    8,    // $0.0120           — 30%
+    revision_points:  8,    // $0.0135           — 13%  (reading a SAC outline, or suggesting one)
     blurting:         8,    // $0.0141           — 11%
     ai_chat:          8,    // $0.0144           —  8%
     quiz_ai_mark:    10,    // $0.0165           — 18%

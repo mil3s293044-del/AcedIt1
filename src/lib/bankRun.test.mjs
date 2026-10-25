@@ -135,7 +135,7 @@ check("Good INSIDE a rung is CLOSER, and says how close", () => {
     const m = moveOf(c, afterRating(c, 3));
     assert.equal(m.kind, "closer");
     assert.equal(m.from, m.to);
-    assert.equal(moveLine(m), "One more good to reach Fix it.");
+    assert.equal(moveLine(m), "One more good to reach Rewrite it.");
 });
 
 /** A mistake whose own words cannot be spotted in: three words, two of them wrong. */

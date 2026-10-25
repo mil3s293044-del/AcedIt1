@@ -15,7 +15,6 @@ import { ToastAction } from "@/components/ui/toast";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { base44 } from "@/api/base44Client";
-import { saveResult } from "@/lib/saveResult";
 import { aceDone } from "@/components/ace/AceReacts";
 import { commandTermOf } from "@/lib/quizInsight";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
@@ -26,12 +25,15 @@ import MultipartQuestion from "@/components/quizzes/MultipartQuestion";
 import SourcePanel from "@/components/quizzes/SourcePanel";
 import MarkPanel from "@/components/quizzes/marking/MarkPanel";
 import { normaliseMark } from "@/lib/quizMarking";
-import { normaliseQuestion, stimulusText } from "@/lib/quizSchema";
+import { normaliseQuestion, stimulusText, questionAsText } from "@/lib/quizSchema";
 // Aliased: this component already has an `isCorrect` STATE variable for the
 // live MCQ verdict, which would shadow the import and turn every call into
 // "isCorrect is not a function" at runtime.
 import { questionMark, attemptScore, needsDrill, isCorrect as gradeOf } from "@/lib/quizScore";
 import { cardFromModule, bankKey, BANK_TOPIC } from "@/lib/mistakeBank";
+// The other bank. A full-mark answer — or the model answer to one that was not
+// — saved to be LEARNED, on the same scheduler, in Revision.
+import { cardFromAnswer, answerSaved, ANSWER_TOPIC } from "@/lib/answerBank";
 import { trayGroups, trayOpen, savedLine, alreadyBanked } from "@/lib/bankTray";
 import BankTray from "@/components/quizzes/marking/BankTray";
 import ScoredHand from "@/components/quizzes/ScoredHand";
@@ -358,11 +360,14 @@ export default function QuizPlayer({ quiz, onExit, mode = "standard", timeLimitM
     const [showAdaptiveReview, setShowAdaptiveReview] = useState(false);
     const [submittedQuestions, setSubmittedQuestions] = useState(new Set());
     const [savedQuestions, setSavedQuestions] = useState(new Set());
+    // The answer bank as it stood when the sit began, so an answer saved on an
+    // earlier sit reads as saved rather than offering a second copy.
+    const [answerCards, setAnswerCards] = useState([]);
+    const savingAnswerRef = useRef(new Set());
+    const toldAnswerWhere = useRef(false);
     const { toast } = useToast();
     const navigate = useNavigate();
 
-    // Bookmark a question + model/correct answer into the revise-later library
-    // (stored as an AISavedResult — no new table needed).
     /**
      * Everything the student wrote for one question, as one string.
      *
@@ -526,7 +531,7 @@ In two or three sentences, explain what makes that the right answer and what the
             description: "It comes back on its own schedule until you have it.",
             action: (
                 <ToastAction altText="Open your mistake bank"
-                    onClick={() => navigate(createPageUrl("MistakeBank"))}>
+                    onClick={() => navigate(`${createPageUrl("Revision")}?view=mistakes`)}>
                     Open bank
                 </ToastAction>
             ),
@@ -551,34 +556,75 @@ In two or three sentences, explain what makes that the right answer and what the
         return needsDrill(q, markFor(i));
     }).length, [shuffledQuiz.questions, aiFeedback, userAnswers, selfMarkedMarks]);
 
-    const handleSaveAnswer = async (idx) => {
-        if (savedQuestions.has(idx)) return;
+    /**
+     * What saving question `idx` would keep: YOUR answer when it scored every
+     * mark available, otherwise the MODEL answer. Learning an answer that lost
+     * marks rehearses the loss — its dropped marks belong in the mistake bank,
+     * and the model answer is the thing to learn instead.
+     */
+    const strongFor = (idx) => {
         const q = shuffledQuiz.questions[idx];
-        if (!q) return;
-        const ua = userAnswers[idx];
-        const yourAns = q.type === 'mcq'
-            ? (ua !== undefined ? q.options?.[parseInt(ua)] : 'No answer')
-            : (ua || 'No answer');
-        const modelOrCorrect = q.type === 'mcq' ? q.options?.[q.correct_answer] : q.model_answer;
-        const fb = aiFeedback[idx];
-        const content = `**Question**\n${q.question || ''}\n\n**Your answer**\n${yourAns}\n\n**${q.type === 'mcq' ? 'Correct answer' : 'Model answer'}**\n${modelOrCorrect || '—'}${fb?.student_error_analysis ? `\n\n**What went wrong**\n${fb.student_error_analysis}` : ''}`;
-        try {
-            const { ok, source } = await saveResult('create', {
-                tool_type: 'saved_answer',
-                title: (q.question || 'Saved answer').slice(0, 80),
-                subject_name: shuffledQuiz.subject || '',
-                topic: shuffledQuiz.title || '',
-                content,
-                input_data: { quiz_title: shuffledQuiz.title, type: q.type },
-                date_created: new Date().toISOString().split('T')[0],
-            });
-            if (ok) {
-                setSavedQuestions(s => new Set([...s, idx]));
-                toast({ title: 'Saved to your library', description: source === 'local' ? 'Saved locally (will sync later)' : 'Find it under Saved answers on the Quizzes page.' });
-            }
-        } catch (e) {
-            toast({ title: "Couldn't save", description: e.message, variant: "destructive" });
+        if (!q) return null;
+        const mark = markFor(idx);
+        const criteria = Array.isArray(aiFeedback[idx]?.mark?.criteria) ? aiFeedback[idx].mark.criteria : [];
+        const own = q.type !== 'mcq' && !!aiFeedback[idx] && !mark.blank && mark.outOf > 0 && mark.awarded >= mark.outOf;
+        const answer = q.type === 'mcq'
+            ? q.options?.[q.correct_answer]
+            : own ? answerTextFor(idx) : modelAnswerFor(idx);
+        return cardFromAnswer({
+            question: questionAsText(q, idx).text || q.question,
+            answer,
+            kind: own ? 'own' : 'model',
+            subject: shuffledQuiz.subject || null,
+            topic: quiz._parentTitle || shuffledQuiz.title || '',
+            marks: own ? mark.awarded : null,
+            outOf: mark.outOf,
+            // What earned the marks: the criteria this answer GOT when it is
+            // theirs, every criterion when it is the model answer's to show.
+            criteria: criteria.filter((c) => own ? c?.got : true).map((c) => c?.text),
+            why: q.type === 'mcq' ? q.explanation : '',
+            source: { quizId: quiz.id, qIndex: q._sourceIndex ?? idx },
+        });
+    };
+    const isAnswerSaved = (idx) => savedQuestions.has(idx) || answerSaved(answerCards, {
+        quizId: quiz.id, qIndex: shuffledQuiz.questions[idx]?._sourceIndex ?? idx,
+    });
+
+    /**
+     * Save answers to the answer bank — one from a question's header, or a
+     * batch from the verdict. Claimed in a ref before the write, the double-tap
+     * guard the mistake bank uses, and settled together so one failure keeps
+     * the rest.
+     */
+    const handleSaveAnswer = async (idxs) => {
+        const list = (Array.isArray(idxs) ? idxs : [idxs])
+            .filter((i) => !isAnswerSaved(i) && !savingAnswerRef.current.has(i));
+        const todo = list.map((i) => ({ i, card: strongFor(i) })).filter((t) => t.card);
+        if (!todo.length) return;
+        todo.forEach((t) => savingAnswerRef.current.add(t.i));
+        const results = await Promise.allSettled(todo.map(({ card }) => base44.entities.Flashcard.create(card)));
+        const ok = todo.filter((_, k) => results[k].status === 'fulfilled');
+        todo.forEach((t) => savingAnswerRef.current.delete(t.i));
+        if (ok.length) {
+            setSavedQuestions((prev) => new Set([...prev, ...ok.map((t) => t.i)]));
+            setAnswerCards((prev) => [...prev, ...ok.map((t, k) => results[todo.indexOf(t)].value || { ...t.card, id: `tmp-${k}` })]);
         }
+        if (ok.length < todo.length) {
+            toast({ title: ok.length ? `${ok.length} saved — ${todo.length - ok.length} didn't` : "Couldn't save that", description: "Try again in a moment.", variant: "destructive" });
+            return;
+        }
+        if (toldAnswerWhere.current) return;
+        toldAnswerWhere.current = true;
+        toast({
+            title: ok.length === 1 ? "In your answer bank" : `${ok.length} in your answer bank`,
+            description: "Learn it word for word in Revision, on its own schedule.",
+            action: (
+                <ToastAction altText="Open your answer bank"
+                    onClick={() => navigate(`${createPageUrl("Revision")}?view=answers`)}>
+                    Open
+                </ToastAction>
+            ),
+        });
     };
 
     const currentQuestion = shuffledQuiz.questions[currentQuestionIndex];
@@ -627,6 +673,8 @@ In two or three sentences, explain what makes that the right answer and what the
                 // tray simply cannot tell what an earlier sit saved.
                 base44.entities.Flashcard.filter({ created_by: user.email, topic: BANK_TOPIC, is_active: true })
                     .then((rows) => setBankCards(rows || [])).catch(() => {});
+                base44.entities.Flashcard.filter({ created_by: user.email, topic: ANSWER_TOPIC, is_active: true })
+                    .then((rows) => setAnswerCards(rows || [])).catch(() => {});
                 const prog = await base44.entities.QuizProgress.filter({ quiz_id: quiz.id, created_by: user.email }, '-last_updated');
                 if (prog?.length > 0) {
                     setCurrentQuestionIndex(prog[0].current_question_index || 0);
@@ -1426,7 +1474,7 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                             <BankTray groups={tray} banked={inBank} saving={bankSaving}
                                                 onSave={(rows) => bankMarks(rows.map((r) => ({ mod: r.mod, qIndex: r.qIndex })))}
                                                 onOpenQuestion={openQuestion}
-                                                onOpenBank={() => navigate(createPageUrl("MistakeBank"))}>
+                                                onOpenBank={() => navigate(`${createPageUrl("Revision")}?view=mistakes`)}>
                                                 <p className="text-sm text-muted-foreground leading-relaxed mt-1">
                                                     {handSum.lost > 0
                                                         ? <>You dropped marks on <span className="font-bold text-foreground">{handSum.lost}</span>{" "}
@@ -1438,6 +1486,48 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                                 </p>
                                             </BankTray>
                                         )}
+
+                                        {/* ── THE OTHER BANK ─────────────────────────
+                                            Every written answer that scored everything,
+                                            offered for the answer bank in one press. A
+                                            full-mark answer is the student's own proof of
+                                            how to word it, and it was saved nowhere unless
+                                            they opened each question and bookmarked it. */}
+                                        {!isGeneratingFeedback && (() => {
+                                            const full = shuffledQuiz.questions.map((q, i) => i).filter((i) => {
+                                                const q = shuffledQuiz.questions[i];
+                                                const m = markFor(i);
+                                                return q?.type !== 'mcq' && aiFeedback[i] && !m.blank && m.outOf > 0 && m.awarded >= m.outOf;
+                                            });
+                                            if (!full.length) return null;
+                                            const open = full.filter((i) => !isAnswerSaved(i));
+                                            return (
+                                                <div className="card-soft border-2 border-border rounded-2xl p-4" data-answer-tray>
+                                                    <p className="font-display font-extrabold text-foreground">Worth learning word for word</p>
+                                                    <p className="text-sm text-muted-foreground mt-0.5 leading-snug">
+                                                        {full.length === 1 ? "One answer" : `${full.length} answers`} scored every mark.
+                                                        {open.length
+                                                            ? (full.length === 1 ? " Keep it and drill it until you can write it cold." : " Keep them and drill them until you can write them cold.")
+                                                            : (full.length === 1 ? " It's in your answer bank." : " They're all in your answer bank.")}
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-1.5 mt-3">
+                                                        {full.map((i) => (
+                                                            <button key={i} type="button" onClick={() => openQuestion(i)}
+                                                                className={`pill text-[11px] font-bold tabular-nums ${isAnswerSaved(i) ? 'bg-primary/10 text-primary' : 'bg-secondary text-foreground hover:bg-secondary/70'}`}>
+                                                                {isAnswerSaved(i) && <BookmarkCheck className="w-3 h-3 inline mr-0.5" />}
+                                                                Q{i + 1} · {markFor(i).awarded}/{markFor(i).outOf}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                    {open.length > 0 && (
+                                                        <Button size="sm" onClick={() => handleSaveAnswer(open)} data-save-answers
+                                                            className="mt-3 rounded-xl gap-1.5 bg-primary hover:bg-primary text-primary-foreground btn-3d">
+                                                            <Bookmark className="w-3.5 h-3.5" /> Save {open.length === 1 ? "it" : `all ${open.length}`} to my answer bank
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })()}
 
                                         {/* Both of these are things you do with the WHOLE
                                             quiz, so they live on the verdict. The drill used
@@ -1484,11 +1574,17 @@ Include "comparison" on any short answer that carries a Previous Answer.` : ''}`
                                                     </span>
                                                     <button
                                                         onClick={() => handleSaveAnswer(currentFeedbackIndex)}
-                                                        disabled={savedQuestions.has(currentFeedbackIndex)}
-                                                        className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg transition-colors ${savedQuestions.has(currentFeedbackIndex) ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
-                                                        title="Save this question + answer to revise later"
+                                                        disabled={isAnswerSaved(currentFeedbackIndex)}
+                                                        data-save-answer
+                                                        className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-lg transition-colors ${isAnswerSaved(currentFeedbackIndex) ? 'text-primary' : 'text-muted-foreground hover:text-foreground hover:bg-secondary'}`}
+                                                        title="Keep it in your answer bank, to learn word for word in Revision"
                                                     >
-                                                        {savedQuestions.has(currentFeedbackIndex) ? <><BookmarkCheck className="w-3.5 h-3.5" /> Saved</> : <><Bookmark className="w-3.5 h-3.5" /> Save</>}
+                                                        {/* WHAT gets saved is said on the button: your
+                                                            answer only when it scored everything, the
+                                                            model answer otherwise. */}
+                                                        {isAnswerSaved(currentFeedbackIndex)
+                                                            ? <><BookmarkCheck className="w-3.5 h-3.5" /> In your answer bank</>
+                                                            : <><Bookmark className="w-3.5 h-3.5" /> {strongFor(currentFeedbackIndex)?.extra?.exemplar?.kind === 'own' ? 'Save answer' : 'Save model answer'}</>}
                                                     </button>
                                                 </div>
                                                 {currentFeedback && (() => {

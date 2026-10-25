@@ -59,6 +59,7 @@ import { sacBand, fanCards } from "@/lib/sacRunway";
 import { sacMood } from "@/lib/aceVoice";
 import { fmtDate } from "@/lib/safeDate";
 import { createPageUrl } from "@/utils";
+import { revisionQuery, sacKey } from "@/lib/revision";
 import { shortSubject } from "@/lib/subjectShort";
 import { LANE_H, STALK_FOOT, hasPrepLine, lanesHeight } from "@/lib/termRunway";
 
@@ -140,9 +141,12 @@ function Header({ next, runway, cue }) {
                             <Sparkles className="w-4 h-4" /> Plan its prep
                         </Link>
                     )}
-                    <Link to="/Study?tab=exam"
+                    {/* Its own folder on Revision: the mock, its mistakes and its
+                        key knowledge in one place. This was a link to Revision
+                        Mode on Study, which knew nothing about which SAC it was. */}
+                    <Link to={`${createPageUrl("Revision")}${revisionQuery({ folder: sacKey(next.sac.id) })}`}
                         className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${band.chip}`}>
-                        <GraduationCap className="w-4 h-4" /> Run a timed mock
+                        <GraduationCap className="w-4 h-4" /> Revise for it
                     </Link>
                     <Link to="/Study?tab=spaced_repetition"
                         className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm font-bold transition-colors ${band.chip}`}>

@@ -248,7 +248,7 @@ export function MistakesTab({ report, range, work = [], chart = null }) {
                 value={`${report.fixed}/${report.total}`} label="mistakes fixed"
                 delta={null} note={null}
                 verdict={verdictFor(report, range)} stats={stats}
-                action={work.length ? null : <Door to={createPageUrl("MistakeBank")}>Drill them</Door>}
+                action={work.length ? null : <Door to={`${createPageUrl("Revision")}?view=mistakes`}>Drill them</Door>}
             />
 
             {/* THE LADDER AS A FUNNEL. It was five bars of exclusive states,
@@ -278,7 +278,6 @@ const TECHNIQUE_ID = {
     "Spaced Repetition": "spaced_repetition",
     "Active Recall": "active_recall",
     "Blurting": "blurting",
-    "Revision Mode": "exam",
     "Mind Maps": "mind_map",
 };
 
@@ -330,7 +329,10 @@ export function HoursTab({ report, range, events, quizzes, attempts, cards, tech
                         <BarList rows={report.techniques.map((t) => ({
                             key: t.name, label: t.name, value: t.minutes,
                             display: hhmm(t.minutes) || "—",
-                            to: TECHNIQUE_ID[t.name] ? studyTab(TECHNIQUE_ID[t.name]) : null,
+                            // Revision Mode moved into Revision; its minutes still
+                            // count, and its row opens the place it lives now.
+                            to: TECHNIQUE_ID[t.name] ? studyTab(TECHNIQUE_ID[t.name])
+                                : t.name === "Revision Mode" ? createPageUrl("Revision") : null,
                             tone: "bg-chart-3",
                         }))} />
                     </Panel>

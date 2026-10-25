@@ -249,6 +249,8 @@ check("every nav entry is a real route", () => {
 
 const STUDY = read("src/pages/Study.jsx");
 const BANK = read("src/pages/MistakeBank.jsx");
+const REVISION = read("src/pages/Revision.jsx");
+const REVISION_LIB = read("src/lib/revision.js");
 
 const walk = (dir, out = []) => {
     for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
@@ -271,6 +273,18 @@ const STUDY_TABS = [...strip(STUDY).matchAll(/\{\s*id:\s*"([a-z_]+)"/g)].map((m)
 const BANK_RETURN = strip(BANK).match(/get\("tab"\);\s*return ([^;]+);/);
 const BANK_TABS = BANK_RETURN
     ? [...BANK_RETURN[1].matchAll(/"([a-z]+)"/g)].map((m) => m[1]) : [];
+/**
+ * Revision honours two lists, both read off its own model: the folder tabs, and
+ * — because "All mistakes" IS the bank, embedded — the bank's tabs. And the
+ * views it can open. A link into Revision names a `?view=` and a `&tab=`, so
+ * both are checked.
+ */
+const listOf = (name) => {
+    const m = REVISION_LIB.match(new RegExp(`export const ${name} = \\[([^\\]]*)\\]`));
+    return m ? [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]) : [];
+};
+const REVISION_VIEWS = listOf("VIEWS");
+const REVISION_TABS = [...listOf("FOLDER_TABS"), ...BANK_TABS];
 
 /**
  * The object literal containing `at`, by brace depth in both directions.
@@ -294,10 +308,16 @@ const objectAround = (src, at) => {
 };
 
 check("the destination pages declare the tab values this scan checks against", () => {
-    assert.ok(STUDY_TABS.includes("spaced_repetition") && STUDY_TABS.length >= 6,
+    // FIVE: Revision Mode left Study for a folder's Mock exam on /Revision.
+    assert.ok(STUDY_TABS.includes("spaced_repetition") && STUDY_TABS.length >= 5,
         "Study's technique ids were not found — the scan below would pass forever");
     assert.ok(BANK_TABS.includes("fix") && BANK_TABS.includes("redo"),
         "MistakeBank no longer reads ?tab= — the deep link into Sit again is dead again");
+    assert.ok(REVISION_VIEWS.includes("mistakes") && REVISION_VIEWS.includes("answers"),
+        "Revision's views were not found — every link into All mistakes would pass unchecked");
+    assert.ok(REVISION_TABS.includes("knowledge") && REVISION_TABS.includes("mock") && REVISION_TABS.includes("redo"),
+        "Revision's tabs were not found");
+    assert.ok(!STUDY_TABS.includes("exam"), "Study still offers the mock exam it handed to Revision");
 });
 
 check("AND EACH ONE ACTUALLY READS THE QUERY IT IS SENT", () => {
@@ -314,15 +334,31 @@ check("AND EACH ONE ACTUALLY READS THE QUERY IT IS SENT", () => {
     const bank = strip(BANK);
     assert.ok(/get\(['"]tab['"]\)/.test(bank),
         "MistakeBank no longer reads ?tab= — the Sit again deep link opens Fix");
+    const rev = strip(REVISION);
+    assert.ok(/get\("view"\)/.test(rev) && /get\("folder"\)/.test(rev) && /get\("tab"\)/.test(rev),
+        "Revision no longer reads its query — every link into a folder or a bank lands on the shelf");
+    assert.ok(/view === "mistakes"[\s\S]{0,600}<MistakeBankView/.test(rev),
+        "?view=mistakes no longer opens the bank inside Revision");
+    // The OLD links still land: /MistakeBank forwards, tab and all, and
+    // Study's retired ?tab=exam forwards to Revision.
+    assert.ok(/export default function MistakeBank\(\)[\s\S]{0,400}<Navigate replace[\s\S]{0,200}view: "mistakes"/.test(bank),
+        "/MistakeBank no longer forwards into Revision — every old link and bookmark is a dead end");
+    assert.ok(/if \(t === 'exam'\) \{[\s\S]{0,300}navigate\([\s\S]{0,40}createPageUrl\('Revision'\)/.test(strip(STUDY)),
+        "Study's retired ?tab=exam no longer forwards to Revision");
 });
 
 check("every ?tab= link into Study or MistakeBank names a value that page honours", () => {
-    const HONOURS = { Study: STUDY_TABS, MistakeBank: BANK_TABS };
+    const HONOURS = { Study: STUDY_TABS, MistakeBank: BANK_TABS, Revision: REVISION_TABS };
     let found = 0;
     for (const f of SOURCES) {
         const src = strip(read(f));
         // Shapes 1-4: "/Study?tab=x", createPageUrl("Study?tab=x"),
         // createPageUrl("Study") + "?tab=x", `${createPageUrl("Study")}?tab=x`.
+        for (const m of src.matchAll(/Revision[^\n]{0,30}?\?view=([A-Za-z_]+)/g)) {
+            found += 1;
+            assert.ok(REVISION_VIEWS.includes(m[1]),
+                `${f} links to Revision?view=${m[1]}, which Revision does not open`);
+        }
         for (const [page, ids] of Object.entries(HONOURS)) {
             for (const m of src.matchAll(new RegExp(`${page}[^\\n]{0,30}?\\?tab=([A-Za-z_]+)`, "g"))) {
                 found += 1;
@@ -343,6 +379,19 @@ check("every ?tab= link into Study or MistakeBank names a value that page honour
             const ids = HONOURS[m[1]];
             if (!ids) continue;
             const lit = objectAround(src, m.index);
+            if (m[1] === "Revision" && lit) {
+                const v = lit.match(/[?&]view=([A-Za-z_]+)/);
+                if (v) {
+                    found += 1;
+                    assert.ok(REVISION_VIEWS.includes(v[1]), `${f} builds Revision?view=${v[1]}, which Revision does not open`);
+                }
+                const rt = lit.match(/[?&]tab=([A-Za-z_]+)/);
+                if (rt) {
+                    found += 1;
+                    assert.ok(REVISION_TABS.includes(rt[1]), `${f} builds Revision&tab=${rt[1]}, which Revision does not honour`);
+                }
+                continue;
+            }
             const t = lit && lit.match(/\?tab=([A-Za-z_]+)/);
             if (!t) continue;
             found += 1;

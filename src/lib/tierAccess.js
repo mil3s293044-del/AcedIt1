@@ -53,6 +53,7 @@ export const FEATURES = {
   ROADMAP_AI_GEN:   'roadmap_ai_gen',    // free: blocked, premium: 15 chips
   BLURTING:         'blurting',          // free: blocked, premium: 8 chips
   ACTIVE_RECALL:    'active_recall',     // free: blocked, premium: 8 chips
+  REVISION_POINTS:  'revision_points',   // a SAC's key-knowledge list read off a photo or suggested — free: blocked (pasting is free), premium: 8 chips
   // NEITHER OF THE NEXT TWO IS A GATE, and the comments used to say they were.
   // Both are declared here, labelled in TierUsagePill, and CHECKED NOWHERE —
   // `grep -rn SPACED_REP src/` finds one label and no canUseFeature call. So

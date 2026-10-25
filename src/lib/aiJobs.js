@@ -143,10 +143,13 @@ export const JOB_KINDS = {
     reshuffle: { noun: "quiz", unit: "question", units: "questions", reading: "Reading the quiz", action: "Open" },
     flashcards: { noun: "deck", unit: "card", units: "cards", reading: "Reading your notes", action: "Review" },
     recall: { noun: "question set", unit: "question", units: "questions", reading: "Reading your notes", action: "Start" },
+    // Revision's "Test me": a quiz made of one question per key-knowledge
+    // point. It IS a quiz being made, so it shares the quiz lane.
+    check: { noun: "knowledge check", unit: "question", units: "questions", reading: "Reading your checklist", action: "Sit it" },
 };
 
-/** The lane a kind runs in: one job per lane. A reshuffle IS a quiz being made. */
-export const laneOf = (kind) => (kind === "reshuffle" ? "quiz" : kind);
+/** The lane a kind runs in: one job per lane. A reshuffle IS a quiz being made, and so is a check. */
+export const laneOf = (kind) => (kind === "reshuffle" || kind === "check" ? "quiz" : kind);
 
 export const STAGES = ["upload", "read", "write", "finish"];
 

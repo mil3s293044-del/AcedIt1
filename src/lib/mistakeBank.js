@@ -33,6 +33,10 @@
 export const BANK_TOPIC = "Mistake bank";
 
 import { LADDER_COMPLETE_AT } from "@/lib/drill";
+// The answer bank is the same shape of thing — a response kept as a flashcard
+// row with a marker on it — and every deck surface must leave it out for the
+// same reason. One filter, both banks: two filters is one forgotten somewhere.
+import { isAnswerCard } from "@/lib/answerBank";
 
 const str = (v) => String(v ?? "").trim();
 const clip = (s, n) => {
@@ -190,7 +194,7 @@ export const isBankCard = (card) => card?.topic === BANK_TOPIC;
  * than the brevity.
  */
 export const deckCards = (cards = []) =>
-    (Array.isArray(cards) ? cards.filter((c) => !isBankCard(c)) : []);
+    (Array.isArray(cards) ? cards.filter((c) => !isBankCard(c) && !isAnswerCard(c)) : []);
 
 // ─── Reading the bank back ──────────────────────────────────────────────────
 //

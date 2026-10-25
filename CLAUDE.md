@@ -812,6 +812,174 @@ ladder. `src/lib/bankRun.js` is the model, pure.
 page and the restored header, and every one was caught against a green
 baseline.
 
+## Revision: one folder per SAC, and everything in it
+
+**"Make revision its own tab. It should hold every mistake, weak point and strong
+answer for each topic or SAC, so they can drill all of it in one place and see
+how they are tracking on the key knowledge."** The pieces existed on four
+screens: dropped marks on /MistakeBank, the mock exam inside Study's Revision
+Mode, weak cards on the flashcard shelf, and saved answers in a panel on
+Quizzes that nothing drilled. What a student actually asks the week before a
+SAC is "am I ready for THIS one", and no screen answered it. `/Revision` is that
+screen. The student chose all four directions: SAC folders, an outline plus AI
+suggestions, an answer bank with a ladder, and Revision absorbing both the
+Mistake Bank and Revision Mode. `src/lib/revision.js` and
+`src/lib/answerBank.js` are the models; `revision.test.mjs` (22 checks) and
+`answerBank.test.mjs` (18) hold them.
+
+### A folder is a row that already exists
+
+Every planner SAC is a folder (`subject_assessments`), and every subject taken
+has an exam folder (`user_subjects`). What a folder adds lives on that row's
+`extra.revision = { topics, points }`, so there is **no new table and no
+migration**. `revisionPatch` merges into `extra` and the test asserts it keeps
+everything else on the row.
+
+- **SCOPE IS TOPICS, MATCHED EXACTLY** (`inFolder`, on normalised text). Fuzzy
+  matching would put a deck called "Redox" in a folder about "Redox and
+  galvanic cells" and claim the student had covered it. A folder with no topics
+  covers the whole subject, and the card SAYS so until they pick.
+- **A topic the SAC's title names is SUGGESTED, never applied.** The scope sheet
+  flags it ("named in the SAC") and leaves it unticked: a title is a hint, and
+  ticking for them would scope a folder off a guess.
+- Past SACs sit under a fold, most recent first; a finished SAC is not what to
+  revise for.
+
+### Key knowledge: what they SAID, and what they PROVED
+
+The folder's checklist is dot points, entered four ways: **paste** (free),
+**photo** (transcribed word for word), **suggest** (drafted from the study
+design), or **type**. Photo and suggest are one call each at `revision_points`,
+8 chips, premium. A drafted point says *suggested — check it against your
+outline* until it is edited, because an AI's guess at a teacher's outline is
+not the outline.
+
+`splitOutline` strips bullets and numbering, drops headings, and glues a line
+onto the one before ONLY when that line is unfinished (it ends in a comma or a
+joining word, or runs 60+ characters without a full stop). The first version
+glued every line that started lowercase, which merged half of a real outline
+into run-ons.
+
+**SAID IS NOT PROVED, and the bar draws both.** A point rated *Got it* is a
+claim. A point that scored full marks on a check is evidence. `readiness`
+counts each item as proved, said or open:
+
+| | proved | said |
+|---|---|---|
+| a point | full marks on its latest check | rated Got it |
+| a mistake | fixed | drilled |
+| an answer | learned | four good recalls |
+
+The proved part is solid green and the said part is hatched (`.ready-said`),
+with a legend. "Ready" is their sum and the lead says how many of them are
+proved. A deck card is never counted, because nobody banked it for this SAC.
+
+**TEST ME IS A REAL QUIZ, not a fourth marker.** It builds one question per
+point (up to `CHECK_MAX`), through the job tray (kind `check`, the quiz lane),
+and sits it in the real QuizPlayer through PreSit and SitScreen. The quiz
+records which point each question tests (`extra.revision_check.points`), and
+`alignCheck` pairs them by the model's own numbering and drops a question it
+cannot place rather than guessing.
+
+Proof is DERIVED from attempts, so it cannot go stale:
+
+- the LATEST marked check counts, and only full marks proves;
+- **an unmarked answer is no evidence either way** (`Number(null)` is 0, which
+  would file every unmarked check as a fail);
+- the newer of the rating and the check decides the state, so somebody who
+  failed a check, studied, and rated it Got it is not held at "missed" forever.
+
+The calibration line only speaks about points that were checked: "You rated 2
+Got it. Of the 2 checked, 1 held up and 1 didn't."
+
+### The answer bank: a strong answer is drilled until it can be written cold
+
+Flashcard rows with `topic: "Answer bank"`, a constant `unit` and
+`extra.exemplar`. `deckCards` takes them off every deck surface, the same rule
+the mistake bank keeps and for the same reason.
+
+- **YOUR OWN ANSWER IS SAVED ONLY WHEN IT SCORED EVERY MARK.** Otherwise the
+  button saves the MODEL answer. Learning an answer that lost marks rehearses
+  the loss; its dropped marks belong in the mistake bank.
+- It is saved from the question's header ("Save answer" or "Save model
+  answer"), or from the verdict's **Worth learning word for word** tray, which
+  lists every written answer at full marks with one button.
+- **Old saved answers move in with a TAP, never on page load.** "Start learning
+  it" makes the card. The guard walks every effect body on the page by paren
+  depth; its first draft only caught `cardFromSaved` written literally inside
+  an effect, so an effect calling `moveLegacy` would have passed.
+
+**The ladder** (`answerDrillFor`), read off `repetitions` like the mistake
+bank's:
+
+- **READ.** The answer, and what earned its marks.
+- **FILL.** The words the criteria turned on, blanked.
+- **REBUILD.** Every word reduced to its first letter. Graded IN ORDER, as the
+  longest common run of words, with spelling ignored. A paraphrase or the same
+  words shuffled is the gist, which is the rung above.
+- **WRITE.** The question alone, checked for the load-bearing terms. A maths
+  answer has none (`keyTerms` wants words of four letters), so it shows the two
+  answers side by side and the student rates themselves, the failed-marking
+  rule.
+
+Learned needs the whole ladder AND a seven-day interval. A rung that cannot be
+built cascades to the one below (`answerSteps` strikes it through), and
+`DrillRun` runs answers and mistakes in one run, reporting "learned" beside
+"fixed".
+
+**`buildCloze` HAD BEEN DROPPING GAPS ON EVERY LONG ANSWER.** It placed gaps by
+scanning the text in order for terms that were sorted LONGEST first, so a term
+appearing before the longest one was never found. On a short mistake wording it
+rarely showed. On a full answer the fill rung was struck off as unbuildable,
+and only a screenshot showed it. Terms are placed in reading order now, and the
+test runs a long answer.
+
+### What Revision absorbed
+
+- **`/MistakeBank` redirects** to `/Revision?view=mistakes`, keeping its tab
+  (`fix` / `redo`). The page itself is `MistakeBankView`, exported and drawn
+  inside Revision with its look unchanged; its actions moved into
+  `useBankActions`.
+- **The mock exam is a folder's Mock tab.** ExamMode takes a `scope` and draws
+  ONLY that folder's questions. Its source tiles had been counting the whole
+  subject under a header counting the folder ("0 Flashcards" over a tile
+  reading 6), so the test now requires every count over the pool to start with
+  `inScope`.
+- **Study has five techniques.** `/Study?tab=exam` forwards to Revision, to the
+  named subject's exam folder when the link carries one.
+- **Every link was repointed**: Ranked's mastery move, the queue's resit and
+  mistakes rows, the subject hub's lead, Progress's door and its Revision Mode
+  row, the runway's "Revise for it", the planner's mock session and the
+  weak-topics panel. Ace's map says so too.
+- **Revision is a primary nav tab** in both navs. On a phone that makes six
+  bottom cells, 60px each at 360, and none clips.
+
+### On a phone
+
+Five folder tabs do not fit 390px at a readable size, so the strip SCROLLS. A
+cut label at the edge reads as a fault, so the edge that has more FADES, and the
+selected tab is scrolled into view by hand (not `scrollIntoView`, which also
+moves the page). A `?tab=mock` link lands with Mock visible and selected. The
+date in a folder's eyebrow is one unit (`whitespace-nowrap`), because "Thu, Oct"
+and "29" wrapped onto two lines. A folder with nothing in it draws no drill
+button: a disabled one above the three ways to start is a dead control.
+
+**THE REPAIR RUNG WAS LABELLED "FIX IT"**, a banned word, on the drill every
+mistake runs through. It reads "Rewrite it" now, and `revision.test.mjs` scans
+everything Revision prints (comments stripped) for the banned list.
+
+The sweep: 33 injections against a green baseline, exit code and `FAIL` both
+observed. Four were silent at first and all four were missing test cases, not
+weak guards: the write-to-rebuild cascade, `allRight` with one term missing,
+the order of past SACs, and the exact `?tab=exam` condition (`&& false` still
+matched a span scan).
+
+**What could not be verified here:** the photo, suggest and Test me paths were
+driven against stubbed model responses. The real model's numbering in
+`alignCheck` is the part most worth watching on the first real check. Draw the
+page through the network harness. `scripts/_floorProbe.jsx` has no Revision
+view, because the page is all data and the harness is the honest drawing.
+
 ## The marker was told to be an examiner and shown none of the rules
 
 **`subjectExaminerPrompts.js` carries 35 subjects of real study-design detail**
@@ -9025,6 +9193,14 @@ request through.
 - `src/lib/bankTray.js`, `src/components/quizzes/marking/BankTray.jsx`: every
   dropped mark on a marked paper, laid out on the verdict and saved in one
   press, with what an earlier sit already banked shown as banked
+- `src/lib/revision.js` + `revision.test.mjs`, `src/lib/answerBank.js` +
+  `answerBank.test.mjs`, `src/pages/Revision.jsx`, `src/components/revision/`
+  (`FolderView`, `FolderCard`, `KeyKnowledge`, `AnswerList`, `ScopeSheet`,
+  `ReadinessBar`, `RebuildDrill`, `WriteDrill`): Revision, one folder per SAC
+  and one exam folder per subject. Key knowledge rated and then PROVED by a
+  real check quiz, the folder's mistakes, its strong answers drilled up a
+  read → fill → rebuild → write ladder, its weak cards and a scoped mock. The
+  Mistake Bank (`MistakeBankView`) and the mock exam live inside it now
 - `src/lib/bankRun.js` + `bankRun.test.mjs`, `src/components/mistakes/BankBand.jsx`,
   `DrillRun.jsx`: the Mistake Bank as one pile in subject bands, and a drill run
   that reports where each mistake went on its ladder

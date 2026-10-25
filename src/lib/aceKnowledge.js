@@ -103,12 +103,24 @@ export const FEATURES = [
         aka: ["blurt", "brain dump", "everything I know", "gaps", "blind spots", "sac"],
     },
     {
-        id: "exam", name: "Revision Mode", section: "Study", suit: "spade",
-        to: "/Study?tab=exam",
-        what: "A timed mock exam assembled from your own cards and quizzes, marked at the end.",
+        // Revision Mode moved off Study: a timed mock is a folder's Mock exam
+        // tab now, built from that SAC's own material. The id stays, because
+        // the Explore progress and the planner both key on it.
+        id: "exam", name: "Mock exam", section: "Study", suit: "spade",
+        to: "/Revision",
+        what: "A timed mock exam assembled from one SAC's folder — its quizzes, cards and recall questions — marked at the end.",
         when: "Close to the real thing, when what you need is stamina and timing rather than more content.",
         needs: NEEDS.flashcards,
-        aka: ["exam", "mock", "practice exam", "timed", "sac practice", "past paper"],
+        aka: ["exam", "mock", "practice exam", "timed", "sac practice", "past paper", "revision mode"],
+    },
+    {
+        id: "revision", name: "Revision", section: "Study", suit: "spade",
+        to: "/Revision",
+        what: "A folder for every SAC and every exam: its key knowledge, your mistakes, the answers worth learning and the cards that are slipping, with one button that drills whatever is ready.",
+        when: "From a fortnight out from a SAC, and every week in the run-up to exams.",
+        needs: null,
+        proof: "It marks what you say you know apart from what a marked check has proved — the gap between the two is the finding.",
+        aka: ["revision", "revise", "sac prep", "key knowledge", "dot points", "outline", "mistake bank", "mistakes", "saved answers", "model answer", "perfect response", "strong answer"],
     },
     {
         id: "mind_map", name: "Mind Maps", section: "Study", suit: "spade",
@@ -371,7 +383,14 @@ export const BY_ID = Object.fromEntries(FEATURES.map(f => [f.id, f]));
 export const PAGES = {
     Help:         { route: "/Help",         title: "Help",         intro: "Everything AcedIt can do, what each thing is for, and when it's worth opening." },
     Dashboard:    { route: "/Dashboard",    title: "Home",         intro: "What's worth doing today, and how the last month has actually gone." },
-    Study:        { route: "/Study",        title: "Study",        intro: "Six techniques doing six different jobs. Which tab you want depends on what's going wrong, not on which one you like." },
+    Study:        { route: "/Study",        title: "Study",        intro: "Five techniques doing five different jobs. Which tab you want depends on what's going wrong, not on which one you like." },
+    Revision:     { route: "/Revision",     title: "Revision",     intro: "Every SAC and every exam as a folder, with everything you need for it inside.", notes: [
+        "A SAC folder covers the topics you tick for it. Until you tick some, it covers the whole subject and says so.",
+        "Key knowledge is your teacher's outline: paste it, or photograph the sheet. Rate each point, then Test me on the shaky ones.",
+        "Said and proved are different. Got it is what you think; full marks on a check is what an assessor would see.",
+        "Save full-mark answers from any marked quiz and they climb from reading them to writing them from the question alone.",
+        "All mistakes is the Mistake Bank, and a folder's Mock exam is the old Revision Mode, aimed at one SAC.",
+    ] },
     Quizzes:      { route: "/Quizzes",      title: "Quizzes",      intro: "Exam-shaped questions, written by you or generated from your notes." },
     AITools:      { route: "/AITools",      title: "AI Tools",     intro: "One chat, several specialists. This page is part of Premium." },
     Planner:      { route: "/Goals",        title: "Planner",      intro: "Your week as sessions, built around the dates you're actually working towards." },

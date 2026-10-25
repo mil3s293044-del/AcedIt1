@@ -26,7 +26,7 @@ import { Layers, ListChecks, Brain, X, ChevronRight, AlertCircle } from "lucide-
 import { jobFill, jobLine, trayJobs } from "@/lib/aiJobs";
 import { useJobs, useLanes, dismissJob, useJobDisplay, useOnScreen } from "@/lib/jobStore";
 
-const GLYPH = { quiz: ListChecks, reshuffle: ListChecks, flashcards: Layers, recall: Brain };
+const GLYPH = { quiz: ListChecks, reshuffle: ListChecks, check: ListChecks, flashcards: Layers, recall: Brain };
 
 /**
  * The bar and its line, shared with the page's own skeleton so the two can

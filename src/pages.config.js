@@ -87,6 +87,8 @@ const Timer = lazyPage('Timer', () => import('./pages/Timer'));
 const Help = lazyPage('Help', () => import('./pages/Help'));
 const League = lazyPage('League', () => import('./pages/League'));
 const MistakeBank = lazyPage('MistakeBank', () => import('./pages/MistakeBank'));
+// Every SAC and exam as a folder; the Mistake Bank and the mock exam live inside it.
+const Revision = lazyPage('Revision', () => import('./pages/Revision'));
 const SubjectHub = lazyPage('SubjectHub', () => import('./pages/SubjectHub'));
 import __Layout from './Layout.jsx';
 
@@ -96,6 +98,7 @@ export const PAGES = {
     "Help": Help,
     "League": League,
     "MistakeBank": MistakeBank,
+    "Revision": Revision,
     "AIToolsHistory": AIToolsHistory,
     "Checkout": Checkout,
     "Competitions": Competitions,
