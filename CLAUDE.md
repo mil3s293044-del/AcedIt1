@@ -8684,6 +8684,36 @@ that no unmount could remove. To check motion, sample `data-ace-pose` over
 time rather than judging one frame. The harness's TIMELINE probe does that,
 and found nothing a screenshot could have.
 
+### He blinked faster the longer a tab was open
+
+**"Ace is blinking way too quickly, calm it down."** Two causes, and the first
+one was a leak rather than a setting.
+
+- **ORPHAN BLINK CHAINS PILED UP.** AceBody and SpadeFace each scheduled their
+  own blinks with two timeouts (close, then open and schedule the next), and the
+  cleanup cancelled only the first. AceBody's effect re-ran on every change of
+  `p.lids`, which most fidgets make, so a re-run during the 110ms the eyes were
+  shut left a chain nothing could stop. Fidgets come every few seconds, so the
+  chains accumulated and the blinking sped up for as long as the page was open.
+  `startBlinking` (`src/lib/aceBlink.js`) owns both timers and its stop cancels
+  both and reopens the eyes; `useBlink` is keyed on a BOOLEAN, so a pose that
+  opens his eyes a little wider no longer restarts the clock.
+- **A BLINK WAS A FLICKER.** The eyes were UNMOUNTED for the length of a blink
+  (`shut` read the blink), so they vanished and popped back. `shut` follows the
+  pose now, the lid animates closed and open, and the pupil is CLIPPED to the
+  eye so it goes behind the lid instead of popping out first. The clip id comes
+  from `useId` with its colons stripped, because they do not belong in a
+  `url(#…)` reference and a broken reference is silently ignored.
+
+The rate is calmer too: 5–11 seconds between blinks (a person's rate reads as
+nervous on a mascot), still random so it never falls on a beat. Measured on the
+real page: 9 blinks in 90 seconds, each lid closing in 60–90ms.
+`aceSpot.test.mjs` drives the scheduler on a fake clock: a hundred restarts
+mid-blink must not raise the rate, and every guard was checked by putting the
+bug back. To measure it in a browser, read the eye ellipse that carries a class
+(the clip copy has none). Before this fix, the eye being absent was what a
+blink looked like.
+
 ## Every leaderboard is one card tournament
 
 **"Rework all the leaderboards. They need to feel calm, aesthetic, with cool
@@ -9209,6 +9239,9 @@ request through.
   for, settles where his fidgets can reach him, and reacts to events the page
   fires through `useAceCue`. Calm cadence, still while typing, unchanged under
   reduced motion
+- `src/lib/aceBlink.js` + `src/components/ace/useBlink.js` — the one blink
+  scheduler both of Ace's faces use: 5–11 seconds apart, both timers owned and
+  cancelled, keyed on a boolean so fidgets cannot leak chains
 - `src/components/ace/useAceYield.js` + `src/lib/aceStage.test.mjs` —
   `ACE_ORDER`, the one list that decides which Ace is on screen. The scan is
   what catches a surface that draws him and forgets to claim

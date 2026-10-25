@@ -36,11 +36,12 @@
  * colour, pupils the body colour — so he's two fills and can never end up with
  * black eyes on a black body in dark mode.
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import {
     motion, useReducedMotion, useMotionValue, useSpring, useTransform,
 } from "framer-motion";
 import { watchPointer } from "@/components/ace/acePointer";
+import useBlink from "@/components/ace/useBlink";
 
 /* ── The silhouette ───────────────────────────────────────────────────── */
 const VIEW = "-10 0 84 92";
@@ -178,10 +179,15 @@ const IDLES = [
  */
 const IDLE_MIN = 3500, IDLE_SPREAD = 4000;
 
-/** Irregular on purpose — a metronome blink reads as a machine. */
-const BLINK_MIN = 2800, BLINK_SPREAD = 3800;
-
 const SPRING = { type: "spring", stiffness: 210, damping: 18, mass: 0.7 };
+
+/**
+ * How a lid moves. A blink is the lid CLOSING and opening, so the eye stays
+ * mounted through it and only its height animates. It used to be unmounted
+ * for the length of a blink, which drew as the eyes vanishing for a tenth of
+ * a second and popping back: a flicker, read as nervous rather than as a blink.
+ */
+const LID = { duration: 0.12, ease: "easeInOut" };
 
 /** One eye. Its own component so the pupil transforms can use hooks. */
 function Eye({ cx, gazeX, gazeY, open, tone, card, showPupil }) {
@@ -189,18 +195,26 @@ function Eye({ cx, gazeX, gazeY, open, tone, card, showPupil }) {
     const py = useTransform(gazeY, (v) => EYE.y + v * EYE.ry * 0.5);
     const hx = useTransform(px, (v) => v + 1.8);
     const hy = useTransform(py, (v) => v - 2);
+    // The pupil is CLIPPED to the eye, so a closing lid covers it rather than
+    // the pupil popping out before the white has finished shrinking. useId
+    // carries colons, which do not belong in a url(#…) reference.
+    const clip = `ace-eye-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
     return (
         <g>
+            <clipPath id={clip}>
+                <motion.ellipse cx={cx} cy={EYE.y} rx={EYE.rx} ry={EYE.ry * open} initial={false}
+                    animate={{ ry: EYE.ry * open }} transition={LID} />
+            </clipPath>
             <motion.ellipse cx={cx} cy={EYE.y} rx={EYE.rx} ry={EYE.ry * open} initial={false}
-                animate={{ ry: EYE.ry * open }} transition={{ duration: 0.09 }}
+                animate={{ ry: EYE.ry * open }} transition={LID}
                 className={card} />
             {showPupil && (
-                <>
+                <g clipPath={`url(#${clip})`}>
                     <motion.circle cx={px} cy={py} r={EYE.rx * 0.52} className={tone} />
                     {/* The catchlight. Without it a pupil is a hole; with it
                         the eye looks wet. */}
                     <motion.circle cx={hx} cy={hy} r={EYE.rx * 0.19} className={card} />
-                </>
+                </g>
             )}
         </g>
     );
@@ -228,7 +242,6 @@ export default function AceBody({
     const reduce = useReducedMotion();
     const ref = useRef(null);
     const [fidget, setFidget] = useState(null);
-    const [blinking, setBlinking] = useState(false);
 
     // The pose actually being drawn: a fidget wins, but only while resting.
     const active = fidget && RESTING.has(pose) ? fidget : pose;
@@ -259,18 +272,10 @@ export default function AceBody({
     }, [fixed, eyes, reduce, rawX, rawY]);
 
     /* ── Blink ─────────────────────────────────────────────────────────── */
-    useEffect(() => {
-        if (!blink || reduce || p.lids < 0.2) return;
-        let t;
-        const schedule = () => {
-            t = setTimeout(() => {
-                setBlinking(true);
-                setTimeout(() => { setBlinking(false); schedule(); }, 110);
-            }, BLINK_MIN + Math.random() * BLINK_SPREAD);
-        };
-        schedule();
-        return () => clearTimeout(t);
-    }, [blink, reduce, p.lids]);
+    // One chain, restarted only when blinking switches on or off. It used to
+    // restart on every change of eyelid, which most fidgets make, and leak a
+    // chain each time — see aceBlink.js.
+    const blinking = useBlink(blink && !reduce && p.lids >= 0.2);
 
     /* ── Fidgets ───────────────────────────────────────────────────────── */
     useEffect(() => {
@@ -288,7 +293,9 @@ export default function AceBody({
     }, [idle, reduce, pose, idleEvery?.min, idleEvery?.spread]);
 
     const open = blinking ? 0.06 : p.lids;
-    const shut = open < 0.12;
+    // SHUT is the pose's own eyes, never the blink: a blink keeps the eyes
+    // mounted so the lid can be seen closing (see LID above).
+    const shut = p.lids < 0.12;
     const arms = ARMS[p.arms] || ARMS.down;
     const lift = reduce ? 0 : step;
 
@@ -353,7 +360,7 @@ export default function AceBody({
                             fill="none" className={cardStroke} strokeWidth="3.4" strokeLinecap="round" />
                     ) : (
                         <Eye key={i} cx={x} gazeX={gazeX} gazeY={gazeY} open={open}
-                            tone={tone} card={card} showPupil={open > 0.35} />
+                            tone={tone} card={card} showPupil={p.lids > 0.35} />
                     )
                 ))}
 

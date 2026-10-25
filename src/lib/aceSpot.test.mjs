@@ -17,6 +17,7 @@ import {
     RESTING, CALM_IDLE, REACTIONS, REACT_MS, settleFor, cueFor, shownPose,
     isTextEntry, ENTRANCES, entranceFor,
 } from "@/lib/aceSpot";
+import { startBlinking, blinkDelay, BLINK_MIN_MS, BLINK_SPREAD_MS, BLINK_HOLD_MS } from "@/lib/aceBlink";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -198,6 +199,111 @@ check("on a break he yawns and falls asleep, and stays asleep", () => {
 
 check("the check-in holds him thinking while a plan builds", () => {
     assert.match(strip(read("src/components/planner/StrategyCheckIn.jsx")), /<AceSpot[^>]*hold=\{busy\}/);
+});
+
+/* ── The blink ────────────────────────────────────────────────────────── */
+
+/** A clock the test drives: timers fire in order as time is advanced. */
+function fakeClock() {
+    let now = 0, id = 0;
+    const queue = new Map();
+    return {
+        setTimeout(fn, ms) { id += 1; queue.set(id, { at: now + ms, fn }); return id; },
+        clearTimeout(i) { queue.delete(i); },
+        advance(ms) {
+            const end = now + ms;
+            for (;;) {
+                let next = null;
+                for (const [k, t] of queue) if (t.at <= end && (next === null || t.at < queue.get(next).at)) next = k;
+                if (next === null) break;
+                const t = queue.get(next);
+                queue.delete(next);
+                now = t.at;
+                t.fn();
+            }
+            now = end;
+        },
+        get pending() { return queue.size; },
+    };
+}
+
+/** Run a chain for `ms` and count the times the eyes closed. */
+const blinksOver = (ms, { restartMidBlink = 0 } = {}) => {
+    const clock = fakeClock();
+    let closes = 0, shut = false, restarts = 0, stop;
+    const onChange = (v) => { if (v) closes += 1; shut = v; };
+    stop = startBlinking(onChange, { timers: clock });
+    for (let t = 0; t < ms; t += 10) {
+        clock.advance(10);
+        // The real trigger: the effect torn down while the eyes are shut,
+        // which every fidget that changed the eyelid used to do.
+        if (shut && restarts < restartMidBlink) {
+            restarts += 1;
+            stop();
+            stop = startBlinking(onChange, { timers: clock });
+        }
+    }
+    return { closes, pending: clock.pending };
+};
+
+check("calm: five to eleven seconds between blinks, and never on a beat", () => {
+    assert.ok(BLINK_MIN_MS >= 5000, "a blink every three seconds reads as nervous on a mascot");
+    assert.equal(blinkDelay(() => 0), BLINK_MIN_MS);
+    assert.equal(blinkDelay(() => 1), BLINK_MIN_MS + BLINK_SPREAD_MS);
+    assert.ok(BLINK_SPREAD_MS >= 3000, "a blink on a fixed beat reads as a machine");
+    assert.ok(BLINK_HOLD_MS >= 120 && BLINK_HOLD_MS <= 250, "shut long enough to read as a blink, not a flicker");
+    const { closes } = blinksOver(10 * 60_000);
+    assert.ok(closes <= 120, `${closes} blinks in ten minutes is more than one every five seconds`);
+    assert.ok(closes >= 50, `${closes} blinks in ten minutes reads as frozen`);
+});
+
+check("stopping mid-blink leaves nothing running and the eyes open", () => {
+    const clock = fakeClock();
+    const seen = [];
+    const stop = startBlinking((v) => seen.push(v), { timers: clock, random: () => 0 });
+    clock.advance(BLINK_MIN_MS + 1);
+    assert.equal(seen.at(-1), true, "the fixture stops while the eyes are shut");
+    stop();
+    assert.equal(clock.pending, 0, "the open-again timer survived the stop — it starts a chain nothing can cancel");
+    assert.equal(seen.at(-1), false, "a pose change mid-blink must not leave his eyes shut");
+    const before = seen.length;
+    clock.advance(10 * 60_000);
+    assert.equal(seen.length, before, "a stopped chain kept blinking");
+});
+
+check("restarted at the worst moment a hundred times, he blinks no faster", () => {
+    const once = blinksOver(10 * 60_000);
+    const churned = blinksOver(10 * 60_000, { restartMidBlink: 100 });
+    assert.ok(churned.pending <= 1, `${churned.pending} timers pending — chains are piling up`);
+    assert.ok(churned.closes <= once.closes + 105,
+        `${churned.closes} blinks against ${once.closes}: every restart leaked a chain`);
+    assert.ok(churned.closes <= 220, "the rate grew with the restarts");
+});
+
+check("both faces blink through the one scheduler, keyed on a boolean", () => {
+    const hook = strip(read("src/components/ace/useBlink.js"));
+    assert.match(hook, /startBlinking\(/);
+    assert.match(hook, /\[enabled\]\)/, "restarting on the eyelid value is what leaked a chain per fidget");
+    for (const f of ["src/components/ace/AceBody.jsx", "src/components/ace/SpadeMark.jsx"]) {
+        const src = strip(read(f));
+        assert.match(src, /useBlink\(/, `${f} does not blink through useBlink`);
+        assert.ok(!/setBlinking\(\s*true\s*\)/.test(src), `${f} schedules its own blinks again`);
+        assert.ok(!/BLINK_MIN\s*=/.test(src), `${f} carries its own blink rate`);
+    }
+});
+
+check("a blink is a lid closing, never the eyes vanishing", () => {
+    // During a blink the eyes used to be UNMOUNTED for 110ms and pop back —
+    // a flicker, which is most of what read as blinking too quickly.
+    const body = strip(BODY);
+    assert.match(body, /const shut = p\.lids < /, "the eyes are hidden by the POSE, never by the blink");
+    assert.ok(!/const shut = open\b/.test(body), "a blink unmounts the eyes again");
+    assert.match(body, /showPupil=\{p\.lids > /, "the pupil pops out mid-blink instead of going behind the lid");
+    const eye = body.slice(body.indexOf("function Eye("), body.indexOf("export default function AceBody"));
+    assert.match(eye, /<clipPath id=\{clip\}>/, "the pupil is not clipped to the lid");
+    assert.match(eye, /clipPath=\{`url\(#\$\{clip\}\)`\}/);
+    const face = strip(read("src/components/ace/SpadeMark.jsx"));
+    assert.match(face, /<motion\.ellipse rx=\{m\.rx\}[^>]*animate=\{\{ ry:/, "SpadeFace's lid snaps rather than closing");
 });
 
 console.log(`\n${passed} placed-Ace checks passed`);
