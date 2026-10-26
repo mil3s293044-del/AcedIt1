@@ -56,6 +56,9 @@ import AceShuffle from "@/components/ace/AceShuffle";
 import AceSpot from "@/components/ace/AceSpot";
 import { signalBrain } from "@/lib/brainSignal";
 import MathText from "@/components/shared/LatexRenderer";
+import ForChip, { ForNote } from "@/components/shared/ForChip";
+import useSacTags, { setClaim } from "@/hooks/useSacTags";
+import { parseFor } from "@/lib/sacTags";
 
 const TYPE_ICON = {
     idea: Lightbulb, cause: Zap, effect: Target, step: ListOrdered,
@@ -247,6 +250,16 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
     const [recallOf, setRecallOf] = useState(null);  // the real map being recalled against
     const [diff, setDiff] = useState(null);
     const [confirmLayer, setConfirmLayer] = useState(null);  // map id awaiting a second click
+    const tags = useSacTags(user?.email);
+    // Arrived from a SAC's folder (`?for=`): a map MADE here is tagged for it.
+    // Made, not opened — opening a subject's map to look at it is not a claim
+    // that the whole subject is on the SAC. The chip tags an open map by hand.
+    const [forKey, setForKey] = useState(() => parseFor(typeof window !== "undefined" ? window.location.search : ""));
+    const forRef = useRef(forKey);
+    useEffect(() => { forRef.current = forKey; }, [forKey]);
+    const claimMade = useCallback((id) => {
+        if (forRef.current && id) setClaim(forRef.current, "maps", id, true).catch(() => {});
+    }, []);
     const canvasApi = useRef(null);
     const dirty = useRef(0);
     const savedAt = useRef(0);
@@ -498,6 +511,7 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
         base.isSubjectRoot = true;
         try {
             const created = await base44.entities.MindMap.create(mapToRow(base));
+            claimMade(created?.id);
             const m = { ...base, id: created?.id };
             setMap(m); setTrail([{ id: m.id, title: name }]); setOutline(toOutline(m.nodes));
             savedAt.current = dirty.current;
@@ -506,7 +520,7 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
             setMap(base); setTrail([{ id: null, title: name }]); setOutline(toOutline(base.nodes));
             toast({ title: "Working offline", description: "Couldn't reach your saved maps — this one won't persist yet." });
         }
-    }, [flush, putRow, toast]);
+    }, [flush, putRow, toast, claimMade]);
 
     const openMapRow = useCallback((row, newTrail) => {
         const m = rowToMap(row);
@@ -539,13 +553,39 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
         }
         try {
             const created = await base44.entities.MindMap.create(mapToRow(child));
+            claimMade(created?.id);
             const row = { ...mapToRow(child), id: created?.id };
             putRow(row);
             openMapRow(row, [...trail, { id: created?.id, title: node.text }]);
         } catch (e) {
             toast({ title: "Couldn't open that node", description: e.message, variant: "destructive" });
         }
-    }, [flush, putRow, subject, trail, openMapRow, toast]);
+    }, [flush, putRow, subject, trail, openMapRow, toast, claimMade]);
+
+    // ── A link to one map (`?map=<id>`), or to a subject (`?subject=`) ───────
+    // Revision's Material tab opens a tagged map here. Read once, after the
+    // saved maps are in; a map that is not there any more is dropped quietly,
+    // the `?play=` rule. A layer opens under its subject's root so Up works.
+    const linked = useRef(false);
+    useEffect(() => {
+        if (loading || linked.current || typeof window === "undefined") return;
+        linked.current = true;
+        const q = new URLSearchParams(window.location.search);
+        const id = q.get("map");
+        const row = id ? allMapsRef.current.find((m) => String(m.id) === id) : null;
+        if (row) {
+            setSubject(row.subject_name);
+            if (row.is_subject_root) { openMapRow(row, [{ id: row.id, title: row.title || row.subject_name }]); return; }
+            const root = allMapsRef.current.find((m) => m.subject_name === row.subject_name && m.is_subject_root);
+            openMapRow(row, [
+                ...(root ? [{ id: root.id, title: root.title || row.subject_name }] : []),
+                { id: row.id, title: row.title },
+            ]);
+            return;
+        }
+        const name = q.get("subject");
+        if (name && (subjects || []).some((s) => s.subject_name === name)) openSubject(name);
+    }, [loading, openMapRow, openSubject, subjects]);
 
     const goToTrail = useCallback(async (i) => {
         const target = trail[i];
@@ -942,6 +982,7 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
         };
         return (
             <div className="space-y-5">
+                <ForNote tags={tags} forKey={forKey} onClear={() => setForKey(null)} what="New maps you make here are tagged for" />
                 <div className="rounded-3xl bg-gradient-to-br from-map/10 to-transparent border-2 border-map/20 p-6">
                     <div className="flex items-start gap-3">
                         <div className="w-11 h-11 rounded-2xl bg-map/15 flex items-center justify-center flex-shrink-0">
@@ -1021,6 +1062,7 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
             className={builder
                 ? "fixed inset-0 z-50 bg-background overflow-y-auto p-3 sm:p-4 space-y-3"
                 : "space-y-3"}>
+            <ForNote tags={tags} forKey={forKey} onClear={() => setForKey(null)} what="New maps you make here are tagged for" />
             {/* ── Breadcrumb ─────────────────────────────────────────────── */}
             <div className="flex items-center gap-2 flex-wrap">
                 {trail.length > 1 ? (
@@ -1057,6 +1099,7 @@ export default function MindMaps({ user, subjects = [], onSessionComplete = null
                     )
                 ))}
                 <span className="ml-auto flex items-center gap-2">
+                    {map?.id && <ForChip tags={tags} kind="maps" id={map.id} subject={subject} align="right" />}
                     <SaveState state={saveState} onRetry={save} />
                     <div className="inline-flex rounded-xl border-2 border-border overflow-hidden">
                         {[["canvas", MousePointer2, "Canvas"], ["outline", ListTree, "Outline"]].map(([id, I, label]) => (

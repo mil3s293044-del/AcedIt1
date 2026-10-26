@@ -50,6 +50,9 @@ export function studyEvents(sessions = [], techniques = []) {
             subject: s.subject || null,
             minutes: mins(s.duration_minutes) || mins(s.session_duration),
             source: "session",
+            // Carried for `folderMember`: which SAC a session was for is read
+            // off its stamp, its quiz, or its topic.
+            topic: s.topic || null, notes: s.notes || null, extra: s.extra || null,
         });
     });
 
@@ -61,6 +64,7 @@ export function studyEvents(sessions = [], techniques = []) {
             subject: t.subject || null,
             minutes: mins(t.session_duration) || mins(t.duration_minutes),
             source: "technique",
+            topic: t.topic || null, notes: t.notes || null, extra: t.extra || null,
         });
     });
 

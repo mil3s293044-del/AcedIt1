@@ -956,7 +956,7 @@ test runs a long answer.
 
 ### On a phone
 
-Five folder tabs do not fit 390px at a readable size, so the strip SCROLLS. A
+Six folder tabs do not fit 390px at a readable size, so the strip SCROLLS. A
 cut label at the edge reads as a fault, so the edge that has more FADES, and the
 selected tab is scrolled into view by hand (not `scrollIntoView`, which also
 moves the page). A `?tab=mock` link lands with Mock visible and selected. The
@@ -979,6 +979,127 @@ driven against stubbed model responses. The real model's numbering in
 `alignCheck` is the part most worth watching on the first real check. Draw the
 page through the network harness. `scripts/_floorProbe.jsx` has no Revision
 view, because the page is all data and the harness is the honest drawing.
+
+## Anything can be tagged for a SAC, and the folder counts it
+
+**"Make it so you can tag any resource for a certain SAC, and then it's all
+attributed and can be sorted for revision, and analytics."** A folder held what
+matched its TOPICS, which is a guess about what a student was revising for; a
+deck called "Electrolysis" for a SAC on "Redox" was invisible to it. The student
+chose all four options: every kind is taggable (decks, quizzes, mistakes,
+answers, mind maps, AI chats, study time, planner sessions), tags ADD to topics,
+tagging is a chip on each item plus an Add sheet in the folder plus auto-tagging
+from inside it, and the analytics are a folder panel and a Progress filter.
+`src/lib/sacTags.js` is the writing and the analytics; `folderMember` in
+`revision.js` is the one reading; `sacTags.test.mjs` holds both (24 checks, 43
+injections, every one biting).
+
+### A tag is a claim the SAC makes, on the SAC's own row
+
+`extra.revision.claims = { decks, quizzes, mistakes, answers, maps, chats }` on
+the `subject_assessments` row. **No migration, and nothing is written to the
+thing tagged.** Three reasons, and the first is not a preference:
+
+- **A DECK IS NOT A ROW.** It is every card sharing a subject and a topic
+  (`deckKeyOf`, normalised), so the only place its tag can live without writing
+  to sixty cards is somewhere that names the pair — and a card added to the deck
+  later is tagged with it, which a per-card tag never would be.
+- **Every resource's `extra` belongs to another feature** (`extra.mistake`,
+  `extra.exemplar`, `extra.revision_check`), and a tag spread over a stale copy
+  of it would undo their work.
+- **One SAC, one row**, so a folder, a chip and the Progress filter read one set.
+
+**STUDY TIME IS STAMPED INSTEAD** (`extra.revision_for` on the session row, at
+the moment it is saved), because a session is an event that already happened FOR
+something and a deck is a resource whose purpose can change. The Study page has a
+"Studying for" chip (`FocusChip`, `studyFocus.js`: this tab, today only) and
+every session saved while it is set is stamped through `withStamp` — the shared
+`handleSessionComplete` AND the flashcard review, which writes its own row. A
+quiz's session carries `extra.quiz_id`, so its time follows its quiz; older rows
+are matched by the title in their notes. Planner sessions are stamped from a "For
+a SAC" field and by Strategise, and the folder counts them kept.
+
+**AN EXAM FOLDER IS NEVER OFFERED AS A TAG.** It already holds the whole subject,
+so a tag on it could only say nothing.
+
+### Membership: tags add, and things follow what they came from
+
+`folderMember` is ONE set of predicates read by the folder's contents, its
+run-up and the Progress filter — three readers that each worked it out would be
+three answers to "what is in this SAC". In a folder: its topics, OR tagged, OR
+— for a mistake or a saved answer — the quiz it came from is in the folder; and
+attempts follow their quizzes. A tag can only ADD, so nothing a student sees in a
+folder today disappears because they tagged something else.
+
+**A planned session is the SAC's when stamped or built for it, never by subject
+alone** — the runway's rule: a Chemistry session on Tuesday is not prep for every
+Chemistry SAC on the calendar.
+
+### ONE QUEUE PER SAC, AND IT RE-READS THE ROW
+
+Tags and the folder's own points, topics and history share ONE `extra.revision`,
+so a points edit built off a copy read before a tag landed would write the old
+claims straight back — silently. `patchSac` (useSacTags.js) queues writes per
+SAC, re-reads the row before building each patch, and broadcasts the saved row
+so every chip on the page (and Revision's own copy) takes it. Revision writes a
+SAC only through it; the test refuses a direct `SubjectAssessment.update` there.
+
+### The chip, and where its list goes
+
+`ForChip` is on every deck and quiz pack (compact, a fourth 28px gutter button),
+every banked mistake and saved answer, the open mind map, and the chat's header.
+It is not drawn when there is no SAC to tag for. **Its list is PORTALLED and
+fixed to the chip's rect**, because the mistake and answer rows clip their
+overflow and cut it off — and it FOLLOWS the chip on scroll rather than closing,
+because the tap that opens a chip near the fold also scrolls it into view, and
+the first version closed the instant it opened. **Except in the console**: the
+chat's palette is scoped to `.console`, so its list stays in place, and
+`consoleInk.test.mjs` now allows ForChip's console preset while refusing
+`ink="console"` from outside the room and refusing to portal it.
+
+### Made from inside a folder, tagged for it — and said first
+
+The Material tab's "Or make one for it" links carry `?for=sac:<id>`: a quiz, a
+deck, a mind map, an AI chat, or study time. Each landing page reads it
+(`parseFor`, which refuses anything but a SAC key), opens what the link promised,
+shows `ForNote` ("Tagged for Chem · SAC 2 — Remove") BEFORE anything is made, and
+claims what it makes. A map is claimed when MADE, never when opened: opening a
+subject's map to look at it is not a claim that the subject is on the SAC. The
+guards pin each claim's CONDITION with its call, because `if (false) setClaim(…)`
+still contains the call — the `&& false` lesson, met again in this sweep.
+
+### The folder: Material and the run-up
+
+- **Material** is what the folder revises FROM — decks, quizzes, maps, chats —
+  and every row says WHY it is there: "Tagged" (with the tap that removes it) or
+  the topic that matched (with no Remove, because removing a topic match from
+  here would be a button that did nothing). "Add to this SAC" is one sheet over
+  everything the student owns, this subject first; a topic match shows ticked and
+  locked. `?chat=<id>` and `?map=<id>` are the deep links its Open buttons use.
+- **The run-up** (`RunupPanel`, a ruled section, not a card): minutes, sits and
+  their average, cards reviewed, planned sessions kept — over RUNUP_WEEKS whole
+  Monday weeks ending today or on the SAC. **Whole weeks, so the four bars ARE
+  the total**: a 28-day window starting mid-week put days into the figure no bar
+  drew. Minutes go through `countableByDay`, retries are never sits, and every
+  figure is null rather than 0.
+- **Readiness over time is the one thing nothing recorded**, so it is written: a
+  snapshot a day on the folder's row when it is opened (`historyPatch`, null when
+  today already reads the same, never for an empty folder). It is what the folder
+  showed that day and never reconstructed — the bank already says nothing records
+  when a mistake was fixed.
+
+### Progress narrows to a SAC
+
+The subject filter gained a SACs group (coming, or finished inside the run-up
+window) in the SAME control, because two filters could be set to "Chemistry" and
+"a Methods SAC" at once, which is no question. `sliceByFolder` slices the inputs
+through `folderMember`, so the report and the folder cannot disagree.
+`studyEvents` now carries topic, notes and extra so it can.
+
+**What could not be verified here:** none of it ran against the real database.
+The harness's PATCH handler now writes to the fixture row it names, so a tag is
+read back by the next GET — the way the real one would — and every surface was
+driven that way at 1280 and 390, in both themes and with reduced motion.
 
 ## The marker was told to be an examiner and shown none of the rules
 
@@ -9223,6 +9344,12 @@ request through.
 - `src/lib/bankTray.js`, `src/components/quizzes/marking/BankTray.jsx`: every
   dropped mark on a marked paper, laid out on the verdict and saved in one
   press, with what an earlier sit already banked shown as banked
+- `src/lib/sacTags.js` + `sacTags.test.mjs`, `src/hooks/useSacTags.js`,
+  `src/components/shared/ForChip.jsx`, `src/lib/studyFocus.js`,
+  `src/components/revision/MaterialTab.jsx`, `RunupPanel.jsx`: tagging anything
+  for a SAC. Claims live on the SAC's row (`folderMember` in revision.js is the
+  one reading), study time is stamped when saved, every SAC write goes through
+  `patchSac`'s queue, and the folder reports the run-up off what is in it
 - `src/lib/revision.js` + `revision.test.mjs`, `src/lib/answerBank.js` +
   `answerBank.test.mjs`, `src/pages/Revision.jsx`, `src/components/revision/`
   (`FolderView`, `FolderCard`, `KeyKnowledge`, `AnswerList`, `ScopeSheet`,

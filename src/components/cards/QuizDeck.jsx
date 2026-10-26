@@ -59,6 +59,8 @@ export default function QuizDeck({
     canReshuffle = false,
     onSelect, onRetryWrong, onReshuffle, onDelete,
     index = 0,
+    /** A tag control (ForChip, compact), first in the gutter. */
+    tag = null,
 }) {
     const played = typeof bestScore === "number";
     const score = played ? Math.round(bestScore) : 0;
@@ -77,6 +79,7 @@ export default function QuizDeck({
             watermark={false}
             actions={(
                 <>
+                    {tag}
                     {/* Only offered when there is something to fix. A button
                         that retries nothing is worse than no button. */}
                     {toFix > 0 && (

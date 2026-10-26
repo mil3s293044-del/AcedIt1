@@ -794,7 +794,9 @@ In two or three sentences, explain what makes that the right answer and what the
             const user = await base44.auth.me();
             if (user?.email) {
                 const tempCorrect = shuffledQuiz.questions.filter((q, i) => q.type === 'mcq' && userAnswers[i] !== undefined && parseInt(userAnswers[i]) === q.correct_answer).length;
-                await base44.entities.StudySession.create({ subject: quiz.subject, duration_minutes: Math.ceil(timeTaken / 60), technique: "quiz", notes: `Quiz: ${quiz.title}`, productivity_rating: tempCorrect === quiz.questions.length ? 5 : Math.max(1, Math.ceil((tempCorrect / quiz.questions.length) * 5)), date: new Date().toISOString().split('T')[0] });
+                // `extra.quiz_id` is how this time reaches a SAC the quiz is tagged
+                // for (`folderMember`), rather than a match on the title in `notes`.
+                await base44.entities.StudySession.create({ subject: quiz.subject, duration_minutes: Math.ceil(timeTaken / 60), technique: "quiz", notes: `Quiz: ${quiz.title}`, productivity_rating: tempCorrect === quiz.questions.length ? 5 : Math.max(1, Math.ceil((tempCorrect / quiz.questions.length) * 5)), date: new Date().toISOString().split('T')[0], ...(quiz.id ? { extra: { quiz_id: String(quiz.id) } } : {}) });
                 // THIS IS THE ONLY WRITER OF `total_study_time`, so the
                 // `if (entries.length)` it used to stop at meant the hours
                 // board stayed at zero forever for anybody without a row —

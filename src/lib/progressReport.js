@@ -53,6 +53,7 @@ import { retentionOutlook } from "@/lib/retention";
 import { cardMastery } from "@/lib/mastery";
 import { bankSummary, isRetired, fixState, repeatOffenders } from "@/lib/mistakeBank";
 import { countableByDay } from "@/lib/integrity";
+import { folderMember } from "@/lib/revision";
 
 /** The three windows, in the order the switch draws them. */
 export const PERIODS = [
@@ -671,3 +672,33 @@ export function sliceBySubject(bag, subject) {
 
 /** The "no filter" value, so the control and the slice cannot disagree. */
 export const ALL_SUBJECTS = "__all__";
+
+/**
+ * The same bag narrowed to one SAC, by the SAC's own membership rules — its
+ * topics, and everything tagged to it. `folderMember` is the one reading of
+ * "what is in this SAC", so the report under this filter and the folder in
+ * Revision cannot disagree about it.
+ *
+ * Assessments narrow to the SAC itself, so the Today queue's deadline row (were
+ * it ever filtered) would name the one SAC the student is looking at.
+ */
+export function sliceByFolder(bag, folder) {
+    if (!folder) return bag;
+    const m = folderMember(folder, { quizzes: bag.quizzes || [] });
+    const quizzes = (bag.quizzes || []).filter(m.quiz);
+    const ids = new Set(quizzes.map((q) => String(q?.id)));
+    return {
+        ...bag,
+        cards: (bag.cards || []).filter(m.card),
+        bankCards: (bag.bankCards || []).filter(m.mistake),
+        events: (bag.events || []).filter(m.time),
+        techniques: (bag.techniques || []).filter(m.time),
+        sessions: (bag.sessions || []).filter(m.time),
+        assessments: (bag.assessments || []).filter((a) => folder.kind === "sac" && String(a?.id) === String(folder.id)),
+        quizzes,
+        attempts: (bag.attempts || []).filter((a) => ids.has(String(a?.quiz_id))),
+    };
+}
+
+/** Is a scope value a SAC rather than a subject? */
+export const isFolderScope = (v) => typeof v === "string" && v.startsWith("sac:");

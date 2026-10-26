@@ -28,6 +28,8 @@ import HelpButton from "@/components/shared/HelpButton";
 import { createPageUrl } from "@/utils";
 import { deckCards } from "@/lib/mistakeBank";
 import { recIdOf, stratIdOf, durationOf, noteTextOf, buildNotes } from "@/lib/planTags";
+import { foldersFor } from "@/lib/revision";
+import { stampOf, withStamp, tagLabel, STAMP_KEY } from "@/lib/sacTags";
 import { strategiesNeedingCheckIn } from "@/lib/strategyState";
 import StrategyCheckIn from "@/components/planner/StrategyCheckIn";
 import TermRunway from "@/components/planner/TermRunway";
@@ -340,6 +342,7 @@ export default function Planner() {
     const [profile, setProfile] = useState(null);
     const [subjects, setSubjects] = useState([]);
     const [assessments, setAssessments] = useState([]);
+    const upcomingSacs = useMemo(() => foldersFor({ assessments }).sacs, [assessments]);
     const [plans, setPlans] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
@@ -372,6 +375,9 @@ export default function Planner() {
     const [planType, setPlanType] = useState("");
     const [planTitle, setPlanTitle] = useState("");
     const [planSubject, setPlanSubject] = useState("");
+    // Which SAC a session is FOR, stamped on the row the way Study stamps its
+    // sessions — so a SAC's folder can say how many of its sessions were kept.
+    const [planFor, setPlanFor] = useState("");
     const [planTime, setPlanTime] = useState("16:00");
     const [planDuration, setPlanDuration] = useState(40);
     const [planNote, setPlanNote] = useState("");
@@ -813,14 +819,14 @@ export default function Planner() {
             const notes = buildNotes(recId, planDuration, planNote, null);
             // A weekly repeat over a term is one insert, not one per week.
             await base44.entities.StudyPlan.bulkCreate(
-                Array.from({ length: weeks }, (_, i) => ({
+                Array.from({ length: weeks }, (_, i) => withStamp({
                     title: finalTitle,
                     subject_name: planSubject || null,
                     date: format(addDays(parseISO(planDay), i * 7), "yyyy-MM-dd"),
                     start_time: planTime || null,
                     is_completed: false,
                     notes,
-                })));
+                }, planFor)));
             if (repeatWeekly) toast({ title: `Weekly for ${weeks} weeks`, description: "The series is on the board — delete any one to trim it." });
             setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false);
             closePlanDialog();
@@ -838,7 +844,7 @@ export default function Planner() {
     const openAddPlan = (dayKey) => {
         setEditingPlan(null);
         setPlanDay(dayKey);
-        setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false);
+        setPlanTitle(""); setPlanType(""); setPlanNote(""); setRepeatWeekly(false); setPlanFor("");
     };
 
     const openEditPlan = (p) => {
@@ -852,6 +858,7 @@ export default function Planner() {
         setPlanDuration(durationOf(p) || DEFAULT_DUR);
         setPlanNote(noteTextOf(p) || "");
         setRepeatWeekly(false);
+        setPlanFor(stampOf(p)[0] || "");
     };
 
     // Editing from inside the day view shouldn't dump you back on the week
@@ -876,6 +883,12 @@ export default function Planner() {
             start_time: planTime || null,
             notes: buildNotes(recIdOf(editingPlan), planDuration, planNote, stratIdOf(editingPlan)),
         };
+        // The stamp is changed only when the field moved, and the rest of the
+        // row's `extra` rides along untouched.
+        if ((stampOf(editingPlan)[0] || "") !== planFor) {
+            const { [STAMP_KEY]: _drop, ...rest } = editingPlan.extra || {};
+            patch.extra = planFor ? withStamp({ extra: rest }, planFor).extra : rest;
+        }
         try {
             await base44.entities.StudyPlan.update(editingPlan.id, patch);
             setPlans(prev => prev.map(x => x.id === editingPlan.id ? { ...x, ...patch } : x));
@@ -1710,6 +1723,22 @@ export default function Planner() {
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            {/* Only when there is a SAC to be for. A field offering
+                                nothing but "Nothing in particular" is a control
+                                over nothing. */}
+                            {upcomingSacs.length > 0 && (
+                                <div>
+                                    <p className="stat-label mb-1.5">For a SAC</p>
+                                    <Select value={planFor || "none"} onValueChange={(v) => setPlanFor(v === "none" ? "" : v)}>
+                                        <SelectTrigger data-plan-for><SelectValue /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">Nothing in particular</SelectItem>
+                                            {upcomingSacs.map(f => <SelectItem key={f.key} value={f.key}>{tagLabel(f)}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
 
                             {/* Day and time together — dragging is the quick way to move a
                                 session, this is the exact way, and the only way on a

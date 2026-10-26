@@ -25,6 +25,7 @@
  */
 import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import ForChip from "@/components/shared/ForChip";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { Check, ChevronDown, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -78,7 +79,7 @@ export function BankPile({ pile }) {
 }
 
 /** One mistake. The criterion IS the headline — it is what was wanted. */
-function MistakeRow({ row, attempts, onClear, index }) {
+function MistakeRow({ row, attempts, onClear, index, tags }) {
     const [open, setOpen] = useState(false);
     const reduce = useReducedMotion();
     const { card, state, topic, repeat } = row;
@@ -159,6 +160,9 @@ function MistakeRow({ row, attempts, onClear, index }) {
                                         Ask what the assessor means
                                     </Link>
                                 )}
+                                {/* On its own, or with its quiz: a mistake follows the quiz
+                                    it came from into a SAC, and this tags the one mark. */}
+                                <ForChip tags={tags} kind="mistakes" id={card.id} subject={subject} />
                                 {state === "fixed" && (
                                     <Button size="sm" variant="outline" onClick={() => onClear?.([card])}
                                         className="border-2 border-border rounded-xl gap-1.5 text-xs">
@@ -174,7 +178,7 @@ function MistakeRow({ row, attempts, onClear, index }) {
     );
 }
 
-export default function BankBand({ band, attempts, onDrill, onClear }) {
+export default function BankBand({ band, attempts, onDrill, onClear, tags }) {
     const tone = colorFor(band.subject);
     return (
         <section data-band={band.subject} aria-label={band.subject}>
@@ -197,7 +201,7 @@ export default function BankBand({ band, attempts, onDrill, onClear }) {
             </div>
             <ul className="space-y-2">
                 {band.rows.map((row, i) => (
-                    <MistakeRow key={row.card.id} row={row} index={i} attempts={attempts} onClear={onClear} />
+                    <MistakeRow key={row.card.id} row={row} index={i} attempts={attempts} onClear={onClear} tags={tags} />
                 ))}
             </ul>
         </section>
