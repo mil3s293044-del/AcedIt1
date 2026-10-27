@@ -9129,6 +9129,40 @@ models reject outright.
 
 The non-streaming path was never at risk: it caps at 32000.
 
+### An empty reply is free, and Monday finally refills
+
+**"Make empty replies free."** A reply with no text takes NO chips, no burst
+and no free-tier use — nothing a student can see — and the bubble says "It cost
+you nothing." Only the SERVER may say that (`emptyReplyMessage(r, { free })`):
+a reply stopped from the browser may still have been written and charged on the
+far side, so the chat's own fallbacks never claim it.
+
+**FREE TO THE STUDENT, NEVER TO THE BACKSTOP.** The real cost still goes on the
+dollar ledgers (`weekly_ai_cost_micros`, and the free tier's lifetime one),
+which is what keeps a run of empty replies inside a ceiling rather than spend
+with none. `chipCharge` and `weeklyLedgerPatch` in `chips.js` are the decision,
+pure, and `recordTierUsage` writes through them. The chip count is written even
+when the charge is zero, because the first call of a week is what rolls it over.
+
+**THE METER HAD A DOLLAR FALLBACK THAT TURNED A FREE REPLY INTO CHIPS.**
+`chipsSpent` read the dollar ledger whenever the chip count was zero, for rows
+written before 0033. Those rows all belong to past weeks, so it had stopped
+being dead and become wrong: an empty reply as the week's first call would have
+printed its cost as chips spent. It is gone.
+
+**"IT REFILLS MONDAY" WAS UNTRUE FOR THE STUDENTS WHO USED THE MOST.** Found in
+the same function. The weekly ledger rolled over only when a call was RECORDED,
+which happens after the gate reads it — so a student who emptied their stack
+was refused on Monday, nothing was recorded, and the week never turned over.
+Anybody at the dollar ceiling could not reach Ace either. `ledgerIsCurrent`
+reads a ledger stamped with an earlier Monday as nothing, and every reader goes
+through it: the server gate, the client meter, and the write. A row with no
+stamp is read as written (the column is `not null`, so only a fixture lacks
+one). The server's week now has ONE copy, `src/lib/utcWeek.js`, which slate.js
+re-exports and `currentWeekStartUTC` returns; `weeklySpendMicros` has one copy,
+in chips.js. `chips.test.mjs` holds the arithmetic, the boundary at Monday
+00:00 UTC and the server's wiring; 21 injections, every one caught.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -9600,6 +9634,10 @@ The non-streaming path was never at risk: it caps at 32000.
 - `src/lib/replyRoom.js` + `replyRoom.test.mjs` — how many tokens a streamed
   reply may use on a model that thinks by default, and what the chat says when
   a reply comes back with no text. The English Mentor's "…" on a long essay
+- `src/lib/chips.js` `ledgerIsCurrent` / `chipCharge` / `weeklyLedgerPatch` /
+  `weeklySpendMicros` + `src/lib/utcWeek.js` — the weekly AI ledger: an empty
+  reply charged no chips and still counted against the dollar ceiling, and a
+  week that ends reads as nothing whether or not a call has been recorded
 - `src/lib/aiJobs.js` + `aiJobs.test.mjs`, `src/lib/jobStore.js`,
   `src/components/shared/JobTray.jsx`: a quiz, deck or Active Recall set being
   made, followed from page to page. The server counts items as they close and

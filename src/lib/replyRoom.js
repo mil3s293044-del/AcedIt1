@@ -45,19 +45,28 @@ export function replyCap(model, replyTokens) {
     return reply + (thinksByDefault(model) ? THINKING_ROOM : 0);
 }
 
+/** Said only when the server has actually declined to charge for it. */
+export const FREE_NOTE = "It cost you nothing.";
+
 /**
  * What the student reads when a reply has no text in it. Said in the reply's
  * own place, because "…" said nothing and the toast beside it disappeared.
+ *
+ * `free` is the SERVER's word that it charged nothing (`recordTierUsage`'s
+ * `empty`), and only the server passes it. The chat's own fallbacks never
+ * claim it: a reply stopped from the browser, or a connection that dropped,
+ * may still have been written and charged on the far side.
  */
-export function emptyReplyMessage(stopReason) {
+export function emptyReplyMessage(stopReason, { free = false } = {}) {
+    const withNote = (s) => (free ? `${s} ${FREE_NOTE}` : s);
     if (stopReason === "max_tokens") {
-        return "That one ran out of room before it could write anything. Send it again, or send a shorter piece — a paragraph or two at a time works well.";
+        return withNote("That one ran out of room before it could write anything. Send it again, or send a shorter piece — a paragraph or two at a time works well.");
     }
     if (stopReason === "refusal") {
-        return "That one could not be answered as it was sent. Try rewording it, or send a smaller part of it.";
+        return withNote("That one could not be answered as it was sent. Try rewording it, or send a smaller part of it.");
     }
     if (stopReason === "stopped") {
         return "Stopped before it wrote anything.";
     }
-    return "That reply came back empty. Send it again.";
+    return withNote("That reply came back empty. Send it again.");
 }

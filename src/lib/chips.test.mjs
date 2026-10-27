@@ -12,8 +12,10 @@ import {
     PRICE, DEFAULT_PRICE, WEEKLY_CHIPS, WEEKLY_CAP_MICROS, MICROS_PER_CHIP,
     priceOf, priceLabel, chipsSpent, stackOf, canAfford, affordable,
     saverDivisor, stackWarning, SAVER_AT, LOW_AT, ALREADY_CHEAP,
-    ACE_RESERVE, spendableFor,
+    ACE_RESERVE, spendableFor, ledgerIsCurrent, weeklySpendMicros, chipCharge, weeklyLedgerPatch,
 } from "@/lib/chips";
+import { weekKeyUTC } from "@/lib/utcWeek";
+import fs from "node:fs";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -126,12 +128,110 @@ check("the stack reads correctly, including nonsense", () => {
     assert.equal(stackOf({}).spent, 0);
 });
 
-check("a profile written before the migration still reads honestly", () => {
-    // Only the micro ledger exists on those rows. Showing them a full stack
-    // they have already half spent would be the meter lying on day one.
-    const old = { weekly_ai_cost_micros: 975_000 };   // half the ceiling
-    assert.equal(chipsSpent(old), 500);
-    assert.equal(stackOf(old).remaining, 500);
+// ─── The week, and what an empty reply is charged ──────────────────────────
+// Wed 28 Oct 2026, mid-afternoon UTC. Its Monday is the 26th; the one before
+// is the 19th.
+const WED = new Date(Date.UTC(2026, 9, 28, 15, 0, 0));
+const THIS_MON = "2026-10-26";
+const LAST_MON = "2026-10-19";
+const stamped = (start, fields) => ({ subscription_tier: "premium", weekly_cost_period_start: start, ...fields });
+
+check("the meter reads chips, never dollars [an empty reply is FREE]", () => {
+    // An empty reply writes its real cost and no chips. The old fallback read
+    // the dollar ledger whenever the chip count was zero, so the first call of
+    // a week coming back empty would have printed its cost as chips spent.
+    const freeFirst = stamped(THIS_MON, { weekly_chips_spent: 0, weekly_ai_cost_micros: 105_000 });
+    assert.equal(chipsSpent(freeFirst, WED), 0);
+    assert.equal(stackOf(freeFirst, WED).remaining, WEEKLY_CHIPS);
+    assert.equal(weeklySpendMicros(freeFirst, WED), 105_000, "the backstop still sees it");
+});
+
+check("last week's ledger reads as nothing — Monday really refills [THE POINT]", () => {
+    // The rollover is only written when a call is RECORDED, after the gate has
+    // read the ledger. A student who emptied their stack was refused on
+    // Monday, nothing was recorded, and the week never turned over.
+    const drained = stamped(LAST_MON, { weekly_chips_spent: WEEKLY_CHIPS, weekly_ai_cost_micros: WEEKLY_CAP_MICROS });
+    assert.equal(ledgerIsCurrent(drained, WED), false);
+    assert.equal(chipsSpent(drained, WED), 0);
+    assert.equal(stackOf(drained, WED).empty, false);
+    assert.equal(stackOf(drained, WED).remaining, WEEKLY_CHIPS);
+    assert.equal(weeklySpendMicros(drained, WED), 0, "the dollar ceiling refills too, or Ace stays shut");
+    // The same row, read inside its own week, is exactly as spent as it says.
+    const sameWeek = { ...drained, weekly_cost_period_start: THIS_MON };
+    assert.equal(stackOf(sameWeek, WED).empty, true);
+    assert.equal(weeklySpendMicros(sameWeek, WED), WEEKLY_CAP_MICROS);
+    // Legacy rows that only have cents are still read inside their week.
+    assert.equal(weeklySpendMicros(stamped(THIS_MON, { weekly_ai_cost_cents: 12 }), WED), 120_000);
+});
+
+check("the week turns over at Monday 00:00 UTC and not a second before", () => {
+    const sun = new Date(Date.UTC(2026, 10, 1, 23, 59, 59));   // Sun 1 Nov
+    const mon = new Date(Date.UTC(2026, 10, 2, 0, 0, 0));      // Mon 2 Nov
+    const row = stamped(THIS_MON, { weekly_chips_spent: 400 });
+    assert.equal(chipsSpent(row, sun), 400);
+    assert.equal(chipsSpent(row, mon), 0);
+    assert.equal(weekKeyUTC(mon), "2026-11-02");
+    // A date column comes back as "YYYY-MM-DD"; a timestamp form reads the same.
+    assert.equal(ledgerIsCurrent(stamped(`${THIS_MON}T00:00:00+00:00`, {}), WED), true);
+});
+
+check("a row with no stamp is read as written, not reset", () => {
+    // The column is not null with a Monday default, so only a fixture lacks
+    // one — and resetting there would hide the figures the fixture set.
+    assert.equal(chipsSpent(premium(250), WED), 250);
+    assert.equal(ledgerIsCurrent({ weekly_cost_period_start: "nonsense" }, WED), true);
+});
+
+check("an empty reply is charged no chips; anything else its price", () => {
+    assert.equal(chipCharge("ai_chat", "standard", { empty: true }), 0);
+    assert.equal(chipCharge("ai_chat", "standard", { empty: true, extraChips: 40 }), 0, "not even a mega read's pages");
+    assert.equal(chipCharge("ai_chat", "standard"), priceOf("ai_chat", "standard"));
+    assert.equal(chipCharge("ai_tool", "saver", { extraChips: 40 }), priceOf("ai_tool", "saver") + 40);
+    assert.equal(chipCharge("ai_tool", "standard", { extraChips: -5 }), priceOf("ai_tool", "standard"));
+});
+
+check("the week's ledger after a call: free to the student, never to the backstop", () => {
+    const mid = stamped(THIS_MON, { weekly_chips_spent: 300, weekly_ai_cost_micros: 500_000, weekly_ai_cost_cents: 50 });
+    const paid = weeklyLedgerPatch(mid, { costMicros: 40_000, chipPrice: 8, now: WED });
+    assert.deepEqual(paid, { weekly_ai_cost_micros: 540_000, weekly_ai_cost_cents: 54, weekly_cost_period_start: THIS_MON, weekly_chips_spent: 308 });
+    const free = weeklyLedgerPatch(mid, { costMicros: 105_000, chipPrice: 0, now: WED });
+    assert.equal(free.weekly_chips_spent, 300, "an empty reply takes no chips");
+    assert.equal(free.weekly_ai_cost_micros, 605_000, "and still counts toward the ceiling");
+
+    // THE FIRST CALL OF A WEEK, EMPTY. It must still roll the chips over, or
+    // last week's 990 is carried into this one under this week's stamp.
+    const lastWeek = stamped(LAST_MON, { weekly_chips_spent: 990, weekly_ai_cost_micros: 1_900_000, weekly_ai_cost_cents: 190 });
+    const rolled = weeklyLedgerPatch(lastWeek, { costMicros: 105_000, chipPrice: 0, now: WED });
+    assert.deepEqual(rolled, { weekly_ai_cost_micros: 105_000, weekly_ai_cost_cents: 10, weekly_cost_period_start: THIS_MON, weekly_chips_spent: 0 });
+    assert.equal(stackOf({ ...lastWeek, ...rolled }, WED).remaining, WEEKLY_CHIPS);
+    assert.equal(weeklyLedgerPatch(lastWeek, { costMicros: 0, chipPrice: 8, now: WED }).weekly_chips_spent, 8);
+});
+
+check("the server charges through these, and nothing else reads the week", () => {
+    const code = (src) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+    const server = code(fs.readFileSync(new URL("../../server.mjs", import.meta.url), "utf8"));
+    const rec = server.slice(server.indexOf("async function recordTierUsage"), server.indexOf("const THREAT_PATTERNS"));
+    assert.ok(/const chipPrice = chipCharge\(feature, tier, \{ extraChips: options\.extraChips, empty \}\)/.test(rec), "the chip charge is not chipCharge's");
+    assert.ok(/Object\.assign\(updates, weeklyLedgerPatch\(profile, \{ costMicros, chipPrice \}\)\)/.test(rec), "the weekly ledger is not weeklyLedgerPatch's");
+    assert.ok(/chips: burst\.chips \+ chipPrice/.test(rec), "the burst window is charged a different figure from the stack");
+    assert.ok(!/weekly_chips_spent|weekly_ai_cost_micros\s*=/.test(rec), "recordTierUsage writes the weekly ledger by hand again");
+    const counters = rec.match(/if \(counterKey[^)]*\)/g) || [];
+    assert.equal(counters.length, 2, "expected the two usage counters");
+    for (const c of counters) assert.ok(/!empty/.test(c), `an empty reply still spends a use: ${c}`);
+    // A free account's empty reply skips the use and still reaches the $1
+    // lifetime backstop: the cost line stands on its own, and the only thing in
+    // that branch that knows about `empty` is the counter.
+    assert.ok(/^\s*updates\.lifetime_ai_cost_micros = lifetimeSpendMicros\(profile\) \+ costMicros;\s*$/m.test(rec), "a free account's empty reply no longer reaches its dollar backstop");
+    const freeBranch = rec.slice(rec.indexOf("} else {"), rec.indexOf("if (Object.keys(updates)"));
+    assert.equal((freeBranch.match(/\bempty\b/g) || []).length, 1, "something besides the free-tier counter now depends on an empty reply");
+    assert.ok(!/function weeklySpendMicros/.test(server), "the server has its own weeklySpendMicros again");
+    assert.ok(/function currentWeekStartUTC\(\) \{\s*return weekKeyUTC\(\);\s*\}/.test(server), "the server's week is not utcWeek's");
+    for (const f of ["server.mjs", "src/lib/slate.js", "src/lib/chips.js", "src/lib/tierAccess.js"]) {
+        const src = code(fs.readFileSync(new URL(`../../${f}`, import.meta.url), "utf8"));
+        assert.ok(!/getUTCDay\(\)/.test(src), `${f} computes a week of its own`);
+    }
+    const access = code(fs.readFileSync(new URL("./tierAccess.js", import.meta.url), "utf8"));
+    assert.ok(!/function weeklySpendMicros/.test(access), "the client has its own weeklySpendMicros again");
 });
 
 check("the bottom of the stack is kept for Ace [THE POINT]", () => {

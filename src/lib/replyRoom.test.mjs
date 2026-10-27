@@ -15,7 +15,7 @@
  */
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { thinksByDefault, replyCap, emptyReplyMessage, THINKING_ROOM } from "@/lib/replyRoom";
+import { thinksByDefault, replyCap, emptyReplyMessage, THINKING_ROOM, FREE_NOTE } from "@/lib/replyRoom";
 
 let passed = 0;
 const check = (name, fn) => {
@@ -89,8 +89,25 @@ check("a reply with no text is an error with its reason, never a done", () => {
     const done = body.indexOf('sse("done"');
     assert.ok(guard > 0 && done > guard, "`done` can be sent before the empty check");
     const branch = body.slice(guard, done);
-    assert.ok(/sse\("error",\s*\{\s*message:\s*emptyReplyMessage\(finalMessage\.stop_reason\)/.test(branch), "the empty case does not send its reason");
+    assert.ok(/sse\("error",\s*\{\s*message:\s*emptyReplyMessage\(finalMessage\.stop_reason,\s*\{\s*free:\s*true\s*\}\)/.test(branch), "the empty case does not send its reason, or no longer says it was free");
     assert.ok(/return;/.test(branch), "the empty case falls through to done");
+});
+
+check("an empty reply is FREE, and says so only when the server said so", () => {
+    for (const r of ["max_tokens", "refusal", undefined]) {
+        assert.ok(emptyReplyMessage(r, { free: true }).endsWith(FREE_NOTE), `${r}: the free reply does not say it was free`);
+        assert.ok(!emptyReplyMessage(r).includes(FREE_NOTE), `${r}: claims free without the server's word`);
+    }
+    // Stopped from the browser, the far side may still have written and
+    // charged it, so it never claims free whoever asks.
+    assert.ok(!emptyReplyMessage("stopped", { free: true }).includes(FREE_NOTE));
+    assert.ok(!/\b(Don't|Fix it|No excuses|Embarrassing|Move)\b/.test(FREE_NOTE));
+
+    const start = serverCode.indexOf('app.post("/local-ai/invokeAIStream"');
+    const body = serverCode.slice(start, serverCode.indexOf("app.post(", start + 10));
+    assert.ok(/recordTierUsage\([^)]*\{[^}]*empty:\s*!wrote[^}]*\}\)/.test(body), "the stream charges an empty reply like any other");
+    const chat = code(read("src/components/ai_tools/UnifiedChat.jsx"));
+    assert.ok(!/emptyReplyMessage\([^)]*free/.test(chat), "the chat claims a reply was free, which only the server can know");
 });
 
 check("no small fixed cap reaches a model that thinks by default", () => {
