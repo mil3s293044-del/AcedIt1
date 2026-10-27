@@ -114,7 +114,12 @@ const owners = () => [...holders.keys()];
 // draws NO Ace and claims anyway, the way "chat" does: the launcher stood over
 // its scrim in the corner, the one bright thing on a dimmed page. Ranked with
 // the other celebrations and over everything that is there by default.
-export const ACE_ORDER = ["reacts", "premium", "results", "onboarding", "first-win", "tour", "report", "chat", "quiz", "buddy", "intro", "roam", "launcher"];
+// "opening" is the landing's first seconds, where he riffles the deck over
+// the whole screen. It is the visitor's very first moment, so everything that
+// is there by default stands down under it, and it holds only for the length
+// of the opening. Second to the XP moment on the same rule as "premium": a
+// celebration is never talked over, and the two never coincide anyway.
+export const ACE_ORDER = ["reacts", "opening", "premium", "results", "onboarding", "first-win", "tour", "report", "chat", "quiz", "buddy", "intro", "roam", "launcher"];
 
 /** An id nobody registered loses to everything, rather than winning by accident. */
 const rank = (id) => {

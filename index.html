@@ -117,11 +117,18 @@
       seconds, and no amount of work inside the app can reach it: by the time
       any component renders, the flash has already happened.
 
-      It is deliberately the same navy and the same wordmark the card storm
-      opens on, so the handover is invisible. CardStorm removes this the frame
-      its own canvas first paints.
+      It is the first frame of the opening (src/components/marketing/
+      OpeningDeal.jsx): the same navy, and the line in the same place, drawn
+      by the SAME CLASS. The two used to be written separately and disagreed —
+      this centred the line and the old canvas put it at the bottom — so the
+      handover jumped. The React layer keeps the line's fade in phase with
+      this one and removes this element once it has painted over it.
+
+      The classes live here rather than in index.css because this paints
+      before that stylesheet arrives, and a <style> in the head outlives #boot.
     -->
     <style>
+      :root { --open-card-w: clamp(92px, 10.5vw, 148px); }
       #boot {
         position: fixed;
         inset: 0;
@@ -133,29 +140,48 @@
            was nothing on screen. The script sits immediately after the div
            and runs in the same parse tick, before first paint, so the routes
            that should not have a curtain never show one. */
-        display: grid;
-        place-items: center;
         background: #0D1626;
       }
-      #boot span {
+      /* The deck's box: one card, centred a little above the middle. */
+      .acedit-open-deck {
+        position: absolute;
+        left: 50%;
+        top: calc(50% - var(--open-card-w));
+        width: var(--open-card-w);
+        aspect-ratio: 2.5 / 3.5;
+        margin-left: calc(var(--open-card-w) * -0.5);
+      }
+      /* The line, under the deck. Brand green, glowing two stops below full
+         strength (the BrandMark idiom) — one shadow at full alpha is a smudge
+         on navy. Explicit line-height, because this paints before the
+         stylesheet that would otherwise set it. */
+      .acedit-open-line {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(50% + var(--open-card-w) * 0.95);
+        margin: 0;
+        padding: 0 24px;
+        text-align: center;
         font-family: Nunito, system-ui, sans-serif;
         font-weight: 800;
+        line-height: 1.4;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        font-size: clamp(13px, 2.1vw, 22px);
-        color: #7CFF3D;
-        text-shadow: 0 0 18px rgba(124, 255, 61, 0.55), 0 0 46px rgba(124, 255, 61, 0.3);
+        font-size: clamp(12px, 1.5vw, 17px);
+        color: #58CC02;
+        text-shadow: 0 0 14px rgba(88, 204, 2, 0.45), 0 0 36px rgba(88, 204, 2, 0.22);
         opacity: 0;
-        animation: bootIn 0.7s ease-out 0.15s forwards;
+        animation: openLineIn 0.7s ease-out 0.15s forwards;
       }
-      @keyframes bootIn { to { opacity: 1; } }
+      @keyframes openLineIn { to { opacity: 1; } }
       @media (prefers-reduced-motion: reduce) {
         #boot { display: none !important; }
       }
     </style>
   </head>
   <body>
-    <div id="boot" aria-hidden="true"><span>The new age of studying</span></div>
+    <div id="boot" aria-hidden="true"><span class="acedit-open-line">The new age of studying</span></div>
     <script>
       // Only the marketing entry gets the curtain, and only the first time in
       // a session. Read before the module bundle runs, so this sees the value

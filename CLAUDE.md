@@ -5123,6 +5123,78 @@ Quizzes page; the one in the side panel only existed because that panel used to
 be about quizzing, and three buttons for one dialog is how a student stops
 believing they do different things.
 
+## The opening is a deal, and it lands in the logo
+
+**"Rework the opening animation, more aesthetic, better UI and UX."** It was
+`CardStorm`: six hundred grey rectangles swarming into a brain over five
+seconds, absorbed into a green fog, then a fade to cream. The student chose
+the deal, about 2.5 seconds, on navy opening onto the cream page, and kept
+"The new age of studying". `src/components/marketing/OpeningDeal.jsx` draws
+it; `src/lib/openingDeal.js` is the arithmetic and `openingDeal.test.mjs`
+holds it (19 checks, 30 injections, every one biting).
+
+Three faults in the old one, and none of them was code:
+
+- **THE BRAIN READ AS AN EGG.** A point cloud held in profile is a brain to
+  whoever built it. To a visitor it was an oval of confetti.
+- **IT WAS NOT THE APP'S VOCABULARY.** The brain had already left the
+  dashboard. The app is cards, the ace of spades and Ace, and the logo IS the
+  ace.
+- **IT ENDED ON A FLASH**: navy, green fog, then cream. Going from dark to
+  light was the last thing it did and the one thing it did not design.
+
+**The sequence.** Ace (in light ink, as he is drawn in dark mode) riffles a
+deck, fans it, and the middle card turns over to the ace of spades. The card
+then flies into the logo in the header while the navy opens around it like an
+iris, and the hero hand deals straight on. A riffle is a CUT: the first draft
+interleaved the even cards with the odd ones, which puts every card back
+where it was. The test asserts the deck actually changes order.
+
+**THE PIP THAT TURNS OVER IS THE LOGO.** `flightTo` solves for the wrapper
+transform that puts the ace's centre on the logo glyph's centre, with the pip
+(PipFace's `w-[34%]` box, inside the card's 1px border) exactly the glyph's
+width. The real glyph is hidden for the flight and shown after landing
+(`LOGO_SWAP_MS`), so the swap is invisible. A frame crop confirms it. The ace
+carries its own pip drawn over the printed one, so fading the card stock
+leaves the mark rather than a smear. **The stock fades LATE** (from 40% of the
+flight on): faded from the first frame, it went grey over the navy and then
+ghostly over the page opening behind it. `data-brand-spade` on `BrandSpade` is
+the target, and only one on screen counts, so the footer logo never is. With
+no target, the ace goes out where it is.
+
+**IT NEVER OPENS ONTO A LOADER.** After the turn it holds on the ace, with the
+glow breathing, until the app's own loaders are gone. Every full loader in
+App.jsx carries `data-app-waiting`, and the test requires it.
+`HOLD_MAX_MS` is the ceiling, and it sits under the hero hand's
+`OPENING_MAX_MS` so the hand cannot deal behind the curtain. **The hold
+polled once and stopped**: its first check ran in the same tick as
+`setPhase("hold")`, while the state still read "turn". `holdStep` treats
+"turn" as holding, and the test runs it.
+
+**THE BOOT LAYER AND THE OPENING SHARE ONE CLASS.** `.acedit-open-line` and
+`.acedit-open-deck` live in index.html's `<style>`, because the boot paints
+before index.css arrives and the head outlives `#boot`. Before this they were
+written separately: the boot centred the line and the canvas put it at the
+bottom, so the handover jumped. The line's fade is phased off the boot's own
+animation clock (`getAnimations`), not off navigation start, which is earlier
+by the server's response time.
+
+**Everything is literal ink**: the navy, the house back (a white border round
+a deep green field, deliberately not the Felt skin on sale, because the
+default back washes out to a pale smear on navy), and white card stock under
+`theme-locked-light`. A dark-OS visitor sees the same opening. It claims the
+Ace stage as `"opening"`, second only to the XP celebration. The rules it
+keeps: the marketing entry only, once a session, never under reduced motion
+(`opensOn`, the boot script's own three tests), skippable on any input, and
+the page underneath hidden from paint but never from layout. The event is
+`OPENING_DONE` now; `STORM_DONE` is gone with the storm.
+
+Judge it on the clock, not on one frame: record it with Playwright's
+`recordVideo` and pull frames with ffmpeg. A screenshot stalls the page long
+enough to land on the wrong beat. Check 1280 and 390, a dark OS, a skip, and
+a loader held up (append a `data-app-waiting` element to `#root`; delaying the
+sign-in request does not gate a signed-out visitor).
+
 ## The logo, and the signup email
 
 **One mark, one component** (`BrandMark`). It was a green rounded square with a
@@ -9445,6 +9517,12 @@ in chips.js. `chips.test.mjs` holds the arithmetic, the boundary at Monday
 - `src/lib/aceBlink.js` + `src/components/ace/useBlink.js` — the one blink
   scheduler both of Ace's faces use: 5–11 seconds apart, both timers owned and
   cancelled, keyed on a boolean so fidgets cannot leak chains
+- `src/components/marketing/OpeningDeal.jsx` + `src/lib/openingDeal.js` +
+  `openingDeal.test.mjs` — the landing's opening: Ace riffles and fans a
+  deck, the ace of spades turns over and flies into the logo while the navy
+  opens onto the page. It holds on the ace until no `data-app-waiting` loader
+  is left. The boot layer in index.html is its first frame, drawn by the same
+  classes
 - `src/components/ace/useAceYield.js` + `src/lib/aceStage.test.mjs` —
   `ACE_ORDER`, the one list that decides which Ace is on screen. The scan is
   what catches a surface that draws him and forgets to claim

@@ -40,7 +40,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { motion, useMotionValue, useSpring, useTransform, useReducedMotion } from "framer-motion";
 import PlayingCard from "@/components/cards/PlayingCard";
 import AceBody from "@/components/ace/AceBody";
-import { FLUSH_SEEN, STORM_DONE, STORM_MAX_MS } from "@/components/marketing/flushGate";
+import { FLUSH_SEEN, OPENING_DONE, OPENING_MAX_MS } from "@/components/marketing/flushGate";
 
 /**
  * The hand. FOUR TECHNIQUES AND THE AI, which is the product in one line: the
@@ -145,7 +145,7 @@ export default function DealtHand({ className = "" }) {
 
     /**
      * ACE THROWS THE HAND WHEN THE CURTAIN IS OFF, not when a timer guesses it
-     * should be. It used to open at a time computed from the storm's declared
+     * should be. It used to open at a time computed from the old storm's declared
      * duration, which meant two files had to agree about the length of an
      * animation only one of them owned; the moment the storm got longer they
      * drifted, the hand dealt behind the sheet, and the curtain lifted on five
@@ -153,7 +153,7 @@ export default function DealtHand({ className = "" }) {
      *
      * On a return visit there is no curtain, so it deals on the short delay
      * that lets the headline land first. The timeout is a backstop for the
-     * case where the storm never mounted at all and the event never comes.
+     * case where the opening never mounted at all and the event never comes.
      */
     const [settled, setSettled] = useState(false);
     useEffect(() => {
@@ -171,9 +171,9 @@ export default function DealtHand({ className = "" }) {
             const t = setTimeout(open, 420);
             return () => clearTimeout(t);
         }
-        window.addEventListener(STORM_DONE, open);
-        const guard = setTimeout(open, STORM_MAX_MS);
-        return () => { window.removeEventListener(STORM_DONE, open); clearTimeout(guard); };
+        window.addEventListener(OPENING_DONE, open);
+        const guard = setTimeout(open, OPENING_MAX_MS);
+        return () => { window.removeEventListener(OPENING_DONE, open); clearTimeout(guard); };
     }, [reduce]);
 
     useEffect(() => {

@@ -190,7 +190,7 @@ export default function Landing() {
               re-rasterised a 160-pixel gaussian over half a megapixel every
               single frame. Measured: the hero ran at 11fps with them and
               48fps without, and that was the whole of "the cards jolt across
-              the screen". The card storm on top was innocent; it inherited a
+              the screen". The opening on top was innocent; it inherited a
               frame budget the page had already spent.
 
               A blurred circle IS a radial gradient. Drawing it as one costs
