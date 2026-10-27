@@ -13,7 +13,7 @@ AcedIt (acedit.au) is a gamified VCE study app for Australian high schoolers. It
 - **Vite dev server**: port 5173. `npm run dev` runs both via `concurrently`.
 - **Backend (target)**: Supabase (Postgres + Auth + Storage). Project: `qhwyjycihgtxpzkitmpt.supabase.co`.
 - **Auth**: Google OAuth (set up in Supabase, app code still uses Base44 — not yet swapped).
-- **AI**: Anthropic Claude (default `claude-sonnet-4-6`, set in `server.mjs:17`). Replaces Base44's metered LLM.
+- **AI**: Anthropic Claude (default `claude-sonnet-5-5`, `MODEL` in `server.mjs`). Replaces Base44's metered LLM. **It thinks by default**, and the thinking counts against `max_tokens` — see "The English Mentor answered a long essay with …" below before setting any cap.
 
 ## Migration plan (the "1% diff dual-run" strategy — already chosen)
 
@@ -9087,6 +9087,48 @@ card fill, turn Ready and land on Open. Do this in both themes, at 390, and with
 reduced motion. The harness's `page.route(...).continue()` is what lets the real
 request through.
 
+## The English Mentor answered a long essay with "…"
+
+**"Someone submitted a long essay and it just replied with …"** One cause, and
+it is a model fact rather than a chat bug: **the current models THINK BY
+DEFAULT, and the thinking counts against `max_tokens`.** The chat's stream
+capped a reply at 2048 tokens, written when the default was Sonnet 4.6, which
+does not think unless asked. Sonnet 5.5 omits nothing: on a short question it
+thinks a little and the cap still fits; on a long essay it thinks a lot, spends
+all 2048 thinking, and stops with `stop_reason: "max_tokens"` and not one text
+token. The server called that `done`, the client got an empty string as a
+success, and the bubble printed "…". The student was billed for the whole cap
+and given nothing, and only on the input they most wanted marked.
+
+Reproduced against a fake model that thinks before writing, then fixed in three
+places (`src/lib/replyRoom.js`, `replyRoom.test.mjs`, 8 checks, 19 injections
+all biting):
+
+- **THE CAP IS THE REPLY PLUS ROOM TO THINK** (`replyCap`). 2048 for a chat
+  reply and 8192 for a one-shot tool are still the REPLY sizes; a model that
+  thinks by default gets `THINKING_ROOM` on top. A cap is a ceiling, not a
+  spend, so a reply that already fitted costs the same; what changes is the
+  case that paid for a whole cap and delivered nothing. `thinksByDefault` is
+  every Claude 5 model; the 4.x ones (Sonnet 4.6, Opus 4.8, Haiku 4.5) do not.
+  **An unknown id gets the room**: unused room costs nothing, and missing room
+  is an empty reply.
+- **A REPLY WITH NO TEXT IS AN ERROR, NEVER `done`.** The stream tracks whether
+  any text arrived and, if none did, sends `error` with `emptyReplyMessage` for
+  the stop reason — ran out of room, a refusal, or nothing at all.
+- **THE BUBBLE SAYS WHY, IN THE REPLY'S PLACE.** "…" said nothing, and the
+  reason (when there was one) went to a toast that disappeared. The failed
+  bubble prints the sentence in a muted ink, offers Try again and not Copy, and
+  is left OUT of the next prompt's transcript — it is the app's sentence, and it
+  went back to the model as something "You" had said.
+
+**The guard scans for the next one.** Every literal `max_tokens` under the room
+must sit in a request whose model does not think by default — today only Ace,
+on Haiku 4.5. Point Ace at a Claude 5 model and the suite fails naming the
+line, which matters twice over: it also sends `temperature`, which the Claude 5
+models reject outright.
+
+The non-streaming path was never at risk: it caps at 32000.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -9555,6 +9597,9 @@ request through.
   `supabase/migrations/0043_study_groups_server_only.sql` — study groups on the
   server: codes and links that ask, set phrases instead of a chat, this week
   first, a shelf you add from in one tap. Apply 0043 AFTER the deploy
+- `src/lib/replyRoom.js` + `replyRoom.test.mjs` — how many tokens a streamed
+  reply may use on a model that thinks by default, and what the chat says when
+  a reply comes back with no text. The English Mentor's "…" on a long essay
 - `src/lib/aiJobs.js` + `aiJobs.test.mjs`, `src/lib/jobStore.js`,
   `src/components/shared/JobTray.jsx`: a quiz, deck or Active Recall set being
   made, followed from page to page. The server counts items as they close and

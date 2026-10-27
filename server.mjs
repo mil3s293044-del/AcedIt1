@@ -79,6 +79,7 @@ import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiC
 // Which model a student's work runs on. The tier lives on their profile, so it
 // is resolved here rather than trusted from the request body.
 import { modelFor } from "./src/lib/aiModels.js";
+import { replyCap, emptyReplyMessage } from "./src/lib/replyRoom.js";
 import { checkoutVerdict, withRevealPending, codeGrantId } from "./src/lib/premiumGrant.js";
 import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
 // Premium from a code (the Year 10 program) — the rules, shared with the client.
@@ -3849,30 +3850,36 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     const fileBlocks = await buildFileContentBlocks(params.file_urls, { email: tierUser?.email });
     const userContent = [...fileBlocks, { type: "text", text: user }];
 
+    // Honours the student's tier the same way the non-streaming path does.
+    // This path previously ignored `fast` entirely, so a tool passing it got
+    // the full model here and the cheap one there — same tool, two prices,
+    // depending only on whether it happened to stream.
+    // A mega read always goes to MEGA_MODEL, whatever the student's tier
+    // says. Input tokens ARE the cost here — three times the rate on a
+    // 40-page chapter is 95 chips against 283 — and pulling facts out of a
+    // textbook is bulk comprehension rather than the judgement marking
+    // needs. The screen names the model rather than leaving somebody to
+    // wonder why a chapter read thinner than a quiz mark.
+    const model = megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
+      fast: params.fast,
+      vision: params.vision === true,
+      standardModel: MODEL,
+      fastModel: FAST_MODEL,
+      visionModel: VISION_MODEL,
+    });
     // Chat tools (Math Tutor, Teaching Assistant) are meant to give short,
-    // conversational replies ("3-5 sentences then a question"). Output tokens
-    // dominate cost (~$15/M), so capping chat responses at 2048 roughly halves
-    // the per-message cost (~5c → ~2.5c) with no real quality loss. One-shot
-    // tools (essay plans, explanations) still get the full 8192.
-    const maxTokens = feature === "ai_chat" ? 2048 : 8192;
+    // conversational replies ("3-5 sentences then a question"), so a chat
+    // REPLY is capped at 2048 and a one-shot tool's (essay plans,
+    // explanations) at 8192.
+    //
+    // PLUS ROOM TO THINK (`replyCap`). The current models think by default and
+    // the thinking counts against `max_tokens`, so a flat 2048 was a cap on
+    // thinking-and-reply together: a long essay sent to the English Mentor
+    // spent all of it thinking and came back with no text at all — billed for
+    // the whole cap, shown "…". The room costs nothing on a reply that fitted.
+    const maxTokens = replyCap(model, feature === "ai_chat" ? 2048 : 8192);
     const request = {
-      // Honours the student's tier the same way the non-streaming path does.
-      // This path previously ignored `fast` entirely, so a tool passing it got
-      // the full model here and the cheap one there — same tool, two prices,
-      // depending only on whether it happened to stream.
-      // A mega read always goes to MEGA_MODEL, whatever the student's tier
-      // says. Input tokens ARE the cost here — three times the rate on a
-      // 40-page chapter is 95 chips against 283 — and pulling facts out of a
-      // textbook is bulk comprehension rather than the judgement marking
-      // needs. The screen names the model rather than leaving somebody to
-      // wonder why a chapter read thinner than a quiz mark.
-      model: megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
-        fast: params.fast,
-        vision: params.vision === true,
-        standardModel: MODEL,
-        fastModel: FAST_MODEL,
-        visionModel: VISION_MODEL,
-      }),
+      model,
       max_tokens: maxTokens,
       messages: [{ role: "user", content: userContent }],
     };
@@ -3891,7 +3898,9 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
 
     const stream = anthropic.messages.stream(request, { timeout: 120_000 });
 
+    let wrote = false;
     stream.on("text", (delta) => {
+      if (delta) wrote = true;
       sse("text", { text: delta });
     });
 
@@ -3899,7 +3908,7 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
 
     if (finalMessage.usage) {
       console.log(
-        `[local-ai] (stream) in=${finalMessage.usage.input_tokens} cache_read=${finalMessage.usage.cache_read_input_tokens ?? 0} cache_write=${finalMessage.usage.cache_creation_input_tokens ?? 0} out=${finalMessage.usage.output_tokens}`,
+        `[local-ai] (stream) in=${finalMessage.usage.input_tokens} cache_read=${finalMessage.usage.cache_read_input_tokens ?? 0} cache_write=${finalMessage.usage.cache_creation_input_tokens ?? 0} out=${finalMessage.usage.output_tokens} stop=${finalMessage.stop_reason}`,
       );
     }
 
@@ -3909,7 +3918,17 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
       );
     }
 
-    sse("done", { ok: true });
+    // A REPLY WITH NO TEXT IS NOT A REPLY. It used to end on `done` like any
+    // other, so the client was handed an empty string as a success and the
+    // student read "…" with nothing saying why. It is an error now, naming the
+    // reason the model stopped, so the chat can print a sentence in its place.
+    if (!wrote) {
+      console.warn(`[local-ai] (stream) empty reply: stop=${finalMessage.stop_reason} model=${request.model} max_tokens=${request.max_tokens}`);
+      sse("error", { message: emptyReplyMessage(finalMessage.stop_reason), empty: true, stop_reason: finalMessage.stop_reason || null });
+      return;
+    }
+
+    sse("done", { ok: true, stop_reason: finalMessage.stop_reason || null });
   } catch (err) {
     console.error("[local-ai] stream error:", err);
     try {
