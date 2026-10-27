@@ -31,7 +31,7 @@ import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import { ThemeProvider } from '@/lib/useTheme';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AceShuffle from '@/components/ace/AceShuffle';
-import CardStorm from '@/components/marketing/CardStorm';
+import OpeningDeal from '@/components/marketing/OpeningDeal';
 
 const { Pages, Layout, mainPage } = pagesConfig;
 const mainPageKey = mainPage ?? Object.keys(Pages)[0];
@@ -55,7 +55,9 @@ const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
  * One loader, everywhere. See AceShuffle's header.
  */
 const PageFallback = () => (
-  <div className="flex items-center justify-center py-24">
+  // `data-app-waiting` tells the landing's opening the page is not drawn yet,
+  // so it holds on the ace rather than opening onto a loader. See OpeningDeal.
+  <div data-app-waiting className="flex items-center justify-center py-24">
     <AceShuffle size="lg" label="Loading" />
   </div>
 );
@@ -104,7 +106,7 @@ const AuthenticatedApp = () => {
   // Show loading spinner while checking app public settings or auth
   if (isLoadingPublicSettings || isLoadingAuth) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center">
+      <div data-app-waiting className="fixed inset-0 flex items-center justify-center">
         <AceShuffle size="lg" label="Signing you in" />
       </div>
     );
@@ -230,22 +232,24 @@ function App() {
             {/* ABOVE THE AUTH GATE ON PURPOSE.
                 Opening the site showed a white flash and then a bare spinner
                 for roughly two seconds while auth and public settings
-                resolved. The storm used to live inside Landing, which is on
+                resolved. The opening used to live inside Landing, which is on
                 the far side of that gate, so it could not start until the
                 exact moment the thing it should have been covering had
                 already finished.
 
                 Mounted here it starts as soon as React does, and the static
-                boot layer in index.html covers everything before that. The
-                spinner still runs underneath for anyone who skips. */}
-            <CardStorm />
+                boot layer in index.html covers everything before that. It
+                holds on the turned ace until the loaders below are gone (the
+                `data-app-waiting` marks), so it opens onto the page rather
+                than onto a spinner. */}
+            <OpeningDeal />
             {/* Outer boundary for the routes AuthenticatedApp returns
                 directly — /privacy, /terms, /onboarding and the recovery
                 flow all render outside LayoutWrapper, so they need one of
                 their own. Page navigations inside the app hit the inner
                 boundary first and keep their chrome. */}
             <Suspense fallback={
-              <div className="fixed inset-0 flex items-center justify-center">
+              <div data-app-waiting className="fixed inset-0 flex items-center justify-center">
                 <AceShuffle size="lg" label="Loading" />
               </div>
             }>

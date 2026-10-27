@@ -55,7 +55,10 @@ const SIZE = {
 export function BrandSpade({ size = "md", tone = "fill-foreground", glow = false, className = "" }) {
     const s = SIZE[size] || SIZE.md;
     return (
-        <span className={`grid place-items-center flex-shrink-0 ${s.box} ${className}`}
+        // `data-brand-spade` is where the landing's opening lands its ace:
+        // the pip the visitor watched turn over becomes this glyph. See
+        // OpeningDeal, which looks for the first one on screen.
+        <span data-brand-spade className={`grid place-items-center flex-shrink-0 ${s.box} ${className}`}
             // A drop-shadow on the GLYPH, not a box-shadow on the span: the
             // span is a rectangle and a glow around a rectangle behind a spade
             // is a green square. `drop-shadow` follows the alpha of what it is

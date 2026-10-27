@@ -1,7 +1,7 @@
 /**
  * One decision, made once, that both the curtain and the hero hand read.
  *
- * The opening flush covers the screen for two seconds. The hero hand deals
+ * The opening covers the screen for a couple of seconds. The hero hand deals
  * itself shortly after mount. Left to their own timers those two overlap, and
  * the best moment on the page happens behind an opaque sheet: you lift the
  * curtain on a hand that is already lying there, which is the one thing the
@@ -32,8 +32,8 @@ try {
 export const FLUSH_SEEN = seen;
 
 /**
- * The event the curtain fires when it is actually gone, whether it ran to the
- * end or was skipped.
+ * The event the opening fires when the page is showing — as the ground opens,
+ * or the moment it is skipped.
  *
  * This replaces a pair of duration constants that DealtHand used to predict
  * when the curtain would lift. Predicting it meant two files had to agree
@@ -43,7 +43,7 @@ export const FLUSH_SEEN = seen;
  * page appeared. The deal is the best moment on the page and nobody ever saw
  * it happen.
  */
-export const STORM_DONE = "acedit:storm-done";
+export const OPENING_DONE = "acedit:opening-done";
 
 /** Ceiling for waiting on that event, in case the curtain never mounted. */
-export const STORM_MAX_MS = 7000;
+export const OPENING_MAX_MS = 7000;
