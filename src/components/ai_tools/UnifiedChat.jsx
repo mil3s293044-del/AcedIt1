@@ -44,6 +44,7 @@ import ChatHistory from "./ChatHistory";
 import ToolPalette from "./ToolPalette";
 import ComposerSetup, { visibleGroups } from "./ComposerSetup";
 import { invokeLLMStream } from "@/lib/streamingAI";
+import { emptyReplyMessage } from "@/lib/replyRoom";
 import { useToast } from "@/components/ui/use-toast";
 import { recordStudyAndGetStreak } from "@/components/shared/streakHelpers";
 import MarkdownMath from "@/components/shared/MarkdownMath";
@@ -94,7 +95,9 @@ function RowAction({ label, icon: Icon, onClick, disabled = false, done = false 
 }
 
 function buildPrompt(tool, subjectName, toolOptions, messages, userText, files) {
-    const transcript = messages.slice(-MAX_TURNS_IN_PROMPT)
+    // A failed reply is the app's sentence, never the model's, so it does not
+    // go back to the model as something "You" said.
+    const transcript = messages.filter(m => !m.failed).slice(-MAX_TURNS_IN_PROMPT)
         .map(m => `${m.role === "user" ? "Student" : "You"}: ${m.content}`)
         .join("\n\n");
     // Without this block the model treats attachments as decoration — it must
@@ -548,6 +551,7 @@ export default function UnifiedChat({
         const controller = new AbortController();
         abortRef.current = controller;
         let finalText = "";
+        let failure = null;
         try {
             await invokeLLMStream(
                 {
@@ -566,13 +570,15 @@ export default function UnifiedChat({
                 { signal: controller.signal },
             );
         } catch (e) {
-            if (e.name !== "AbortError") {
-                toast({ title: "That one got away", description: e.message || "Try sending again.", variant: "destructive" });
-            }
+            failure = e?.name === "AbortError" ? emptyReplyMessage("stopped") : (e?.message || emptyReplyMessage());
         }
+        // A REPLY THAT NEVER CAME SAYS WHY, IN ITS OWN PLACE. It printed "…",
+        // with the reason (when there was one) in a toast that disappeared, and
+        // a long essay to the English Mentor that came back empty said nothing
+        // at all. The server names the reason now; the bubble prints it.
         const finalMessages = [...history, userMsg, finalText
             ? { role: "assistant", content: finalText }
-            : { role: "assistant", content: "…", failed: true }];
+            : { role: "assistant", content: failure || emptyReplyMessage(), failed: true }];
         setMessages(finalMessages);
         setStreaming(false);
         if (finalText) {
@@ -1092,7 +1098,9 @@ export default function UnifiedChat({
                                             <span className="text-[12.5px] font-bold text-[var(--console-ink-dim)]">{tool.label}</span>
                                         </div>
                                         <div className="min-w-0 text-[15px] leading-relaxed text-[var(--console-ink)] sm:pl-8">
-                                            {m.content
+                                            {m.failed
+                                                ? <p className="text-[14px] leading-relaxed text-[var(--console-ink-dim)]">{m.content}</p>
+                                                : m.content
                                                 ? <MarkdownMath isStreaming={!!m.streaming}>{m.content}</MarkdownMath>
                                                 : <span className="inline-flex items-center gap-2 text-[var(--console-ink-faint)]"><AceShuffle size="sm" /> Thinking…</span>}
                                             {m.artifact?.kind === "cheat_sheet" && (
@@ -1113,8 +1121,10 @@ export default function UnifiedChat({
                                             {!m.streaming && m.content && !locked && (
                                                 <div className={`mt-2 flex items-center gap-0.5 transition-opacity
                                                     ${i === lastIndex ? "" : HOVER_REVEAL}`}>
-                                                    <RowAction label="Copy" onClick={() => copyMessage(i, m.content)}
-                                                        icon={copiedAt === i ? Check : Copy} done={copiedAt === i} />
+                                                    {!m.failed && (
+                                                        <RowAction label="Copy" onClick={() => copyMessage(i, m.content)}
+                                                            icon={copiedAt === i ? Check : Copy} done={copiedAt === i} />
+                                                    )}
                                                     {i === lastIndex && (
                                                         <RowAction label="Try again" icon={RotateCcw} onClick={regenerate} disabled={streaming} />
                                                     )}

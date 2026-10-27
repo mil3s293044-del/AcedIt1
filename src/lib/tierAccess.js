@@ -1,4 +1,4 @@
-import { canAfford, stackOf, stackWarning, priceOf, WEEKLY_CHIPS } from './chips.js';
+import { canAfford, stackOf, stackWarning, priceOf, WEEKLY_CHIPS, weeklySpendMicros } from './chips.js';
 import { codePremiumActive } from './premiumCodes.js';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -110,11 +110,8 @@ export const PREMIUM_DAILY_CAPS = {};
 export const WEEKLY_COST_CAP_MICROS  = 1_950_000;   // $1.95 USD ≈ $3.00 AUD
 export const WEEKLY_COST_WARN_MICROS = 1_365_000;   // 70% — early enough to still act on
 
-/** Spend so far, in micro-dollars, tolerating a profile written before 0030. */
-export function weeklySpendMicros(profile) {
-    const micros = profile?.weekly_ai_cost_micros ?? 0;
-    return micros > 0 ? micros : (profile?.weekly_ai_cost_cents ?? 0) * 10_000;
-}
+/** Spend so far THIS WEEK, in micro-dollars. One copy, in chips.js. */
+export { weeklySpendMicros };
 
 // Maps each feature to the daily-counter bucket it deducts from.
 // (Quizzes and flashcards have their own buckets; the 10 tools share `tools`;

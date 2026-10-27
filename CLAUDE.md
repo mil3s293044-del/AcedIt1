@@ -13,7 +13,7 @@ AcedIt (acedit.au) is a gamified VCE study app for Australian high schoolers. It
 - **Vite dev server**: port 5173. `npm run dev` runs both via `concurrently`.
 - **Backend (target)**: Supabase (Postgres + Auth + Storage). Project: `qhwyjycihgtxpzkitmpt.supabase.co`.
 - **Auth**: Google OAuth (set up in Supabase, app code still uses Base44 — not yet swapped).
-- **AI**: Anthropic Claude (default `claude-sonnet-4-6`, set in `server.mjs:17`). Replaces Base44's metered LLM.
+- **AI**: Anthropic Claude (default `claude-sonnet-5-5`, `MODEL` in `server.mjs`). Replaces Base44's metered LLM. **It thinks by default**, and the thinking counts against `max_tokens` — see "The English Mentor answered a long essay with …" below before setting any cap.
 
 ## Migration plan (the "1% diff dual-run" strategy — already chosen)
 
@@ -9087,6 +9087,82 @@ card fill, turn Ready and land on Open. Do this in both themes, at 390, and with
 reduced motion. The harness's `page.route(...).continue()` is what lets the real
 request through.
 
+## The English Mentor answered a long essay with "…"
+
+**"Someone submitted a long essay and it just replied with …"** One cause, and
+it is a model fact rather than a chat bug: **the current models THINK BY
+DEFAULT, and the thinking counts against `max_tokens`.** The chat's stream
+capped a reply at 2048 tokens, written when the default was Sonnet 4.6, which
+does not think unless asked. Sonnet 5.5 omits nothing: on a short question it
+thinks a little and the cap still fits; on a long essay it thinks a lot, spends
+all 2048 thinking, and stops with `stop_reason: "max_tokens"` and not one text
+token. The server called that `done`, the client got an empty string as a
+success, and the bubble printed "…". The student was billed for the whole cap
+and given nothing, and only on the input they most wanted marked.
+
+Reproduced against a fake model that thinks before writing, then fixed in three
+places (`src/lib/replyRoom.js`, `replyRoom.test.mjs`, 8 checks, 19 injections
+all biting):
+
+- **THE CAP IS THE REPLY PLUS ROOM TO THINK** (`replyCap`). 2048 for a chat
+  reply and 8192 for a one-shot tool are still the REPLY sizes; a model that
+  thinks by default gets `THINKING_ROOM` on top. A cap is a ceiling, not a
+  spend, so a reply that already fitted costs the same; what changes is the
+  case that paid for a whole cap and delivered nothing. `thinksByDefault` is
+  every Claude 5 model; the 4.x ones (Sonnet 4.6, Opus 4.8, Haiku 4.5) do not.
+  **An unknown id gets the room**: unused room costs nothing, and missing room
+  is an empty reply.
+- **A REPLY WITH NO TEXT IS AN ERROR, NEVER `done`.** The stream tracks whether
+  any text arrived and, if none did, sends `error` with `emptyReplyMessage` for
+  the stop reason — ran out of room, a refusal, or nothing at all.
+- **THE BUBBLE SAYS WHY, IN THE REPLY'S PLACE.** "…" said nothing, and the
+  reason (when there was one) went to a toast that disappeared. The failed
+  bubble prints the sentence in a muted ink, offers Try again and not Copy, and
+  is left OUT of the next prompt's transcript — it is the app's sentence, and it
+  went back to the model as something "You" had said.
+
+**The guard scans for the next one.** Every literal `max_tokens` under the room
+must sit in a request whose model does not think by default — today only Ace,
+on Haiku 4.5. Point Ace at a Claude 5 model and the suite fails naming the
+line, which matters twice over: it also sends `temperature`, which the Claude 5
+models reject outright.
+
+The non-streaming path was never at risk: it caps at 32000.
+
+### An empty reply is free, and Monday finally refills
+
+**"Make empty replies free."** A reply with no text takes NO chips, no burst
+and no free-tier use — nothing a student can see — and the bubble says "It cost
+you nothing." Only the SERVER may say that (`emptyReplyMessage(r, { free })`):
+a reply stopped from the browser may still have been written and charged on the
+far side, so the chat's own fallbacks never claim it.
+
+**FREE TO THE STUDENT, NEVER TO THE BACKSTOP.** The real cost still goes on the
+dollar ledgers (`weekly_ai_cost_micros`, and the free tier's lifetime one),
+which is what keeps a run of empty replies inside a ceiling rather than spend
+with none. `chipCharge` and `weeklyLedgerPatch` in `chips.js` are the decision,
+pure, and `recordTierUsage` writes through them. The chip count is written even
+when the charge is zero, because the first call of a week is what rolls it over.
+
+**THE METER HAD A DOLLAR FALLBACK THAT TURNED A FREE REPLY INTO CHIPS.**
+`chipsSpent` read the dollar ledger whenever the chip count was zero, for rows
+written before 0033. Those rows all belong to past weeks, so it had stopped
+being dead and become wrong: an empty reply as the week's first call would have
+printed its cost as chips spent. It is gone.
+
+**"IT REFILLS MONDAY" WAS UNTRUE FOR THE STUDENTS WHO USED THE MOST.** Found in
+the same function. The weekly ledger rolled over only when a call was RECORDED,
+which happens after the gate reads it — so a student who emptied their stack
+was refused on Monday, nothing was recorded, and the week never turned over.
+Anybody at the dollar ceiling could not reach Ace either. `ledgerIsCurrent`
+reads a ledger stamped with an earlier Monday as nothing, and every reader goes
+through it: the server gate, the client meter, and the write. A row with no
+stamp is read as written (the column is `not null`, so only a fixture lacks
+one). The server's week now has ONE copy, `src/lib/utcWeek.js`, which slate.js
+re-exports and `currentWeekStartUTC` returns; `weeklySpendMicros` has one copy,
+in chips.js. `chips.test.mjs` holds the arithmetic, the boundary at Monday
+00:00 UTC and the server's wiring; 21 injections, every one caught.
+
 ## Voice / UX guardrails (from prior decisions)
 
 - **Tone**: chill motivational coach. Never cocky.
@@ -9555,6 +9631,13 @@ request through.
   `supabase/migrations/0043_study_groups_server_only.sql` — study groups on the
   server: codes and links that ask, set phrases instead of a chat, this week
   first, a shelf you add from in one tap. Apply 0043 AFTER the deploy
+- `src/lib/replyRoom.js` + `replyRoom.test.mjs` — how many tokens a streamed
+  reply may use on a model that thinks by default, and what the chat says when
+  a reply comes back with no text. The English Mentor's "…" on a long essay
+- `src/lib/chips.js` `ledgerIsCurrent` / `chipCharge` / `weeklyLedgerPatch` /
+  `weeklySpendMicros` + `src/lib/utcWeek.js` — the weekly AI ledger: an empty
+  reply charged no chips and still counted against the dollar ceiling, and a
+  week that ends reads as nothing whether or not a call has been recorded
 - `src/lib/aiJobs.js` + `aiJobs.test.mjs`, `src/lib/jobStore.js`,
   `src/components/shared/JobTray.jsx`: a quiz, deck or Active Recall set being
   made, followed from page to page. The server counts items as they close and

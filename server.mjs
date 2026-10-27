@@ -79,8 +79,9 @@ import { estimateCostMicros, isUnpricedModel, formatMicros } from "./src/lib/aiC
 // Which model a student's work runs on. The tier lives on their profile, so it
 // is resolved here rather than trusted from the request body.
 import { modelFor } from "./src/lib/aiModels.js";
+import { replyCap, emptyReplyMessage } from "./src/lib/replyRoom.js";
 import { checkoutVerdict, withRevealPending, codeGrantId } from "./src/lib/premiumGrant.js";
-import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, chipsSpent } from "./src/lib/chips.js";
+import { priceOf, stackOf, spendableFor, WEEKLY_CHIPS, weeklySpendMicros, chipCharge, weeklyLedgerPatch } from "./src/lib/chips.js";
 // Premium from a code (the Year 10 program) — the rules, shared with the client.
 import { codePremiumActive, normaliseCode, cleanName, nameProblem, redeemVerdict } from "./src/lib/premiumCodes.js";
 import { makeFriendCode, normaliseFriendCode, REQUESTS_PER_DAY, PENDING_MAX, LOOKUPS_PER_HOUR, noteText, SHARE_TABLES, DECK_SHARE_MAX, splitFriendships, friendName } from "./src/lib/friends.js";
@@ -396,13 +397,11 @@ const TIER_COUNTER_KEY  = { quiz_ai_gen: "quizzes", quiz_ai_mark: "quiz_marks", 
 const TIER_WEEKLY_CAP_MICROS = Number(process.env.TIER_WEEKLY_CAP_MICROS || 1_950_000);   // $1.95 USD ≈ $3.00 AUD
 const TIER_FREE_LIFETIME_CAP_MICROS = Number(process.env.TIER_FREE_LIFETIME_CAP_MICROS || 1_000_000); // $1.00 USD, lifetime
 
-// Returns YYYY-MM-DD for the Monday of the current ISO week, in UTC.
+// Returns YYYY-MM-DD for the Monday of the current ISO week, in UTC. The one
+// copy lives in src/lib/utcWeek.js, so the leagues, the slate and the chip
+// ledger cannot disagree about which Monday it is.
 function currentWeekStartUTC() {
-  const d = new Date();
-  const day = d.getUTCDay();           // Sun=0..Sat=6
-  const offset = (day + 6) % 7;        // Mon=0, Sun=6
-  d.setUTCDate(d.getUTCDate() - offset);
-  return d.toISOString().slice(0, 10);
+  return weekKeyUTC();
 }
 
 // ─── Weekly Leagues ────────────────────────────────────────────────────────
@@ -1056,14 +1055,16 @@ const UNLIMITED_EMAILS = (process.env.UNLIMITED_ACCESS_EMAILS || "mil3s293044@gm
 
 // Recorded spend, in micro-dollars.
 //
-// Falls back to the legacy cents columns when the micro columns are still zero,
-// so a server that deploys before migration 0030 lands enforces a coarse
-// ceiling rather than none at all. Once 0030 has run the backfill makes the
-// micro column authoritative and the fallback stops firing.
-function weeklySpendMicros(profile) {
-  const micros = profile?.weekly_ai_cost_micros ?? 0;
-  return micros > 0 ? micros : (profile?.weekly_ai_cost_cents ?? 0) * 10_000;
-}
+// WEEKLY spend is `weeklySpendMicros` in src/lib/chips.js — one copy for the
+// gate here and the meter in the browser. It reads a ledger stamped with an
+// earlier Monday as nothing (`ledgerIsCurrent`): the rollover is written only
+// when a call is RECORDED, after the gate has read the ledger, so without that
+// check a student who hit the ceiling was refused on Monday, recorded nothing,
+// and stayed at the ceiling for good.
+//
+// Lifetime spend falls back to the legacy cents column when the micro column
+// is still zero, so a server that deploys before migration 0030 lands enforces
+// a coarse ceiling rather than none at all.
 function lifetimeSpendMicros(profile) {
   const micros = profile?.lifetime_ai_cost_micros ?? 0;
   return micros > 0 ? micros : (profile?.lifetime_ai_cost_cents ?? 0) * 10_000;
@@ -1197,6 +1198,12 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
   // sub-half-cent call still floors to 0 here — which is exactly why the
   // micro columns exist and why the gate reads those.
   const costCents = Math.floor(costMicros / 10_000);
+  // AN EMPTY REPLY IS FREE TO THE STUDENT, AND STILL COSTS US. A reply that
+  // came back with no text took no chips, no burst and no free-tier use —
+  // nothing a student can see. Its real cost is still written to the dollar
+  // ledgers below, because those are the backstop: without them a run of
+  // empty replies would be spend with no ceiling at all.
+  const empty = options.empty === true;
   const updates = {};
   if (tierIsPremium(profile)) {
     const today = new Date().toISOString().slice(0, 10);
@@ -1209,27 +1216,22 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
     // the app has and they cost one jsonb field to keep. Deleting them would
     // throw away the data that says which features people actually use.
     const counterKey = TIER_COUNTER_KEY[feature];
-    if (counterKey) counters = { ...counters, [counterKey]: (counters[counterKey] ?? 0) + 1 };
+    if (counterKey && !empty) counters = { ...counters, [counterKey]: (counters[counterKey] ?? 0) + 1 };
     updates.daily_ai_counters = counters;
-
-    const weekStartStr = currentWeekStartUTC();
-    const prevStartStr = profile.weekly_cost_period_start
-      ? new Date(profile.weekly_cost_period_start).toISOString().slice(0, 10)
-      : null;
-    const sameWeek = prevStartStr && prevStartStr >= weekStartStr;
-    // A new week zeroes the running total rather than adding to last week's.
-    updates.weekly_ai_cost_micros = (sameWeek ? weeklySpendMicros(profile) : 0) + costMicros;
-    updates.weekly_ai_cost_cents  = (sameWeek ? (profile.weekly_ai_cost_cents ?? 0) : 0) + costCents;
-    updates.weekly_cost_period_start = weekStartStr;
 
     // ─── CHIPS ────────────────────────────────────────────────────────────
     // The PUBLISHED price, not what the call happened to cost. A student who
     // was told a quiz costs 30 chips before they pressed the button must be
     // charged 30, whether the model was chatty that time or terse. The real
-    // cost is recorded above; this is the thing they were quoted.
+    // cost is recorded beside it; the chips are the thing they were quoted.
+    // `chipCharge` is nothing for an empty reply; `weeklyLedgerPatch` writes
+    // the week's cost, its chips and its Monday together — the cost even when
+    // the charge is nothing, and the chips even when they are zero, because
+    // the first call of a week is what rolls both over. A new week zeroes the
+    // running totals rather than adding to last week's.
     const tier = profile.ai_model_preference === "saver" ? "saver" : "standard";
-    const chipPrice = priceOf(feature, tier) + Math.max(0, Math.round(options.extraChips) || 0);
-    updates.weekly_chips_spent = (sameWeek ? chipsSpent(profile) : 0) + chipPrice;
+    const chipPrice = chipCharge(feature, tier, { extraChips: options.extraChips, empty });
+    Object.assign(updates, weeklyLedgerPatch(profile, { costMicros, chipPrice }));
 
     // Roll the burst window forward on the same write.
     const burst = burstState(profile);
@@ -1237,7 +1239,7 @@ async function recordTierUsage(profile, feature, usage, options = {}) {
   } else {
     // Free user — increment the matching counter AND the lifetime cost.
     const counterKey = TIER_FREE_COUNTER[feature];
-    if (counterKey) updates[counterKey] = (profile[counterKey] ?? 0) + 1;
+    if (counterKey && !empty) updates[counterKey] = (profile[counterKey] ?? 0) + 1;
     updates.lifetime_ai_cost_micros = lifetimeSpendMicros(profile) + costMicros;
     updates.lifetime_ai_cost_cents  = (profile.lifetime_ai_cost_cents ?? 0) + costCents;
   }
@@ -3849,30 +3851,36 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
     const fileBlocks = await buildFileContentBlocks(params.file_urls, { email: tierUser?.email });
     const userContent = [...fileBlocks, { type: "text", text: user }];
 
+    // Honours the student's tier the same way the non-streaming path does.
+    // This path previously ignored `fast` entirely, so a tool passing it got
+    // the full model here and the cheap one there — same tool, two prices,
+    // depending only on whether it happened to stream.
+    // A mega read always goes to MEGA_MODEL, whatever the student's tier
+    // says. Input tokens ARE the cost here — three times the rate on a
+    // 40-page chapter is 95 chips against 283 — and pulling facts out of a
+    // textbook is bulk comprehension rather than the judgement marking
+    // needs. The screen names the model rather than leaving somebody to
+    // wonder why a chapter read thinner than a quiz mark.
+    const model = megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
+      fast: params.fast,
+      vision: params.vision === true,
+      standardModel: MODEL,
+      fastModel: FAST_MODEL,
+      visionModel: VISION_MODEL,
+    });
     // Chat tools (Math Tutor, Teaching Assistant) are meant to give short,
-    // conversational replies ("3-5 sentences then a question"). Output tokens
-    // dominate cost (~$15/M), so capping chat responses at 2048 roughly halves
-    // the per-message cost (~5c → ~2.5c) with no real quality loss. One-shot
-    // tools (essay plans, explanations) still get the full 8192.
-    const maxTokens = feature === "ai_chat" ? 2048 : 8192;
+    // conversational replies ("3-5 sentences then a question"), so a chat
+    // REPLY is capped at 2048 and a one-shot tool's (essay plans,
+    // explanations) at 8192.
+    //
+    // PLUS ROOM TO THINK (`replyCap`). The current models think by default and
+    // the thinking counts against `max_tokens`, so a flat 2048 was a cap on
+    // thinking-and-reply together: a long essay sent to the English Mentor
+    // spent all of it thinking and came back with no text at all — billed for
+    // the whole cap, shown "…". The room costs nothing on a reply that fitted.
+    const maxTokens = replyCap(model, feature === "ai_chat" ? 2048 : 8192);
     const request = {
-      // Honours the student's tier the same way the non-streaming path does.
-      // This path previously ignored `fast` entirely, so a tool passing it got
-      // the full model here and the cheap one there — same tool, two prices,
-      // depending only on whether it happened to stream.
-      // A mega read always goes to MEGA_MODEL, whatever the student's tier
-      // says. Input tokens ARE the cost here — three times the rate on a
-      // 40-page chapter is 95 chips against 283 — and pulling facts out of a
-      // textbook is bulk comprehension rather than the judgement marking
-      // needs. The screen names the model rather than leaving somebody to
-      // wonder why a chapter read thinner than a quiz mark.
-      model: megaPages > 0 ? MEGA_MODEL : modelFor(tierProfile?.ai_model_preference, feature, {
-        fast: params.fast,
-        vision: params.vision === true,
-        standardModel: MODEL,
-        fastModel: FAST_MODEL,
-        visionModel: VISION_MODEL,
-      }),
+      model,
       max_tokens: maxTokens,
       messages: [{ role: "user", content: userContent }],
     };
@@ -3891,7 +3899,9 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
 
     const stream = anthropic.messages.stream(request, { timeout: 120_000 });
 
+    let wrote = false;
     stream.on("text", (delta) => {
+      if (delta) wrote = true;
       sse("text", { text: delta });
     });
 
@@ -3899,17 +3909,27 @@ app.post("/local-ai/invokeAIStream", async (req, res) => {
 
     if (finalMessage.usage) {
       console.log(
-        `[local-ai] (stream) in=${finalMessage.usage.input_tokens} cache_read=${finalMessage.usage.cache_read_input_tokens ?? 0} cache_write=${finalMessage.usage.cache_creation_input_tokens ?? 0} out=${finalMessage.usage.output_tokens}`,
+        `[local-ai] (stream) in=${finalMessage.usage.input_tokens} cache_read=${finalMessage.usage.cache_read_input_tokens ?? 0} cache_write=${finalMessage.usage.cache_creation_input_tokens ?? 0} out=${finalMessage.usage.output_tokens} stop=${finalMessage.stop_reason}`,
       );
     }
 
     if (tierProfile) {
-      recordTierUsage(tierProfile, feature, finalMessage.usage, { model: request.model, extraChips: megaChips }).catch((e) =>
+      recordTierUsage(tierProfile, feature, finalMessage.usage, { model: request.model, extraChips: megaChips, empty: !wrote }).catch((e) =>
         console.error("[local-ai] (stream) recordTierUsage failed:", e?.message || e),
       );
     }
 
-    sse("done", { ok: true });
+    // A REPLY WITH NO TEXT IS NOT A REPLY. It used to end on `done` like any
+    // other, so the client was handed an empty string as a success and the
+    // student read "…" with nothing saying why. It is an error now, naming the
+    // reason the model stopped, so the chat can print a sentence in its place.
+    if (!wrote) {
+      console.warn(`[local-ai] (stream) empty reply: stop=${finalMessage.stop_reason} model=${request.model} max_tokens=${request.max_tokens}`);
+      sse("error", { message: emptyReplyMessage(finalMessage.stop_reason, { free: true }), empty: true, stop_reason: finalMessage.stop_reason || null });
+      return;
+    }
+
+    sse("done", { ok: true, stop_reason: finalMessage.stop_reason || null });
   } catch (err) {
     console.error("[local-ai] stream error:", err);
     try {

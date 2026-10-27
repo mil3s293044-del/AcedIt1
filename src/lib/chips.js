@@ -44,6 +44,7 @@
  */
 
 import { PRICES, MICROS_PER_DOLLAR } from "./aiCost.js";
+import { weekKeyUTC } from "./utcWeek.js";
 
 /** One week's allowance. Chosen so the cheapest action is 2 and the dearest 30. */
 export const WEEKLY_CHIPS = 1000;
@@ -127,19 +128,95 @@ export function priceOf(feature, tier = "standard") {
 
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-/** Chips spent this week, tolerating a profile written before 0033. */
-export function chipsSpent(profile) {
-    const direct = num(profile?.weekly_chips_spent);
-    if (direct > 0) return direct;
-    // Pre-migration rows only have the micro ledger. Converting it keeps the
-    // meter honest on the first deploy rather than showing everyone a full
-    // stack they have already partly spent.
-    return Math.round(num(profile?.weekly_ai_cost_micros) / MICROS_PER_CHIP);
+/**
+ * THE LEDGER IS THIS WEEK'S, OR IT IS NOTHING.
+ *
+ * The server stamps the week's spend with the Monday it belongs to and rolls
+ * it over only when it RECORDS a call — which happens after the gate has
+ * already read it. So a student who emptied their stack was refused on
+ * Monday, nothing was recorded, and the week never turned over: "It refills
+ * Monday" was untrue for exactly the students who had used the most, and
+ * anybody at the dollar ceiling could not even reach Ace. Every reader of the
+ * weekly ledger goes through this now, so last week's figures read as nothing
+ * the moment the week ends, whether or not anything has been written since.
+ *
+ * A row with no stamp is read as written. The column is `not null` with a
+ * Monday default (0011), so that only happens in a fixture, and inventing a
+ * reset there would hide the figures a test put in.
+ */
+export function ledgerIsCurrent(profile, now = new Date()) {
+    const raw = profile?.weekly_cost_period_start;
+    if (raw === null || raw === undefined || raw === "") return true;
+    const t = Date.parse(String(raw));
+    if (!Number.isFinite(t)) return true;
+    return new Date(t).toISOString().slice(0, 10) >= weekKeyUTC(now);
+}
+
+/**
+ * Chips spent this week.
+ *
+ * It used to fall back to the DOLLAR ledger whenever the chip count was zero,
+ * for rows written before 0033. Those rows all belong to past weeks now, and
+ * the fallback had become wrong rather than dead: an empty reply is free (no
+ * chips) and still costs us (dollars), so as the first call of a week it would
+ * have printed its cost back at the student as chips spent. The meter reads
+ * chips and nothing else.
+ */
+export function chipsSpent(profile, now = new Date()) {
+    if (!ledgerIsCurrent(profile, now)) return 0;
+    return num(profile?.weekly_chips_spent);
+}
+
+/**
+ * The real dollar spend this week, in micro-dollars — the BACKSTOP behind the
+ * chips, never what a student is shown. Last week's figure is nothing, for the
+ * reason `ledgerIsCurrent` gives. Falls back to the legacy cents column for a
+ * row written before 0030. One copy: the server gates on it and the client's
+ * meter warns on it, and the two used to be written out separately.
+ */
+export function weeklySpendMicros(profile, now = new Date()) {
+    if (!ledgerIsCurrent(profile, now)) return 0;
+    const micros = num(profile?.weekly_ai_cost_micros);
+    return micros > 0 ? micros : num(profile?.weekly_ai_cost_cents) * 10_000;
+}
+
+/**
+ * What a call is charged in CHIPS: the published price (plus a mega read's
+ * pages), or nothing when the reply came back EMPTY.
+ *
+ * An empty reply is one with no text in it at all — the model spent its room
+ * thinking, or declined — and the student was given nothing, so they pay
+ * nothing. Its real cost still goes on the dollar ledger
+ * (`weeklyLedgerPatch`), which is what keeps a run of empty replies inside a
+ * ceiling. Free to the student; never free to the backstop.
+ */
+export function chipCharge(feature, tier = "standard", { extraChips = 0, empty = false } = {}) {
+    if (empty) return 0;
+    return priceOf(feature, tier) + Math.max(0, Math.round(extraChips) || 0);
+}
+
+/**
+ * The week's ledger after one call: the dollars it cost, the chips it was
+ * charged, and the Monday they belong to.
+ *
+ * ALWAYS WRITES ALL FOUR, including a chip charge of zero. The first call of a
+ * new week is what rolls the figures over, so leaving the chip count unwritten
+ * while the stamp moved on would carry last week's spend into this one.
+ */
+export function weeklyLedgerPatch(profile, { costMicros = 0, chipPrice = 0, now = new Date() } = {}) {
+    const same = ledgerIsCurrent(profile, now);
+    const cost = Math.max(0, num(costMicros));
+    return {
+        weekly_ai_cost_micros: (same ? weeklySpendMicros(profile, now) : 0) + cost,
+        weekly_ai_cost_cents: (same ? num(profile?.weekly_ai_cost_cents) : 0) + Math.floor(cost / 10_000),
+        weekly_cost_period_start: weekKeyUTC(now),
+        weekly_chips_spent: (same ? chipsSpent(profile, now) : 0) + Math.max(0, num(chipPrice)),
+    };
 }
 
 /** The whole picture, which is what every caller actually wants. */
-export function stackOf(profile) {
-    const spent = Math.max(0, chipsSpent(profile));
+export function stackOf(profile, now = new Date()) {
+    const spent = Math.max(0, chipsSpent(profile, now));
     const remaining = Math.max(0, WEEKLY_CHIPS - spent);
     return {
         spent,

@@ -47,6 +47,7 @@
  * and the division thresholds are the same objects on both sides.
  */
 import { skill, clampP } from "./market.js";
+import { weekKeyUTC } from "./utcWeek.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
@@ -66,12 +67,7 @@ const isWeekKey = (k) => typeof k === "string" && /^\d{4}-\d{2}-\d{2}$/.test(k);
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 /** The Monday (UTC) of the week holding `d`, as YYYY-MM-DD. The server's week. */
-export function weekKeyUTC(d = new Date()) {
-    const x = new Date(toTime(d) ?? Date.now());
-    const day = x.getUTCDay();
-    x.setUTCDate(x.getUTCDate() - ((day + 6) % 7));
-    return x.toISOString().slice(0, 10);
-}
+export { weekKeyUTC };
 
 const weekStartMs = (weekKey) => Date.parse(`${weekKey}T00:00:00Z`);
 
