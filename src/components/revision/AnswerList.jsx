@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import MarkdownMath from "@/components/shared/MarkdownMath";
 import QuestionPanel from "@/components/mistakes/QuestionPanel";
 import LadderTrack from "@/components/mistakes/LadderTrack";
+import ForChip from "@/components/shared/ForChip";
 import { exemplarMeta, answerSteps, answerState, parseSavedAnswer } from "@/lib/answerBank";
 
 const STATE = {
@@ -32,7 +33,7 @@ const KIND = {
     yours_unmarked: { label: "Your answer (never marked)", cls: "bg-secondary text-muted-foreground" },
 };
 
-function AnswerRow({ card, onRetire, onDelete, index }) {
+function AnswerRow({ card, onRetire, onDelete, index, tags }) {
     const reduce = useReducedMotion();
     const [open, setOpen] = useState(false);
     const meta = exemplarMeta(card);
@@ -95,6 +96,7 @@ function AnswerRow({ card, onRetire, onDelete, index }) {
                             )}
                             <LadderTrack steps={steps} />
                             <div className="flex flex-wrap items-center gap-2 pt-1">
+                                <ForChip tags={tags} kind="answers" id={card.id} subject={card.subject_name} />
                                 <Button size="sm" variant="outline" onClick={() => onRetire?.([card])} data-answer-retire
                                     className="border-2 border-border rounded-xl gap-1.5 text-xs">
                                     <Archive className="w-3.5 h-3.5" /> Put it away
@@ -133,7 +135,7 @@ function LegacyRow({ row, onMove, moving }) {
     );
 }
 
-export default function AnswerList({ answers = [], legacy = [], ready = [], onDrill, onRetire, onDelete, onMoveLegacy, movingId, empty }) {
+export default function AnswerList({ answers = [], legacy = [], ready = [], onDrill, onRetire, onDelete, onMoveLegacy, movingId, empty, tags }) {
     const order = { slipping: 0, new: 1, rehearsing: 2, learned: 3 };
     const sorted = [...answers].sort((a, b) => order[answerState(a)] - order[answerState(b)]);
     if (!answers.length && !legacy.length) return empty || null;
@@ -155,7 +157,7 @@ export default function AnswerList({ answers = [], legacy = [], ready = [], onDr
             )}
             {answers.length > 0 && (
                 <ul className="space-y-2">
-                    {sorted.map((c, i) => <AnswerRow key={c.id} card={c} index={i} onRetire={onRetire} onDelete={onDelete} />)}
+                    {sorted.map((c, i) => <AnswerRow key={c.id} card={c} index={i} onRetire={onRetire} onDelete={onDelete} tags={tags} />)}
                 </ul>
             )}
             {legacy.length > 0 && (

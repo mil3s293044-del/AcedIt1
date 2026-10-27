@@ -36,6 +36,8 @@ import { fixState, isBankCard, isRetired } from "@/lib/mistakeBank";
 import { isAnswerCard, exemplarMeta, answerState, isRetiredAnswer } from "@/lib/answerBank";
 import { recallAt, isLearned, RISK_FLOOR } from "@/lib/retention";
 import { shortSubject } from "@/lib/subjectShort";
+import { stratIdOf } from "@/lib/planTags";
+import { strategyIsFor } from "@/lib/strategise";
 
 const str = (v) => String(v ?? "").trim();
 
@@ -94,6 +96,7 @@ export function foldersFor({ assessments = [], userSubjects = [], now = new Date
             daysAway: days,
             topics: cleanTopics(rev.topics),
             points: cleanPoints(rev.points),
+            claims: cleanClaims(rev.claims),
             row: a,
         };
         if (a.is_completed || (days != null && days < 0)) past.push(folder);
@@ -123,6 +126,9 @@ export function foldersFor({ assessments = [], userSubjects = [], now = new Date
             // would be a second SAC folder with a misleading name.
             topics: [],
             points: cleanPoints(revisionOf(us).points),
+            // Nothing is tagged to an exam folder: it already holds the whole
+            // subject, so a tag there could only ever say nothing.
+            claims: cleanClaims(null),
             row: us,
         });
     }
@@ -235,6 +241,129 @@ export function inFolder(folder, subject, topic) {
     return want.has(normTopic(topic));
 }
 
+// ─── Tags ───────────────────────────────────────────────────────────────────
+//
+// A TAG IS A CLAIM THE SAC MAKES, stored on the SAC's own row
+// (`extra.revision.claims`), never on the thing tagged. Three reasons:
+//   - a deck is not a row — it is every card sharing a subject and a topic —
+//     so the only place a deck's tag can live without writing to sixty cards
+//     is somewhere that names the deck;
+//   - every resource row already carries `extra` that other features own
+//     (`extra.mistake`, `extra.exemplar`, `extra.revision_check`), and a tag
+//     written by spreading a stale copy of it would quietly undo their work;
+//   - one SAC, one row to read, so a folder, a chip and the Progress filter
+//     all see the same set without a query per resource.
+//
+// TAGS ADD ON TOP OF TOPICS. A folder holds everything in its topics AND
+// everything tagged to it, so tagging can only ever add — nothing a student
+// can see in a folder today disappears because they tagged something else.
+//
+// STUDY TIME IS THE EXCEPTION, and the difference is what the two are. A deck
+// is a resource whose purpose can change; a session is an event that already
+// happened FOR something. So a session is STAMPED when it is saved
+// (`extra.revision_for`, see sacTags.js) and the stamp never moves.
+
+/** What a SAC can claim. */
+export const CLAIM_KINDS = ["decks", "quizzes", "mistakes", "answers", "maps", "chats"];
+/** Per kind, per SAC. A SAC claiming more than this is a subject. */
+export const CLAIM_MAX = 300;
+
+/** A deck's identity: the shelf groups cards by subject and topic, so the tag does too. */
+export const deckKeyOf = (subject, topic) =>
+    `${normTopic(subject || "Other")}|${normTopic(topic || "General")}`;
+
+/** Claims off a row, whatever shape they arrive in: unique strings, capped, every kind present. */
+export function cleanClaims(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const out = {};
+    for (const kind of CLAIM_KINDS) {
+        const seen = new Set();
+        const list = [];
+        for (const v of Array.isArray(src[kind]) ? src[kind] : []) {
+            if (typeof v !== "string" && typeof v !== "number") continue;
+            const id = str(v);
+            if (!id || seen.has(id)) continue;
+            seen.add(id);
+            list.push(id);
+            if (list.length >= CLAIM_MAX) break;
+        }
+        out[kind] = list;
+    }
+    return out;
+}
+
+/** Does this folder claim this thing? An id that is not there is never claimed. */
+export function claims(folder, kind, id) {
+    if (id == null || id === "") return false;
+    return !!folder?.claims?.[kind]?.includes(String(id));
+}
+
+/** The quiz a banked mistake or a saved answer came from, if it says. */
+export function sourceQuizOf(card) {
+    if (isBankCard(card)) return str(card?.extra?.mistake?.source?.quiz_id) || null;
+    if (isAnswerCard(card)) return str(exemplarMeta(card).source?.quizId) || null;
+    return null;
+}
+
+/**
+ * The membership rules for one folder, as predicates. ONE set, read by the
+ * folder's contents, its time, and the Progress filter — three readers that
+ * each worked it out would be three answers to "what is in this SAC".
+ *
+ *   deck card   in its topics, or its deck is tagged
+ *   quiz        in its topics, or it is tagged
+ *   mistake     in its topics, tagged itself, or its quiz is in the folder
+ *   answer      the same
+ *   map / chat  in its topics, or it is tagged
+ *   time        stamped for this SAC, about a quiz or deck in the folder, or
+ *               in its topics
+ */
+export function folderMember(folder, { quizzes = [] } = {}) {
+    const quizById = new Map((quizzes || []).map((q) => [q.id, q]));
+    const here = (item) => inFolder(folder, subjectOf(item, { quizById }), topicOf(item, { quizById }));
+    const quizIn = new Set((quizzes || []).filter((q) => here(q) || claims(folder, "quizzes", q.id)).map((q) => String(q.id)));
+    const fromQuiz = (c) => { const q = sourceQuizOf(c); return !!q && quizIn.has(q); };
+    const quizTitles = new Map();
+    for (const q of quizzes || []) if (quizIn.has(String(q.id))) quizTitles.set(normTopic(q.title), String(q.id));
+
+    return {
+        quizIds: quizIn,
+        card: (c) => here(c) || claims(folder, "decks", deckKeyOf(c?.subject_name, c?.topic)),
+        quiz: (q) => quizIn.has(String(q?.id)),
+        mistake: (c) => here(c) || claims(folder, "mistakes", c?.id) || fromQuiz(c),
+        answer: (c) => here(c) || claims(folder, "answers", c?.id) || fromQuiz(c),
+        map: (m) => here(m) || claims(folder, "maps", m?.id),
+        chat: (r) => here(r) || claims(folder, "chats", r?.id),
+        /**
+         * A planner session: stamped for this SAC when it was planned, or built
+         * by Strategise for it (the plan id carries the SAC). Never by subject
+         * alone — a Chemistry session on Tuesday is not prep for every
+         * Chemistry SAC on the calendar, the rule the runway keeps.
+         */
+        plan: (p) => {
+            const stamp = p?.extra?.revision_for;
+            if (Array.isArray(stamp) && stamp.includes(folder?.key)) return true;
+            return folder?.kind === "sac" && strategyIsFor(stratIdOf(p), folder.id);
+        },
+        /**
+         * A study session or technique row. A quiz's own session is reached
+         * through its quiz: by `extra.quiz_id` on new rows, and by the title
+         * in its notes ("Quiz: …") on the rows written before that existed.
+         */
+        time: (row) => {
+            const stamp = row?.extra?.revision_for;
+            if (Array.isArray(stamp) && stamp.includes(folder?.key)) return true;
+            const qid = str(row?.extra?.quiz_id);
+            if (qid && quizIn.has(qid)) return true;
+            const note = str(row?.notes);
+            if (/^quiz:\s*/i.test(note) && quizTitles.has(normTopic(note.replace(/^quiz:\s*/i, "")))) return true;
+            const subject = row?.subject_name || row?.subject;
+            if (claims(folder, "decks", deckKeyOf(subject, row?.topic))) return true;
+            return inFolder(folder, subject, row?.topic);
+        },
+    };
+}
+
 // ─── What is in a folder ────────────────────────────────────────────────────
 
 /** A deck card that is slipping: learned, and predicted recall under the floor, or flagged. */
@@ -254,18 +383,18 @@ export function isWeakCard(card, now = Date.now()) {
  */
 export function folderContents(folder, {
     flashcards = [], bankCards = [], answerCards = [], quizzes = [], attempts = [],
-    redo = [], legacySaved = [], isReady = () => false, now = Date.now(),
+    redo = [], legacySaved = [], maps = [], chats = [], sessions = [], techniques = [], plans = [],
+    isReady = () => false, now = Date.now(),
 } = {}) {
-    const quizById = new Map((quizzes || []).map((q) => [q.id, q]));
-    const here = (item) => inFolder(folder, subjectOf(item, { quizById }), topicOf(item, { quizById }));
+    const m = folderMember(folder, { quizzes });
 
-    const mistakes = (bankCards || []).filter((c) => isBankCard(c) && !isRetired(c) && c.is_active !== false && here(c));
-    const answers = (answerCards || []).filter((c) => isAnswerCard(c) && !isRetiredAnswer(c) && c.is_active !== false && here(c));
-    const cards = (flashcards || []).filter(here);
+    const mistakes = (bankCards || []).filter((c) => isBankCard(c) && !isRetired(c) && c.is_active !== false && m.mistake(c));
+    const answers = (answerCards || []).filter((c) => isAnswerCard(c) && !isRetiredAnswer(c) && c.is_active !== false && m.answer(c));
+    const cards = (flashcards || []).filter(m.card);
     const weak = cards.filter((c) => isWeakCard(c, now));
-    const quizzesIn = (quizzes || []).filter(here);
-    const quizIds = new Set(quizzesIn.map((q) => q.id));
-    const redoIn = (redo || []).filter((r) => quizIds.has(r.quizId));
+    const quizzesIn = (quizzes || []).filter(m.quiz);
+    const quizIds = new Set(quizzesIn.map((q) => String(q.id)));
+    const redoIn = (redo || []).filter((r) => quizIds.has(String(r.quizId)));
     const legacy = (legacySaved || []).filter((row) =>
         inFolder(folder, row?.subject_name, row?.topic || row?.input_data?.quiz_title));
 
@@ -275,9 +404,13 @@ export function folderContents(folder, {
         cards,
         weak,
         quizzes: quizzesIn,
-        attempts: (attempts || []).filter((a) => quizIds.has(a.quiz_id)),
+        attempts: (attempts || []).filter((a) => quizIds.has(String(a.quiz_id))),
         redo: redoIn,
         legacy,
+        maps: (maps || []).filter(m.map),
+        chats: (chats || []).filter(m.chat),
+        time: [...(sessions || []), ...(techniques || [])].filter(m.time),
+        plans: (plans || []).filter(m.plan),
         ready: {
             mistakes: mistakes.filter(isReady),
             answers: answers.filter(isReady),
@@ -611,6 +744,7 @@ export function drillQueue(contents) {
 
 export default {
     foldersFor, findFolder, topicOf, subjectOf, topicOptions, suggestedTopics, inFolder, folderContents,
+    folderMember, cleanClaims, claims, deckKeyOf,
     splitOutline, mergePoints, ratePoint, removePoint, editPoint, revisionPatch, checkQuiz, pointProof,
     pointState, orderPoints, checkCandidates, readiness, calibration, folderLead, drillQueue, isWeakCard,
 };
@@ -624,7 +758,7 @@ export default {
  * them was a value the page honoured.
  */
 export const VIEWS = ["mistakes", "answers"];
-export const FOLDER_TABS = ["knowledge", "mistakes", "answers", "cards", "mock"];
+export const FOLDER_TABS = ["knowledge", "material", "mistakes", "answers", "cards", "mock"];
 
 export function revisionQuery({ folder, view, tab, sit } = {}) {
     const q = new URLSearchParams();

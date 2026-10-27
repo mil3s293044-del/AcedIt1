@@ -44,6 +44,8 @@ export default function DeckStack({
     onSelect, onStats, onDelete,
     /** Position in the list — staggers the deal. */
     index = 0,
+    /** A tag control (ForChip, compact), first in the gutter. */
+    tag = null,
 }) {
     return (
         <CardPack
@@ -62,6 +64,7 @@ export default function DeckStack({
             watermark={false}
             actions={(
                 <>
+                    {tag}
                     <PackAction label={`Stats for ${topic}`} onClick={onStats}>
                         <BarChart3 className="w-3.5 h-3.5" />
                     </PackAction>

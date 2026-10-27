@@ -30,6 +30,8 @@ import ReadinessBar from "@/components/revision/ReadinessBar";
 import { Countdown } from "@/components/revision/FolderCard";
 import KeyKnowledge from "@/components/revision/KeyKnowledge";
 import AnswerList from "@/components/revision/AnswerList";
+import MaterialTab from "@/components/revision/MaterialTab";
+import RunupPanel from "@/components/revision/RunupPanel";
 
 const fmtDue = (iso) => {
     if (!iso) return "";
@@ -62,6 +64,7 @@ export default function FolderView({
     folder, tone, contents, r, proof, profile, attempts = [], cases = [], checkJob,
     tab = "knowledge", onTab, onSavePoints, onTest, onScope, onDrill, onClear, onRetire, onDeleteAnswer,
     onMoveLegacy, movingId, onSitRedo, onMock, mockCount = 0,
+    stats = null, history = [], tags = null, allMaterial = { decks: [], quizzes: [], maps: [], chats: [] },
 }) {
     const reduce = useReducedMotion();
     const [testNonce, setTestNonce] = useState(0);
@@ -71,7 +74,7 @@ export default function FolderView({
     const toTest = useMemo(() => checkCandidates(folder.points, proof, CHECK_MAX).length, [folder.points, proof]);
     const lead = folderLead(folder, r);
 
-    // The tab strip scrolls on a phone (five tabs do not fit 390px at a size
+    // The tab strip scrolls on a phone (six tabs do not fit 390px at a size
     // anybody can read). Two things make that a strip rather than a clipped
     // row: the edge that has more FADES rather than cutting a word in half,
     // and the selected tab is always scrolled into view — a ?tab= link to
@@ -122,8 +125,12 @@ export default function FolderView({
         return [...m.values()].sort((a, b) => b.weak - a.weak || b.ready - a.ready || a.topic.localeCompare(b.topic));
     }, [contents.cards, contents.weak]);
 
+    const decksIn = useMemo(() => new Set(contents.cards.map((c) => `${c.subject_name}|${c.topic}`)).size, [contents.cards]);
     const TABS = [
         { id: "knowledge", label: "Key knowledge", n: folder.points.length },
+        // What the folder revises FROM: its decks, quizzes, maps and chats —
+        // the tab where anything is added to a SAC or taken out of it.
+        { id: "material", label: "Material", n: decksIn + contents.quizzes.length + (contents.maps?.length || 0) + (contents.chats?.length || 0) },
         { id: "mistakes", label: "Mistakes", n: contents.mistakes.length + contents.redo.length },
         { id: "answers", label: "Answers", n: contents.answers.length + contents.legacy.length },
         { id: "cards", label: "Weak cards", n: contents.weak.length },
@@ -200,6 +207,10 @@ export default function FolderView({
                 </div>
             </motion.header>
 
+            {/* ── THE RUN-UP: time, sits, reviews and readiness, counted off
+                what is in the folder. Not drawn until there is something. */}
+            {stats && <RunupPanel stats={stats} history={history} />}
+
             {/* ── THE TABS: what you do, with what is in each ──────────── */}
             <div ref={strip} onScroll={measure} data-folder-tabs
                 style={fade ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
@@ -222,11 +233,18 @@ export default function FolderView({
                     readiness={r} checkJob={checkJob} onSave={onSavePoints} onTest={onTest} openTest={testNonce} />
             )}
 
+            {tab === "material" && (
+                <MaterialTab folder={folder} contents={contents} all={allMaterial} tags={tags}
+                    empty={<Empty>{folder.kind === "sac"
+                        ? <>Nothing here yet. Tag a deck, quiz, mind map or chat for {folder.title}, or make one for it — its mistakes, sits and study time come with it.</>
+                        : <>No decks, quizzes, maps or chats in {folder.subject} yet.</>}</Empty>} />
+            )}
+
             {tab === "mistakes" && (
                 <div className="space-y-8">
                     {bands.length > 0
                         ? bands.map((band) => (
-                            <BankBand key={band.subject} band={band} attempts={attempts}
+                            <BankBand key={band.subject} band={band} attempts={attempts} tags={tags}
                                 onDrill={(list) => onDrill(list, `Drilling ${folder.title}`)} onClear={onClear} />
                         ))
                         : <Empty>No mistakes banked in {folder.topics.length ? "these topics" : folder.subject} yet. Every mark you drop on a marked quiz can be saved from the marking, and it lands here.</Empty>}
@@ -246,7 +264,7 @@ export default function FolderView({
             {tab === "answers" && (
                 <AnswerList answers={contents.answers} legacy={contents.legacy} ready={contents.ready.answers}
                     onDrill={(list) => onDrill(list, `Learning ${folder.title}`)} onRetire={onRetire} onDelete={onDeleteAnswer}
-                    onMoveLegacy={onMoveLegacy} movingId={movingId}
+                    onMoveLegacy={onMoveLegacy} movingId={movingId} tags={tags}
                     empty={<Empty>No answers saved here yet. When a quiz is marked, save your full-mark answers — or the model answer to one you dropped marks on — and learn them word for word.</Empty>} />
             )}
 

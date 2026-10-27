@@ -55,6 +55,8 @@ import { actionById } from "./chatActions";
 import { todaysIntent } from "@/lib/studyIntent";
 import AceShuffle from "@/components/ace/AceShuffle";
 import { useMedia } from "@/hooks/useMedia";
+import ForChip, { ForNote } from "@/components/shared/ForChip";
+import useSacTags, { setClaim } from "@/hooks/useSacTags";
 
 const MAX_TURNS_IN_PROMPT = 12;
 /** How close to the bottom still counts as "at the bottom", so streaming keeps following. */
@@ -134,6 +136,9 @@ export default function UnifiedChat({
     defaultTool = null,
     // Told the row the moment one exists.
     onSaved = null,
+    // Arrived from a SAC's folder: the conversation is tagged for that SAC the
+    // moment it is first saved. The note above the composer says so first.
+    forKey = null,
     // ── WHAT THE EMPTY STATE SHOWS ──────────────────────────────────────────
     // Counted by the PAGE, which already loads the rows for them.
     cards = [],
@@ -145,6 +150,10 @@ export default function UnifiedChat({
     const { toast } = useToast();
     const [user, setUser] = useState(null);
     const [profile, setProfile] = useState(null);
+    const tags = useSacTags(user?.email);
+    const [tagFor, setTagFor] = useState(forKey);
+    const tagForRef = useRef(forKey);
+    useEffect(() => { tagForRef.current = tagFor; }, [tagFor]);
     const [subjects, setSubjects] = useState([]);
     const [conversations, setConversations] = useState([]);
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -419,6 +428,7 @@ export default function UnifiedChat({
             } else {
                 const { ok, id } = await saveResult("create", payload);
                 if (ok && id) {
+                    if (tagForRef.current) setClaim(tagForRef.current, "chats", id, true).catch(() => {});
                     convIdRef.current = id;
                     setActiveConvId(id);
                     const row = { ...payload, id, created_date: now, updated_date: now };
@@ -760,6 +770,10 @@ export default function UnifiedChat({
     const ToolIcon = tool.icon;
     const composerBox = (
         <div ref={composerRef} className="relative">
+            {!activeConvId && (
+                <ForNote tags={tags} forKey={tagFor} onClear={() => setTagFor(null)} ink="console"
+                    what="This chat will be tagged for" className="mb-2 px-1" />
+            )}
             {palette && (
                 <ToolPalette
                     ref={paletteRef}
@@ -978,6 +992,10 @@ export default function UnifiedChat({
                             <p className="text-[13px] font-bold text-[var(--console-ink)]">New chat</p>
                         )}
                     </div>
+                    {activeConvId && (
+                        <ForChip tags={tags} kind="chats" id={activeConvId} subject={subjectName} ink="console" align="right"
+                            className="hidden sm:inline-flex" />
+                    )}
                     <button type="button" onClick={newChat} aria-label="New chat"
                         className={`flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-[12.5px] font-bold text-[var(--console-ink-dim)]
                             hover:bg-[var(--console-panel-2)] hover:text-[var(--console-ink)]

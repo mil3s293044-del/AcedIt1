@@ -90,7 +90,7 @@ export default function MistakeBank() {
         to={`${createPageUrl("Revision")}${revisionQuery({ view: "mistakes", tab: tab === "redo" || tab === "fix" ? tab : undefined })}`} />;
 }
 
-export function MistakeBankView() {
+export function MistakeBankView({ tags = null } = {}) {
     const { toast } = useToast();
     const [cards, setCards] = useState([]);
     // Quiz attempts: the command-term panel, the redo gate and every fixState.
@@ -299,7 +299,7 @@ export function MistakeBankView() {
                 {/* ── THE BANDS ─────────────────────────────────────────────── */}
                 <div className="space-y-7">
                     {bands.map((band) => (
-                        <BankBand key={band.subject} band={band} attempts={attempts}
+                        <BankBand key={band.subject} band={band} attempts={attempts} tags={tags}
                             onDrill={(list) => drill(list, `Drilling ${band.subject}`)} onClear={clearFixed} />
                     ))}
                 </div>

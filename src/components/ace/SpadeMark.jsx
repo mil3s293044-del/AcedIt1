@@ -16,8 +16,9 @@
  * a mascot people turn off, and the point of him being alive is that you like
  * having him around rather than that you notice him.
  */
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { motion, useReducedMotion } from "framer-motion";
+import useBlink from "@/components/ace/useBlink";
 
 // The spade: apex, two lobes, and the tail, as one closed path so the
 // silhouette stays crisp at 16px. Fuller in the cheeks than a printed pip —
@@ -55,9 +56,6 @@ const MOODS = {
     point:    { rx: 6.4, ry: 7.6, dx: 0,    dy: 1.4, squash: 1, mouth: "smile",  blush: false },
 };
 
-/** Blink timing. Irregular on purpose — a metronome blink reads as a machine. */
-const BLINK_MIN = 2600, BLINK_SPREAD = 3600;
-
 export function SpadeFace({
     className = "w-8 h-8",
     mood = "idle",
@@ -72,20 +70,9 @@ export function SpadeFace({
 }) {
     const m = MOODS[mood] || MOODS.idle;
     const reduce = useReducedMotion();
-    const [blinking, setBlinking] = useState(false);
-
-    useEffect(() => {
-        if (!blink || reduce || m.squash === 0) return;
-        let timer;
-        const schedule = () => {
-            timer = setTimeout(() => {
-                setBlinking(true);
-                setTimeout(() => { setBlinking(false); schedule(); }, 110);
-            }, BLINK_MIN + Math.random() * BLINK_SPREAD);
-        };
-        schedule();
-        return () => clearTimeout(timer);
-    }, [blink, reduce, m.squash]);
+    // The shared chain (aceBlink.js): this one leaked the same way AceBody's
+    // did whenever his mood changed mid-blink.
+    const blinking = useBlink(blink && !reduce && m.squash !== 0);
 
     const open = blinking ? 0.08 : m.squash;
     const eyeShut = m.squash === 0;
@@ -111,13 +98,19 @@ export function SpadeFace({
                         fill="none" className={cardStroke} strokeWidth="3" strokeLinecap="round" />
                 ) : (
                     <g key={i} transform={`translate(${x + m.dx} ${EYE_Y + m.dy})`}>
-                        <ellipse rx={m.rx} ry={m.ry * open} className={card} />
+                        {/* The lid CLOSES: the height animates down and back,
+                            rather than the eye snapping to a sliver for a
+                            tenth of a second, which read as a flicker. */}
+                        <motion.ellipse rx={m.rx} ry={m.ry * open} initial={false}
+                            animate={{ ry: m.ry * open }} transition={{ duration: 0.12, ease: "easeInOut" }}
+                            className={card} />
                         {/* The highlight is what makes an eye look wet rather
-                            than punched out. Hidden mid-blink so it can't
-                            float in a closed eye. */}
-                        {open > 0.5 && (
-                            <circle cx={m.rx * 0.34} cy={-m.ry * 0.34} r={m.rx * 0.26}
-                                className={tone} opacity="0.55" />
+                            than punched out. It fades under a closing lid so
+                            it cannot float in a closed eye. */}
+                        {m.squash > 0.5 && (
+                            <motion.circle cx={m.rx * 0.34} cy={-m.ry * 0.34} r={m.rx * 0.26}
+                                className={tone} initial={false}
+                                animate={{ opacity: blinking ? 0 : 0.55 }} transition={{ duration: 0.06 }} />
                         )}
                     </g>
                 );

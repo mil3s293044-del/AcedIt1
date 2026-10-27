@@ -171,15 +171,40 @@ check("every --console-* token a component uses is one that exists", () => {
     assert.deepEqual(bad, [], "a token that is not declared renders as nothing at all");
 });
 
+/*
+ * A SHARED CONTROL MAY CARRY A CONSOLE PRESET, and then only the room may
+ * select it. `ForChip` is drawn on every deck, quiz and map AND in the chat's
+ * header, so it holds both inks as named presets. The tokens in it are blank
+ * anywhere but inside `.console` — which is exactly why the two checks after
+ * this one exist: `ink="console"` only from a room file, and the console list
+ * never portalled out of the room it needs.
+ */
+const INKED = ["components/shared/ForChip.jsx"];
+
 check("and nothing outside the room reaches for one", () => {
     // They are scoped to `.console` on purpose, so a console colour anywhere
     // else is blank.
     const bad = walk(SRC).filter((f) => {
         const r = rel(f);
-        if (ROOM.includes(r) || r.endsWith(".test.mjs")) return false;
+        if (ROOM.includes(r) || INKED.includes(r) || r.endsWith(".test.mjs")) return false;
         return /var\(--console-/.test(fs.readFileSync(f, "utf8"));
     });
     assert.deepEqual(bad.map(rel), []);
+});
+
+check("a console preset is only ever selected from inside the room", () => {
+    const bad = walk(SRC).filter((f) => {
+        const r = rel(f);
+        if (ROOM.includes(r) || r.endsWith(".test.mjs")) return false;
+        return /ink=["{]+["']?console/.test(code(fs.readFileSync(f, "utf8")));
+    });
+    assert.deepEqual(bad.map(rel), [], "ink=\"console\" outside the room renders blank");
+    assert.ok(/ink="console"/.test(read("components/ai_tools/UnifiedChat.jsx")), "the chat no longer selects the console ink, so its chip is cream");
+});
+
+check("the console list is never portalled out of the room", () => {
+    const src = code(read("components/shared/ForChip.jsx"));
+    assert.ok(/portal=\{ink !== "console"\}/.test(src), "ForChip must keep its list in place for the console ink");
 });
 
 check("NO APP GROUND OR INK TOKEN SURVIVES IN THE ROOM", () => {

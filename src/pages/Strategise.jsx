@@ -56,6 +56,7 @@ import { priceLabel } from "@/lib/chips";
 import { VCE_SUBJECTS } from "@/data/vceSubjects";
 import { Segmented } from "@/components/shared/SetupControls";
 import AceShuffle from "@/components/ace/AceShuffle";
+import { withStamp, sacKey } from "@/lib/sacTags";
 
 // ─── Static class tables (the JIT cannot see an assembled class) ─────────────
 
@@ -389,14 +390,16 @@ export default function Strategise() {
             const stratId = strategyIdFor(sac.id);
             // One insert. A strategy to a SAC three weeks out is twenty-odd
             // sessions, and every one of them used to be its own request.
-            await base44.entities.StudyPlan.bulkCreate(plan.sessions.map((s) => ({
+            // Stamped for the SAC as well as carrying it in the plan id: the
+            // stamp is what the SAC's folder counts kept sessions from.
+            await base44.entities.StudyPlan.bulkCreate(plan.sessions.map((s) => withStamp({
                 title: `${TECHNIQUES[s.technique].label}: ${s.topic}`,
                 subject_name: sac.subject_name || null,
                 date: s.date,
                 start_time: null,
                 is_completed: false,
                 notes: buildNotes(null, s.duration, s.why, stratId),
-            })));
+            }, sacKey(sac.id))));
             // The old plan goes only AFTER the new one has landed, so a failed
             // write leaves the student with the plan they had rather than none.
             const gone = await Promise.allSettled(replacing.map((p) => base44.entities.StudyPlan.delete(p.id)));

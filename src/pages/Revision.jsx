@@ -28,7 +28,7 @@
  * tick; a point is theirs. The only rows this page creates are ones somebody
  * asked for.
  */
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { X, Bookmark, BookMarked, ChevronLeft, CalendarPlus } from "lucide-react";
@@ -59,6 +59,11 @@ import { STIMULUS_RULE, STIMULUS_SCHEMA } from "@/lib/quizSchema";
 import { cleanQuestion } from "@/lib/questionText";
 import { startJob, getJobs, useJobView, adoptJob } from "@/lib/jobStore";
 import { runningIn } from "@/lib/aiJobs";
+import useSacTags, { patchSac, useSacTagRows } from "@/hooks/useSacTags";
+import { folderStats, historyOf, historyPatch } from "@/lib/sacTags";
+import { chatRows } from "@/lib/aiChats";
+import { loadSavedResults } from "@/lib/saveResult";
+import { itemsOf } from "@/components/revision/MaterialTab";
 import {
     foldersFor, findFolder, folderContents, readiness, pointProof, normTopic, topicOptions,
     suggestedTopics, revisionPatch, revisionQuery, checkQuiz, alignCheck, FOLDER_TABS,
@@ -99,7 +104,15 @@ export default function Revision() {
     const [quizzes, setQuizzes] = useState([]);
     const [attempts, setAttempts] = useState([]);
     const [saved, setSaved] = useState([]);
+    // What a folder can also hold since tagging: the student's maps and chats,
+    // and the study log its run-up is counted from.
+    const [maps, setMaps] = useState([]);
+    const [chats, setChats] = useState([]);
+    const [studySessions, setStudySessions] = useState([]);
+    const [techniques, setTechniques] = useState([]);
+    const [plans, setPlans] = useState([]);
     const [loading, setLoading] = useState(true);
+    const tags = useSacTags(user?.email);
 
     const [run, setRun] = useState(null);
     const [pendingSit, setPendingSit] = useState(null);
@@ -118,7 +131,7 @@ export default function Revision() {
             setUser(me);
             const by = { created_by: me.email };
             const fail = () => [];
-            const [profiles, sacs, subjects, rows, quizRows, attemptRows, savedRows] = await Promise.all([
+            const [profiles, sacs, subjects, rows, quizRows, attemptRows, savedRows, mapRows, convRows, sessionRows, techniqueRows, planRows] = await Promise.all([
                 base44.entities.UserProfile.filter(by).catch(fail),
                 base44.entities.SubjectAssessment.filter(by).catch(fail),
                 base44.entities.UserSubject.filter({ ...by, is_active: true }).catch(fail),
@@ -126,6 +139,11 @@ export default function Revision() {
                 base44.entities.Quiz.filter(by).catch(fail),
                 base44.entities.QuizAttempt.filter(by).catch(fail),
                 base44.entities.AISavedResult.filter({ ...by, tool_type: "saved_answer" }).catch(fail),
+                base44.entities.MindMap.filter(by).catch(fail),
+                loadSavedResults(null, me.email).catch(fail),
+                base44.entities.StudySession.filter(by).catch(fail),
+                base44.entities.StudyTechnique.filter(by).catch(fail),
+                base44.entities.StudyPlan.filter(by).catch(fail),
             ]);
             setProfile(profiles?.[0] || null);
             setAssessments(sacs || []);
@@ -134,11 +152,22 @@ export default function Revision() {
             setQuizzes(quizRows || []);
             setAttempts(attemptRows || []);
             setSaved(savedRows || []);
+            setMaps(mapRows || []);
+            setChats(chatRows(convRows || []));
+            setStudySessions(sessionRows || []);
+            setTechniques(techniqueRows || []);
+            setPlans(planRows || []);
         } catch {
             setCards([]);
         } finally { setLoading(false); }
     }, []);
     useEffect(() => { load(); }, [load]);
+
+    // A tag written anywhere (a chip on this page, or the Add sheet) is a write
+    // to a SAC's row. Taking the saved row keeps this page's copy current, so
+    // the next points edit is not built off a copy that predates the tag.
+    const takeSac = useCallback((row) => setAssessments((prev) => prev.map((a) => (a.id === row.id ? row : a))), []);
+    useSacTagRows(takeSac);
 
     // ── Everything below is DERIVED. Nothing here is stored. ───────────────
     const deck = useMemo(() => deckCards(cards), [cards]);
@@ -156,7 +185,16 @@ export default function Revision() {
 
     const sources = useMemo(() => ({
         flashcards: deck, bankCards: bank, answerCards: answers, quizzes, attempts, redo, legacySaved: legacy, isReady,
-    }), [deck, bank, answers, quizzes, attempts, redo, legacy]);
+        maps, chats, sessions: studySessions, techniques, plans,
+    }), [deck, bank, answers, quizzes, attempts, redo, legacy, maps, chats, studySessions, techniques, plans]);
+
+    // Everything the student owns, as the Add sheet lists it.
+    const allMaterial = useMemo(() => ({
+        decks: itemsOf("decks", deck),
+        quizzes: itemsOf("quizzes", quizzes.filter((q) => !q?.extra?.revision_check)),
+        maps: itemsOf("maps", maps),
+        chats: itemsOf("chats", chats),
+    }), [deck, quizzes, maps, chats]);
 
     const measured = useMemo(() => {
         const m = new Map();
@@ -201,18 +239,44 @@ export default function Revision() {
     const goTab = (t) => navigate(`${REVISION}${revisionQuery({ folder: folderKey, tab: t })}`, { replace: true });
 
     // ── Writes ────────────────────────────────────────────────────────────
+    // A SAC's revision goes through `patchSac`, the same queue the tags use:
+    // they share one `extra.revision`, and a points edit built off a copy read
+    // before a tag landed would write the old claims straight back.
     const writeRevision = async (f, next) => {
         const patch = revisionPatch(f.row, next);
         const apply = (rows) => rows.map((x) => (x.id === f.id ? { ...x, ...patch } : x));
         if (f.kind === "sac") setAssessments(apply); else setUserSubjects(apply);
         try {
-            if (f.kind === "sac") await base44.entities.SubjectAssessment.update(f.id, patch);
+            if (f.kind === "sac") await patchSac(f.id, (row) => revisionPatch(row, next));
             else await base44.entities.UserSubject.update(f.id, patch);
         } catch {
             toast({ title: "That didn't save", description: "Give it another go in a moment.", variant: "destructive" });
             load();
         }
     };
+
+    // ── Readiness, recorded once a day the folder is opened ──────────────
+    // The one figure nothing else records. `historyPatch` is null when today
+    // already reads the same, so re-opening a folder costs nothing; the ref
+    // stops a second write for the same reading while the first is in flight.
+    const recorded = useRef("");
+    useEffect(() => {
+        if (loading || !folder) return;
+        const m = measured.get(folder.key);
+        if (!m) return;
+        const patch = historyPatch(folder.row, m.r);
+        const sig = `${folder.key}:${m.r.proved}/${m.r.said}/${m.r.total}`;
+        if (!patch || recorded.current === sig) return;
+        recorded.current = sig;
+        const apply = (rows) => rows.map((x) => (x.id === folder.id ? { ...x, ...patch } : x));
+        if (folder.kind === "sac") {
+            setAssessments(apply);
+            patchSac(folder.id, (row) => historyPatch(row, m.r)).catch(() => { recorded.current = ""; });
+        } else if (folder.id) {
+            setUserSubjects(apply);
+            base44.entities.UserSubject.update(folder.id, patch).catch(() => { recorded.current = ""; });
+        }
+    }, [loading, folder, measured]);
     const savePoints = (points) => folder && writeRevision(folder, { points });
     const saveTopics = (topics) => folder && writeRevision(folder, { topics });
 
@@ -386,7 +450,7 @@ ${STIMULUS_RULE}`,
                         <ChevronLeft className="w-3.5 h-3.5" /> Revision
                     </Link>
                 </div>
-                <MistakeBankView />
+                <MistakeBankView tags={tags} />
             </div>
         );
     }
@@ -424,7 +488,7 @@ ${STIMULUS_RULE}`,
                     const a = live.filter((c) => (c.subject_name || "No subject") === s);
                     return (
                         <Shelf key={s} title={s} aside={<span className="w-1.5 h-5 rounded-full order-first" style={{ backgroundColor: toneOf(s) }} aria-hidden="true" />}>
-                            <AnswerList answers={a} legacy={legacy.filter((r) => (r.subject_name || "No subject") === s)}
+                            <AnswerList answers={a} legacy={legacy.filter((r) => (r.subject_name || "No subject") === s)} tags={tags}
                                 ready={a.filter(isReady)} onDrill={(list) => setRun({ queue: list, label: `Learning ${s}` })}
                                 onRetire={clearFixed} onDelete={deleteAnswer} onMoveLegacy={moveLegacy} movingId={movingId} />
                         </Shelf>
@@ -463,7 +527,9 @@ ${STIMULUS_RULE}`,
                     onDrill={(queue, label) => queue?.length && setRun({ queue, label })}
                     onClear={clearFixed} onRetire={clearFixed} onDeleteAnswer={deleteAnswer}
                     onMoveLegacy={moveLegacy} movingId={movingId} onSitRedo={sitRedo}
-                    onMock={() => setMock(folder)} mockCount={mockCount} />
+                    onMock={() => setMock(folder)} mockCount={mockCount}
+                    stats={folderStats(m.contents, folder)} history={historyOf(folder.row)}
+                    tags={tags} allMaterial={allMaterial} />
                 {scoping && (
                     <ScopeSheet open={scoping} onOpenChange={setScoping} folder={folder} options={options}
                         suggested={suggestedTopics(folder, options)} onSave={saveTopics} />

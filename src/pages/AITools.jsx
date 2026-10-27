@@ -55,6 +55,7 @@ import { openingTool } from "@/lib/chatModel";
 import { chatRows } from "@/lib/aiChats";
 import { todaysIntent } from "@/lib/studyIntent";
 import { claimAce } from "@/components/ace/useAceYield";
+import { parseFor } from "@/lib/sacTags";
 
 /** A fresh thread, opened on nothing in particular. */
 const BLANK = { key: "new", tool: null, subject: "", seed: "", conv: null };
@@ -93,6 +94,8 @@ export default function AITools() {
      * URL there anyway, which is what makes a suggestion override a deep link.
      */
     const [session, setSession] = useState(BLANK);
+    // `?for=sac:<id>`: a chat started from a SAC's folder is tagged for it.
+    const [forKey] = useState(() => parseFor(window.location.search));
 
     useEffect(() => {
         let alive = true;
@@ -113,6 +116,12 @@ export default function AITools() {
                 setPremium(isPremium(profiles?.[0] ?? null));
                 setMe({ profile: profiles?.[0] ?? null, user: u });
                 setConvs(saved || []);
+                // `?chat=<id>` reopens one conversation — the way a SAC's
+                // folder opens a chat tagged for it. A chat that is not there
+                // any more is dropped quietly, the `?play=` rule.
+                const wantChat = new URLSearchParams(window.location.search).get("chat");
+                const conv = wantChat ? chatRows(saved || []).find((r) => String(r.id) === wantChat) : null;
+                if (conv) setSession({ key: `chat:${conv.id}`, tool: conv.tool_type, subject: conv.input_data?.subject || "", seed: "", conv });
                 setRows({
                     // `deckCards` is the filter every DECK surface reads
                     // through, and the mistake bank's own rows are read
@@ -234,6 +243,7 @@ export default function AITools() {
                     briefLoading={rows === null}
                     onOpenCard={openCard}
                     onSaved={noteSaved}
+                    forKey={forKey}
                 />
             </div>
         </Console>

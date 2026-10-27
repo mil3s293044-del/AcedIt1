@@ -100,8 +100,10 @@ import AceVerdict from "@/components/progress/AceVerdict";
 import { strengthStack, reviewForecast, sitPlot, fixFunnel, heatCalendar } from "@/lib/progressCharts";
 import {
     PERIODS, periodRange, cardsReport, quizzesReport, mistakesReport, hoursReport, workFor,
-    subjectsIn, sliceBySubject, ALL_SUBJECTS,
+    subjectsIn, sliceBySubject, sliceByFolder, isFolderScope, ALL_SUBJECTS,
 } from "@/lib/progressReport";
+import { foldersFor } from "@/lib/revision";
+import { scopeFolders } from "@/lib/sacTags";
 
 /** How long "not this week" actually is. */
 const SNOOZE_DAYS = 7;
@@ -328,16 +330,30 @@ export default function Review() {
      * rows talking about the whole account three inches above a figure that
      * is not — the "two surfaces answer one question" failure, built in.
      */
-    const slice = useMemo(() => (data ? sliceBySubject({
-        cards, bankCards: data.bankCards, quizzes: data.quizzes,
-        attempts: data.attempts, assessments: data.assessments,
-        events, techniques: data.techniques, sessions: data.sessions,
-    }, subject) : null), [data, cards, events, subject]);
+    /** The SACs the filter offers — coming, or finished inside the run-up window. */
+    const sacScopes = useMemo(() => (data ? scopeFolders(foldersFor({ assessments: data.assessments })) : []),
+        [data]);
+    // A SAC that was picked and has since gone (deleted on the planner, or
+    // aged out of the window) falls back to everything rather than to a slice
+    // of nothing that reads as an empty account.
+    const scope = isFolderScope(subject) && !sacScopes.some((f) => f.key === subject) ? ALL_SUBJECTS : subject;
+
+    const slice = useMemo(() => {
+        if (!data) return null;
+        const bag = {
+            cards, bankCards: data.bankCards, quizzes: data.quizzes,
+            attempts: data.attempts, assessments: data.assessments,
+            events, techniques: data.techniques, sessions: data.sessions,
+        };
+        return isFolderScope(scope)
+            ? sliceByFolder(bag, sacScopes.find((f) => f.key === scope))
+            : sliceBySubject(bag, scope);
+    }, [data, cards, events, scope, sacScopes]);
 
     /** The queue again, over the slice — so a tab's rows match its figures. */
     const tabQueue = useMemo(() => {
         if (!slice) return [];
-        if (subject === ALL_SUBJECTS) return queue;
+        if (scope === ALL_SUBJECTS) return queue;
         return studyQueue({
             cards: slice.cards, bankCards: slice.bankCards, quizzes: slice.quizzes,
             attempts: slice.attempts, assessments: slice.assessments, events: slice.events,
@@ -345,7 +361,7 @@ export default function Review() {
             isReady: (c) => isReady(c, today),
             today,
         });
-    }, [slice, subject, queue, today]);
+    }, [slice, scope, queue, today]);
 
     const reports = useMemo(() => {
         if (!slice) return null;
@@ -630,7 +646,7 @@ export default function Review() {
                         ) : (
                             <>
                                 <PeriodSwitch value={period} onChange={setPeriod} />
-                                <SubjectSwitch subjects={subjects} value={subject} onChange={setSubject} />
+                                <SubjectSwitch subjects={subjects} folders={sacScopes} value={scope} onChange={setSubject} />
                             </>
                         )}
                     </div>
@@ -768,7 +784,7 @@ export default function Review() {
                     the period and the subject, so a change in any of the three
                     re-reveals what it changed — and nothing else moves. */}
                 {tab !== "today" && (
-                    <motion.div key={`${tab}:${period}:${subject}`}
+                    <motion.div key={`${tab}:${period}:${scope}`}
                         initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.28, ease: [0.2, 0.8, 0.2, 1] }}>
                         {tab === "cards" && (

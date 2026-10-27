@@ -3,6 +3,9 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { base44 } from "@/api/base44Client";
 import { acceptFiles, STUDY_ACCEPT, STUDY_ACCEPT_LABEL } from "@/lib/pickFiles";
 import MegaPicker from "@/components/shared/MegaPicker";
+import ForChip, { ForNote } from "@/components/shared/ForChip";
+import useSacTags, { setClaim } from "@/hooks/useSacTags";
+import { parseFor } from "@/lib/sacTags";
 import { PRICE } from "@/lib/chips";
 import { createPageUrl } from "@/utils";
 import { BANK_TOPIC, bankSummary } from "@/lib/mistakeBank";
@@ -153,6 +156,10 @@ export default function Quizzes() {
     const navigate = useNavigate();
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
+    const tags = useSacTags(user?.email);
+    // `?for=sac:<id>` — arrived from a SAC's folder, so the quiz made here is
+    // tagged for it. Read once; the dialog says so and can drop it.
+    const [forKey, setForKey] = useState(() => parseFor(typeof window !== "undefined" ? window.location.search : ""));
     const [quizzes, setQuizzes] = useState([]);
     const [quizAttempts, setQuizAttempts] = useState([]);
     const [bankCards, setBankCards] = useState([]);
@@ -259,6 +266,18 @@ export default function Quizzes() {
      * not an error worth a toast on arrival.
      */
     const [searchParams, setSearchParams] = useSearchParams();
+    // Arriving from a folder's "Make a quiz" opens the generator on arrival:
+    // the link said what it would do. The param is consumed so a back
+    // navigation does not reopen it; the tag rides in state.
+    useEffect(() => {
+        if (!searchParams.get("for")) return;
+        setShowAIDialog(true);
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete("for");
+            return next;
+        }, { replace: true });
+    }, [searchParams, setSearchParams]);
     useEffect(() => {
         const id = searchParams.get("play");
         if (!id || isPlaying || !quizzes.length) return;
@@ -791,6 +810,11 @@ Base ALL questions on the provided material. If files are attached, read ALL con
                 // swept within the day, and nothing reads it any more —
                 // reshuffle and marking both work from the quiz itself.
             });
+
+            // Made from inside a SAC's folder: tag it for that SAC. The tag is
+            // a claim on the SAC's row, so a failure here costs the tag and
+            // never the quiz — the quiz is saved and can be tagged by hand.
+            if (forKey && created?.id) setClaim(forKey, "quizzes", created.id, true).catch(() => {});
 
             // Only create subject if it doesn't already exist
             if (!userSubjects.some(s => s.subject_name === effectiveSubject)) {
@@ -1727,6 +1751,8 @@ Return valid JSON only.`,
                                                             attempts={stats.attempts}
                                                             toFix={stats.wrongIdx.length}
                                                             canReshuffle={!!quiz.questions?.length}
+                                                            tag={<ForChip tags={tags} kind="quizzes" compact
+                                                                id={quiz.id} subject={quiz.subject} />}
                                                             onSelect={() => setPendingQuiz(quiz)}
                                                             onRetryWrong={() => {
                                                                 setQuizMode('standard');
@@ -2010,6 +2036,7 @@ Return valid JSON only.`,
                                 <TierUsagePill feature={FEATURES.QUIZ_AI_GEN} userProfile={userProfile} />
                             </DialogTitle>
                             <p className="text-sm text-muted-foreground mt-2">Questions written from your own material in VCAA's style, and marked when you sit it.</p>
+                            <ForNote tags={tags} forKey={forKey} onClear={() => setForKey(null)} className="mt-2" />
                         </DialogHeader>
 
                         <div ref={aiDialogBody} className="flex-1 overflow-y-auto px-6">

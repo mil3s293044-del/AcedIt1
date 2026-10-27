@@ -31,6 +31,10 @@ import ActiveRecall from "../components/study/ActiveRecall";
 import BlurtingMethod from "../components/study/BlurtingMethod";
 import MindMaps from "../components/study/MindMaps";
 import HelpButton from "@/components/shared/HelpButton";
+import { FocusChip } from "@/components/shared/ForChip";
+import useSacTags from "@/hooks/useSacTags";
+import { parseFor, withStamp } from "@/lib/sacTags";
+import { readFocus, writeFocus } from "@/lib/studyFocus";
 import NeuroPanel from "../components/study/NeuroPanel";
 import { todaysIntent } from "@/lib/studyIntent";
 import { isReady } from "@/lib/due";
@@ -97,6 +101,15 @@ function getCoachLine({ name, hour, todayMins, weekMins, streakDays, hasStudiedA
 
 export default function Study() {
     const [user, setUser] = useState(null);
+    const tags = useSacTags(user?.email);
+    // What this sitting is for. Arriving from a SAC's folder sets it; the chip
+    // under the heading changes it; every session saved here is stamped with it.
+    const [studyFor, setStudyForState] = useState(() => {
+        const fromLink = parseFor(typeof window !== "undefined" ? window.location.search : "");
+        if (fromLink) writeFocus(fromLink);
+        return fromLink || readFocus();
+    });
+    const setStudyFor = useCallback((key) => { setStudyForState(key); writeFocus(key); }, []);
     const [userProfile, setUserProfile] = useState(null);
     const [userSubjects, setUserSubjects] = useState([]);
     const [recentSessions, setRecentSessions] = useState([]);
@@ -276,7 +289,7 @@ export default function Study() {
     const handleSessionComplete = async (sessionData) => {
         if (!user) return;
         try {
-            await StudyTechnique.create({ ...sessionData });
+            await StudyTechnique.create(withStamp({ ...sessionData }, studyFor));
             loadData(user.email);
 
             // Award XP by the minute studied. The rate per source lives on the
@@ -665,6 +678,7 @@ export default function Study() {
                     <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground leading-[1.1]">
                         {coachLine}
                     </h1>
+                    <FocusChip tags={tags} value={studyFor} onChange={setStudyFor} align="left" className="mt-3" />
                 </motion.section>
 
                 {/* ── HERO ROW: Technique panel (3/5) + Today stats (2/5) ── */}

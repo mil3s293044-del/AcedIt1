@@ -37,6 +37,11 @@ import { aceDone } from "@/components/ace/AceReacts";
 import AceShuffle from "@/components/ace/AceShuffle";
 import ReviewTable from "@/components/cards/ReviewTable";
 import DeckStack from "@/components/cards/DeckStack";
+import ForChip, { ForNote } from "@/components/shared/ForChip";
+import useSacTags, { setClaim } from "@/hooks/useSacTags";
+import { deckKeyOf } from "@/lib/revision";
+import { withStamp, parseFor } from "@/lib/sacTags";
+import { readFocus } from "@/lib/studyFocus";
 import { rankFor, suitFor, subjectColor } from "@/components/cards/cardIdentity";
 import { cardMastery, isCardDue } from "@/lib/mastery";
 import { isNew, isReady, tally } from "@/lib/due";
@@ -131,7 +136,7 @@ const GRADE_TONE = {
 // The presentation is DeckStack — an actual pack of cards. This is the thin
 // layer that works out what the numbers are; everything about how a deck looks
 // belongs with the rest of the card system, not in a 1,500-line screen.
-function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats, index }) {
+function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats, index, tags }) {
     const total = deck.cards.length;
     return (
         <DeckStack
@@ -153,6 +158,11 @@ function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats, index }) {
             onSelect={() => onSelect(deck)}
             onDelete={() => onDelete(deck.id)}
             onStats={() => onStats(deck)}
+            // A deck is every card sharing a subject and a topic, so the tag
+            // names the pair — and a card added to the deck later is tagged
+            // with it, which a tag written onto each card could never be.
+            tag={<ForChip tags={tags} kind="decks" compact
+                id={deckKeyOf(deck.subject_name, deck.topic)} subject={deck.subject_name} />}
         />
     );
 }
@@ -161,6 +171,10 @@ function DeckCard({ deck, subjectColor, onSelect, onDelete, onStats, index }) {
 export default function SpacedRepetition() {
     const [user, setUser] = useState(null);
     const [userProfile, setUserProfile] = useState(null);
+    const tags = useSacTags(user?.email);
+    // `?for=sac:<id>`: arrived from a SAC's folder, so a deck made from notes
+    // here is tagged for it. The generator says so before it saves.
+    const [forKey, setForKey] = useState(() => parseFor(typeof window !== "undefined" ? window.location.search : ""));
     const [decks, setDecks] = useState([]);
     const [selectedDeck, setSelectedDeck] = useState(null);
     const [reviewMode, setReviewMode] = useState(false);
@@ -177,6 +191,14 @@ export default function SpacedRepetition() {
     const [selectedFriends, setSelectedFriends] = useState([]);
     const [selectedGroups, setSelectedGroups] = useState([]);
     const [isShowingGenerated, setIsShowingGenerated] = useState(false);
+    // "A deck" from a SAC's folder opens the generator on arrival: the link
+    // said what it would do. Once per arrival, never again after it closes.
+    const forOpened = useRef(false);
+    useEffect(() => {
+        if (!forKey || forOpened.current) return;
+        forOpened.current = true;
+        setIsShowingGenerated(true);
+    }, [forKey]);
     const [uploadedFiles, setUploadedFiles] = useState([]);
     // A chapter of a stored book: `{ url, pages, name, chips }` or null. Kept
     // apart from `uploadedFiles` because it is not a file the student is
@@ -614,6 +636,10 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             const failed = results.filter(r => r.status === "rejected").length;
             const blocked = results.filter(r => r.status === "fulfilled" && !r.value).length;
 
+            // Tag the deck, not its cards: the deck is the subject + topic pair,
+            // so any card added to it later is for the same SAC.
+            if (saved > 0 && forKey) setClaim(forKey, "decks", deckKeyOf(deckInfo.subject_name, deckInfo.topic), true).catch(() => {});
+
             if (saved === 0) {
                 toast({
                     title: "Could not save flashcards",
@@ -724,7 +750,8 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
             if (user?.email && selectedDeck) {
                 // XP is paid per card as it happens (awardXPIncremental in
                 // handleRateCard) — no batch award here, or cards would pay twice.
-                await base44.entities.StudyTechnique.create({ technique_name: "spaced_repetition", session_duration: durationMinutes, subject: selectedDeck.subject_name, topic: selectedDeck.topic, date: format(new Date(), 'yyyy-MM-dd'), notes: `Reviewed ${cardsReviewed} flashcards`, created_by: user.email });
+                // Stamped for the SAC the Study page says this sitting is for.
+                await base44.entities.StudyTechnique.create(withStamp({ technique_name: "spaced_repetition", session_duration: durationMinutes, subject: selectedDeck.subject_name, topic: selectedDeck.topic, date: format(new Date(), 'yyyy-MM-dd'), notes: `Reviewed ${cardsReviewed} flashcards`, created_by: user.email }, readFocus()));
             }
         } catch (error) { console.error(error); }
         // Scored on recall, not on effort — "you got 9 of 12 back" is the
@@ -764,14 +791,14 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                     const durationMinutes = Math.round((Date.now() - startedAt) / 60000);
                     // XP is paid per card as it happens (awardXPIncremental in
                     // handleRateCard) — no batch award here, or cards pay twice.
-                    await base44.entities.StudyTechnique.create({
+                    await base44.entities.StudyTechnique.create(withStamp({
                         technique_name: "spaced_repetition",
                         session_duration: durationMinutes,
                         subject: deck.subject_name, topic: deck.topic,
                         date: format(new Date(), 'yyyy-MM-dd'),
                         notes: `Reviewed ${reviewed || 0} flashcards`,
                         created_by: user.email,
-                    });
+                    }, readFocus()));
                 }
             } catch (error) { console.error(error); }
             if (user?.email) loadDecks(user.email).catch(() => {});
@@ -1259,6 +1286,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                                             onSelect={setSelectedDeck}
                                             onDelete={handleDeleteDeck}
                                             onStats={setViewingStats}
+                                            tags={tags}
                                         />
                                     ))}
                                 </div>
@@ -1388,6 +1416,7 @@ The documents provided may be PowerPoint slides, Word documents, PDFs or text fi
                         <DialogTitle className="flex items-center gap-2">
                             <Sparkles className="w-5 h-5 text-chart-4" /> Make flashcards from your notes
                         </DialogTitle>
+                        <ForNote tags={tags} forKey={forKey} onClear={() => setForKey(null)} what="This deck will be tagged for" />
                     </DialogHeader>
 
                     {!generatedFlashcards ? (
